@@ -2,11 +2,13 @@
   "name": "dms",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@12.6.0",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @dms/db run generate",
     "db:migrate": "pnpm --filter @dms/db run migrate",
     "db:seed": "pnpm --filter @dms/db run seed",
@@ -14,6 +16,7 @@
   },
   "devDependencies": {
     "turbo": "^2.0.0",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }

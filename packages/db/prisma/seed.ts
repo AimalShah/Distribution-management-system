@@ -1,7 +1,7 @@
 // prisma/seed.js
-import prisma from "@/lib/prisma";
+import prisma from "../src/client";
 import { faker } from "@faker-js/faker";
-import type { InventoryMovement } from "./generated";
+import type { InventoryMovement } from "./generated/client";
 
 /** faker v9 dropped `date.past({ days })`; anchor a refDate instead. */
 function daysAgo(days: number) {

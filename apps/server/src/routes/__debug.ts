@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getRecentQueries } from "@dms/db/debug-log";
 
-export const debugRouter = Router();
+export const debugRouter: Router = Router();
 
 debugRouter.get("/state", (_req, res) => {
   const queries = getRecentQueries();
