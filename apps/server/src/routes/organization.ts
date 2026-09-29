@@ -3,42 +3,16 @@ import {
   organizationCreateSchema,
   setActiveOrganizationSchema,
 } from "@dms/shared";
-import { asyncHandler, badRequest, notFound } from "../http";
+import { asyncHandler, notFound } from "../http";
 import {
   createOrganization,
   getActiveOrganization,
   getUserOrganizations,
   setActiveOrganization,
 } from "../services/organization";
-import { SESSION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { requireSessionId, requireUserId } from "../middleware/auth-context";
 
 export const organizationRouter: Router = Router();
-
-/**
- * These routes are mounted behind `bootstrapAuthContext`, not `authContext`, so
- * a caller with no active organization still gets through -- see the comment on
- * that middleware. The consequence is that every value this router needs has to
- * be asked for explicitly, and asked for before the database is touched.
- */
-const requireUserId = (userId?: string): string => {
-  if (!userId) {
-    throw badRequest(
-      `Missing user context. Send the ${USER_HEADER} header.`,
-      "USER_REQUIRED"
-    );
-  }
-  return userId;
-};
-
-const requireSessionId = (sessionId?: string): string => {
-  if (!sessionId) {
-    throw badRequest(
-      `Missing session context. Send the ${SESSION_HEADER} header.`,
-      "SESSION_REQUIRED"
-    );
-  }
-  return sessionId;
-};
 
 /**
  * The legacy `getUserOrganization` fell back to `prisma.organization.findMany()`
