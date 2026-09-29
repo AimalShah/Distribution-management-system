@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DistroManager - System Architecture & Documentation</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --secondary: #7c3aed;
+    --accent: #06b6d4;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --bg: #f8fafc;
+    --card-bg: #ffffff;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --sidebar-bg: #0f172a;
+    --sidebar-text: #94a3b8;
+    --code-bg: #1e293b;
+    --code-text: #e2e8f0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 280px;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    padding: 24px 0;
+    z-index: 100;
+  }
+
+  .sidebar-brand {
+    padding: 0 24px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-brand h1 {
+    font-size: 1.25rem;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .sidebar-brand p {
+    font-size: 0.75rem;
+    color: var(--sidebar-text);
+    margin-top: 4px;
+  }
+
+  .sidebar-nav {
+    list-style: none;
+  }
+
+  .sidebar-nav li {
+    margin: 2px 12px;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+  }
+
+  .sidebar-nav a:hover, .sidebar-nav a.active {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+  }
+
+  .sidebar-nav a .icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+  }
+
+  .sidebar-section {
+    padding: 16px 24px 8px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    font-weight: 600;
+  }
+
+  /* Main Content */
+  .main {
+    margin-left: 280px;
+    flex: 1;
+    padding: 40px 48px;
+    max-width: calc(100% - 280px);
+  }
+
+  .page-header {
+    margin-bottom: 40px;
+  }
+
+  .page-header h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .page-header p {
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .card h3 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  .card h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: var(--text);
+  }
+
+  .card p {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+  }
+
+  /* Grid */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  /* Feature Cards */
+  .feature-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s;
+  }
+
+  .feature-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(37,99,235,0.1);
+  }
+
+  .feature-card .feature-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    margin-bottom: 12px;
+  }
+
+  .feature-card h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  /* Flow Diagram */
+  .flow-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 16px 0;
+  }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 120px;
+    text-align: center;
+  }
+
+  .flow-step .step-box {
+    width: 80px;
+    height: 80px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    border: 2px solid;
+  }
+
+  .flow-step .step-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .flow-step .step-desc {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    max-width: 100px;
+  }
+
+  .flow-arrow {
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    margin: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* Code Block */
+  .code-block {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    overflow-x: auto;
+    margin: 12px 0;
+    line-height: 1.6;
+  }
+
+  .code-block .keyword { color: #c084fc; }
+  .code-block .string { color: #86efac; }
+  .code-block .comment { color: #64748b; }
+  .code-block .type { color: #7dd3fc; }
+  .code-block .function { color: #fbbf24; }
+
+  /* Table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: #f1f5f9;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 2px solid var(--border);
+  }
+
+  .data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .data-table tr:hover td {
+    background: #f8fafc;
+  }
+
+  /* Badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .badge-blue { background: #dbeafe; color: #1d4ed8; }
+  .badge-green { background: #d1fae5; color: #047857; }
+  .badge-purple { background: #ede9fe; color: #6d28d9; }
+  .badge-orange { background: #fef3c7; color: #b45309; }
+  .badge-red { background: #fee2e2; color: #b91c1c; }
+  .badge-cyan { background: #cffafe; color: #0e7490; }
+
+  /* Architecture Diagram */
+  .arch-layer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .arch-layer .layer-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .arch-layer .layer-info h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .arch-layer .layer-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .arch-layer .layer-tech {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  /* Stat Cards */
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--primary);
+  }
+
+  .stat-card .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 48px;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+  }
+
+  /* ER Diagram placeholder */
+  .er-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .er-entity {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .er-entity-header {
+    padding: 10px 14px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .er-entity-body {
+    padding: 8px 14px;
+  }
+
+  .er-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .er-field:last-child { border-bottom: none; }
+
+  .er-field .field-name { color: var(--text); }
+  .er-field .field-type { color: var(--text-muted); font-size: 0.7rem; }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .er-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; max-width: 100%; padding: 24px; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .er-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Print */
+  @media print {
+    .sidebar { display: none; }
+    .main { margin-left: 0; max-width: 100%; }
+    .card, .feature-card { break-inside: avoid; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+  /* Anchor offset for fixed sidebar */
+  .section[id] {
+    scroll-margin-top: 20px;
+  }
+
+  /* Highlight box */
+  .highlight-box {
+    background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+
+  .highlight-box.warning {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-color: #fcd34d;
+  }
+
+  .highlight-box.success {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: #6ee7b7;
+  }
+
+  /* List */
+  .feature-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .feature-list li {
+    padding: 6px 0;
+    padding-left: 24px;
+    position: relative;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+
+  .feature-list li::before {
+    content: "\2713";
+    position: absolute;
+    left: 0;
+    color: var(--success);
+    font-weight: 700;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  .tab {
+    padding: 10px 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>DistroManager</h1>
+      <p>System Architecture Docs</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="#overview" class="active"><span class="icon">&#128202;</span> Overview</a></li>
+      <li><a href="#architecture"><span class="icon">&#127959;</span> Architecture</a></li>
+      <li><a href="#tech-stack"><span class="icon">&#128187;</span> Tech Stack</a></li>
+      <li><a href="#database"><span class="icon">&#128451;</span> Database Schema</a></li>
+      <li><a href="#auth"><span class="icon">&#128274;</span> Auth & RBAC</a></li>
+    </ul>
+    <div class="sidebar-section">Core Modules</div>
+    <ul class="sidebar-nav">
+      <li><a href="#organizations"><span class="icon">&#127970;</span> Organizations</a></li>
+      <li><a href="#products"><span class="icon">&#128230;</span> Products</a></li>
+      <li><a href="#suppliers"><span class="icon">&#128666;</span> Suppliers</a></li>
+      <li><a href="#customers"><span class="icon">&#128101;</span> Customers</a></li>
+      <li><a href="#purchases"><span class="icon">&#128722;</span> Purchases</a></li>
+      <li><a href="#sales"><span class="icon">&#128176;</span> Sales & Invoices</a></li>
+      <li><a href="#inventory"><span class="icon">&#128230;</span> Inventory</a></li>
+      <li><a href="#returns"><span class="icon">&#128260;</span> Returns</a></li>
+      <li><a href="#reports"><span class="icon">&#128200;</span> Reports</a></li>
+    </ul>
+    <div class="sidebar-section">System</div>
+    <ul class="sidebar-nav">
+      <li><a href="#data-flows"><span class="icon">&#128257;</span> Data Flows</a></li>
+      <li><a href="#api-layer"><span class="icon">&#128737;</span> API Layer</a></li>
+      <li><a href="#features"><span class="icon">&#11088;</span> Key Features</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <section id="overview" class="section">
+      <div class="page-header">
+        <h2>System Overview</h2>
+        <p>Distribution Management System (DMS) - Complete business management for distribution companies</p>
+      </div>
+
+      <div class="grid-4" style="margin-bottom: 24px;">
+        <div class="stat-card">
+          <div class="stat-value">15+</div>
+          <div class="stat-label">Data Models</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">10</div>
+          <div class="stat-label">Core Modules</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">3</div>
+          <div class="stat-label">User Roles</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">Multi</div>
+          <div class="stat-label">Organization Support</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>What is DistroManager?</h3>
+        <p>DistroManager is a comprehensive <strong>Distribution Management System</strong> built to manage the complete business operations of distribution companies. It handles the full lifecycle from procurement (purchases from suppliers) through inventory management to sales (invoices to customers), with full tracking, reporting, and multi-organization support.</p>
+        <p>The system is designed as a <strong>multi-tenant SaaS application</strong> where each organization has isolated data, role-based access control, and complete operational autonomy.</p>
+      </div>
+
+      <div class="highlight-box">
+        <strong>Core Business Value:</strong> Streamlines distribution operations by unifying procurement, inventory, sales, and reporting into a single platform with real-time stock tracking and comprehensive analytics.
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section id="architecture" class="section">
+      <h2 class="section-title">&#127959; System Architecture</h2>
+      <p class="section-subtitle">Layered architecture with clear separation of concerns</p>
+
+      <div class="arch-layer">
+        <div class="layer-icon" style="background: #dbeafe;">&#128421;</div>
+        <div class="layer-info">
+          <h4>Presentation Layer (Frontend)</h4>
+          <p>React 19 + Next.js 15 App Router, Tailwind CSS 4, shadcn/ui components, Recharts for data visualization</p>
+        </div>
+        <div class="layer-tech">
+          <span class="badge badge-blue">React 19</span>
+          <span class="badge badge-blue">Next.js 15</span>
+          <span class="badge badge-purple">Tailwind 4</span>
+          <span class="badge badge-cyan">shadcn/ui</span>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-icon" style="background: #d1fae5;">&#9881;</div>
+        <div class="layer-info">
+          <h4>Application Layer (Server Actions)</h4>
+          <p>Next.js Server Actions handle all business logic, form processing, and data validation with Zod schemas</p>
+        </div>
+        <div class="layer-tech">
+          <span class="badge badge-green">Server Actions</span>
+          <span class="badge badge-orange">Zod</span>
+          <span class="badge badge-purple">React Hook Form</span>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-icon" style="background: #fef3c7;">&#128640;</div>
+        <div class="layer-info">
+          <h4>Service Layer</h4>
+          <p>Dedicated service modules for each domain (products, purchases, sales, inventory, returns, reports) encapsulating all database operations</p>
+        </div>
+        <div class="layer-tech">
+          <span class="badge badge-orange">Services</span>
+          <span class="badge badge-blue">Prisma Client</span>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-icon" style="background: #fee2e2;">&#128451;</div>
+        <div class="layer-info">
+          <h4>Data Layer</h4>
+          <p>PostgreSQL database with Prisma ORM, fully normalized schema with proper relations, indexes, and constraints</p>
+        </div>
+        <div class="layer-tech">
+          <span class="badge badge-red">PostgreSQL</span>
+          <span class="badge badge-cyan">Prisma 6</span>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-icon" style="background: #ede9fe;">&#128274;</div>
+        <div class="layer-info">
+          <h4>Auth Layer</h4>
+          <p>Better Auth with email/password, organization plugin for multi-tenancy, role-based access control (Owner, Admin, Member)</p>
+        </div>
+        <div class="layer-tech">
+          <span class="badge badge-purple">Better Auth</span>
+          <span class="badge badge-green">Resend</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TECH STACK -->
+    <section id="tech-stack" class="section">
+      <h2 class="section-title">&#128187; Technology Stack</h2>
+      <p class="section-subtitle">Modern, production-ready technologies</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h4>Frontend</h4>
+          <ul class="feature-list">
+            <li>React 19.1 with Server Components</li>
+            <li>Next.js 15.4 (App Router)</li>
+            <li>Tailwind CSS 4</li>
+            <li>shadcn/ui (Radix UI primitives)</li>
+            <li>Recharts for charts/graphs</li>
+            <li>React Hook Form + Zod</li>
+            <li>Sonner for toast notifications</li>
+            <li>next-themes for dark mode</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Backend</h4>
+          <ul class="feature-list">
+            <li>Next.js Server Actions</li>
+            <li>Better Auth 1.3</li>
+            <li>Prisma 6 ORM</li>
+            <li>PostgreSQL Database</li>
+            <li>Resend (Email delivery)</li>
+            <li>SWR (Data fetching/caching)</li>
+            <li>Axios (HTTP client)</li>
+            <li>Puppeteer (PDF generation)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>DevOps & Tooling</h4>
+          <ul class="feature-list">
+            <li>TypeScript 5 (Full type safety)</li>
+            <li>ESLint 9 + Next.js config</li>
+            <li>tsx (Seed scripts)</li>
+            <li>dotenv (Environment config)</li>
+            <li>class-variance-authority</li>
+            <li>date-fns (Date manipulation)</li>
+            <li>lucide-react (Icons)</li>
+            <li>clsx + tailwind-merge</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- DATABASE SCHEMA -->
+    <section id="database" class="section">
+      <h2 class="section-title">&#128451; Database Schema</h2>
+      <p class="section-subtitle">PostgreSQL with Prisma ORM - 15+ models with full relations</p>
+
+      <div class="card">
+        <h3>Entity Relationship Overview</h3>
+        <p>The database is fully normalized with proper foreign key constraints, indexes, and cascade deletes. Every business entity belongs to an Organization (multi-tenant isolation).</p>
+      </div>
+
+      <div class="er-grid">
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #2563eb;">&#128100; User</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">name</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">email (unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">role</span><span class="field-type">String?</span></div>
+            <div class="er-field"><span class="field-name">isOwner</span><span class="field-type">Boolean?</span></div>
+            <div class="er-field"><span class="field-name">banned</span><span class="field-type">Boolean?</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #7c3aed;">&#127970; Organization</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">name</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">slug (unique)</span><span class="field-type">String?</span></div>
+            <div class="er-field"><span class="field-name">logo</span><span class="field-type">String?</span></div>
+            <div class="er-field"><span class="field-name">metadata</span><span class="field-type">String?</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #059669;">&#128101; Member</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">organizationId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">userId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">role</span><span class="field-type">String</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #d97706;">&#128230; Product</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">productCode (unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">name</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">unitPrice</span><span class="field-type">Float</span></div>
+            <div class="er-field"><span class="field-name">unitCost</span><span class="field-type">Float</span></div>
+            <div class="er-field"><span class="field-name">categoryId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">brandId (FK)</span><span class="field-type">String</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #dc2626;">&#128722; Purchase</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">purchaseCode (unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">supplierId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">totalAmount</span><span class="field-type">Float</span></div>
+            <div class="er-field"><span class="field-name">status</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">purchaseDate</span><span class="field-type">DateTime</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #0891b2;">&#128176; Sale</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">saleCode (unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">customerId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">totalAmount</span><span class="field-type">Float</span></div>
+            <div class="er-field"><span class="field-name">status</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">saleDate</span><span class="field-type">DateTime</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #4f46e5;">&#128230; Inventory</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">productId (FK, unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">quantityOnHand</span><span class="field-type">Int</span></div>
+            <div class="er-field"><span class="field-name">quantityReserved</span><span class="field-type">Int</span></div>
+            <div class="er-field"><span class="field-name">reorderLevel</span><span class="field-type">Int</span></div>
+            <div class="er-field"><span class="field-name">maxStockLevel</span><span class="field-type">Int?</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #be185d;">&#128260; Return</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">returnCode (unique)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">returnType</span><span class="field-type">Enum</span></div>
+            <div class="er-field"><span class="field-name">userId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">reason</span><span class="field-type">String?</span></div>
+          </div>
+        </div>
+
+        <div class="er-entity">
+          <div class="er-entity-header" style="background: #0d9488;">&#128202; InventoryLog</div>
+          <div class="er-entity-body">
+            <div class="er-field"><span class="field-name">id (PK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">inventoryId (FK)</span><span class="field-type">String</span></div>
+            <div class="er-field"><span class="field-name">movementType</span><span class="field-type">Enum</span></div>
+            <div class="er-field"><span class="field-name">quantity</span><span class="field-type">Int</span></div>
+            <div class="er-field"><span class="field-name">previousQty</span><span class="field-type">Int</span></div>
+            <div class="er-field"><span class="field-name">newQty</span><span class="field-type">Int</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 24px;">
+        <h3>Supporting Models</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>Model</th><th>Key Fields</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Category</strong></td><td>name, organizationId, description</td><td>Product categorization (unique per org)</td></tr>
+            <tr><td><strong>Brand</strong></td><td>name, categoryId, organizationId</td><td>Brand linked to categories</td></tr>
+            <tr><td><strong>Supplier</strong></td><td>supplierCode, companyName, contactPerson, email, phone</td><td>Vendor information with unique code</td></tr>
+            <tr><td><strong>Customer</strong></td><td>customerCode, name, email, phone, creditLimit</td><td>Customer master with credit limit</td></tr>
+            <tr><td><strong>PurchaseItem</strong></td><td>purchaseId, productId, quantity, unitCost, batchNumber, expiryDate</td><td>Line items per purchase</td></tr>
+            <tr><td><strong>SaleItem</strong></td><td>saleId, productId, quantity, unitPrice, taxPercent, discount</td><td>Line items per sale</td></tr>
+            <tr><td><strong>ReturnItem</strong></td><td>returnId, productId, quantity, unitPrice, taxAmount, discount</td><td>Line items per return</td></tr>
+            <tr><td><strong>Invitation</strong></td><td>email, role, status, expiresAt, inviterId</td><td>Org member invitations</td></tr>
+            <tr><td><strong>Session</strong></td><td>token, userId, activeOrganizationId, ipAddress, userAgent</td><td>User sessions with org context</td></tr>
+            <tr><td><strong>Account</strong></td><td>providerId, userId, accessToken, refreshToken</td><td>OAuth account linking</td></tr>
+            <tr><td><strong>Verification</strong></td><td>identifier, value, expiresAt</td><td>Email verification tokens</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Enums</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>Enum</th><th>Values</th><th>Usage</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>InventoryMovement</code></td><td>IN, OUT, ADJUSTMENT, TRANSFER, RETURN, DAMAGED, EXPIRED</td><td>Stock movement types in InventoryLog</td></tr>
+            <tr><td><code>ReturnType</code></td><td>SALE, PURCHASE, EXPIRED, DAMAGED</td><td>Return classification</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- AUTH & RBAC -->
+    <section id="auth" class="section">
+      <h2 class="section-title">&#128274; Authentication & Authorization</h2>
+      <p class="section-subtitle">Better Auth with organization plugin and role-based access control</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Authentication Flow</h3>
+          <div class="flow-container">
+            <div class="flow-step">
+              <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128100;</div>
+              <div class="step-label">User</div>
+              <div class="step-desc">Enters credentials</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128274;</div>
+              <div class="step-label">Better Auth</div>
+              <div class="step-desc">Validates & creates session</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#127970;</div>
+              <div class="step-label">Org Context</div>
+              <div class="step-desc">Attaches active org to session</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #ede9fe; border-color: #7c3aed;">&#9989;</div>
+              <div class="step-label">Access</div>
+              <div class="step-desc">Redirected to dashboard</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Role-Based Access Control (RBAC)</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Role</th><th>Permissions</th><th>Scope</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge badge-purple">Owner</span></td>
+                <td>Full access: create, update, delete all resources. Manage members, invitations, and organization settings.</td>
+                <td>Organization</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-blue">Admin</span></td>
+                <td>Create and update resources. Cannot delete or manage organization settings.</td>
+                <td>Organization</td>
+              </tr>
+              <tr>
+                <td><span class="badge badge-green">Member</span></td>
+                <td>Create-only access. Can create records but cannot update or delete existing ones.</td>
+                <td>Organization</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Auth Configuration</h3>
+        <div class="code-block">
+<span class="keyword">export const</span> <span class="type">auth</span> = <span class="function">betterAuth</span>({
+  <span class="string">database</span>: <span class="function">prismaAdapter</span>(prisma, { <span class="string">provider</span>: <span class="string">"postgresql"</span> }),
+  <span class="string">emailAndPassword</span>: { <span class="string">enabled</span>: <span class="keyword">true</span>, <span class="string">autoSignIn</span>: <span class="keyword">true</span> },
+  <span class="string">plugins</span>: [
+    <span class="function">organization</span>({
+      <span class="string">organizationLimit</span>: <span class="string">5</span>,  <span class="comment">// Max orgs per user</span>
+      <span class="string">roles</span>: { <span class="string">owner</span>, <span class="string">adminRole</span>, <span class="string">member</span> }
+    }),
+    <span class="function">admin</span>({ <span class="string">defaultRole</span>: <span class="string">"admin"</span> })
+  ]
+});
+        </div>
+      </div>
+
+      <div class="highlight-box warning">
+        <strong>Session Management:</strong> Each session stores <code>activeOrganizationId</code> to maintain organization context. Users can switch between organizations via the sidebar dropdown, and all data queries are scoped to the active organization.
+      </div>
+    </section>
+
+    <!-- ORGANIZATIONS -->
+    <section id="organizations" class="section">
+      <h2 class="section-title">&#127970; Organization Management</h2>
+      <p class="section-subtitle">Multi-tenant architecture with organization isolation</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Organization Features</h3>
+          <ul class="feature-list">
+            <li>Create up to 5 organizations per user account</li>
+            <li>Switch between organizations from sidebar dropdown</li>
+            <li>All data isolated by <code>organizationId</code> on every model</li>
+            <li>Invite members via email with role assignment</li>
+            <li>Member management: add, remove, change roles</li>
+            <li>Organization-scoped sessions</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Organization Flow</h3>
+          <div class="flow-container">
+            <div class="flow-step">
+              <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#127970;</div>
+              <div class="step-label">Create Org</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128231;</div>
+              <div class="step-label">Invite Members</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128101;</div>
+              <div class="step-label">Assign Roles</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+              <div class="step-box" style="background: #ede9fe; border-color: #7c3aed;">&#128203;</div>
+              <div class="step-label">Manage Data</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="products" class="section">
+      <h2 class="section-title">&#128230; Product Management</h2>
+      <p class="section-subtitle">Complete product catalog with categories and brands</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Product Features</h3>
+          <ul class="feature-list">
+            <li>Unique product codes per organization</li>
+            <li>Product categorization (Category &gt; Brand &gt; Product hierarchy)</li>
+            <li>Unit-based pricing (box, piece, kg, etc.)</li>
+            <li>Separate unit cost and unit price for margin tracking</li>
+            <li>Active/inactive product status</li>
+            <li>Product descriptions</li>
+            <li>Full CRUD operations with organization scoping</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Category & Brand Hierarchy</h3>
+          <div class="code-block">
+<span class="comment">// Hierarchy: Category &gt; Brand &gt; Product</span>
+
+<span class="type">Category</span> (e.g., <span class="string">"Beverages"</span>)
+  <span class="keyword">&#9508;</span> <span class="type">Brand</span> (e.g., <span class="string">"Coca-Cola"</span>)
+      <span class="keyword">&#9508;</span> <span class="type">Product</span> (e.g., <span class="string">"Coke 500ml"</span>)
+        - productCode: <span class="string">"BEV-001"</span>
+        - unitPrice: <span class="string">2.50</span>
+        - unitCost: <span class="string">1.80</span>
+        - unit: <span class="string">"bottle"</span>
+
+<span class="comment">// Constraints:</span>
+<span class="comment">// - Category name unique per organization</span>
+<span class="comment">// - Brand name unique per category per organization</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUPPLIERS -->
+    <section id="suppliers" class="section">
+      <h2 class="section-title">&#128666; Supplier Management</h2>
+      <p class="section-subtitle">Vendor master data for procurement</p>
+
+      <div class="card">
+        <h3>Supplier Features</h3>
+        <ul class="feature-list">
+          <li>Unique supplier codes for easy reference</li>
+          <li>Contact person, company name, email, phone tracking</li>
+          <li>Address and city information</li>
+          <li>Active/inactive status for supplier management</li>
+          <li>Linked to all purchase records</li>
+          <li>Organization-scoped data isolation</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- CUSTOMERS -->
+    <section id="customers" class="section">
+      <h2 class="section-title">&#128101; Customer Management</h2>
+      <p class="section-subtitle">Customer master with credit limit tracking</p>
+
+      <div class="card">
+        <h3>Customer Features</h3>
+        <ul class="feature-list">
+          <li>Unique customer codes</li>
+          <li>Contact information (name, email, phone, address, city)</li>
+          <li>Credit limit tracking for accounts receivable</li>
+          <li>Active/inactive status</li>
+          <li>Linked to all sale invoices</li>
+          <li>Organization-scoped data isolation</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- PURCHASES -->
+    <section id="purchases" class="section">
+      <h2 class="section-title">&#128722; Purchase Management</h2>
+      <p class="section-subtitle">Procurement from suppliers with automatic stock-in</p>
+
+      <div class="card">
+        <h3>Purchase Flow</h3>
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128666;</div>
+            <div class="step-label">Select Supplier</div>
+            <div class="step-desc">Choose vendor</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128230;</div>
+            <div class="step-label">Add Products</div>
+            <div class="step-desc">Select items & quantities</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128178;</div>
+            <div class="step-label">Set Costs</div>
+            <div class="step-desc">Unit cost & tax</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #ede9fe; border-color: #7c3aed;">&#128220;</div>
+            <div class="step-label">Complete</div>
+            <div class="step-desc">Stock auto-increments</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Purchase Features</h3>
+          <ul class="feature-list">
+            <li>Unique purchase codes</li>
+            <li>Multi-item purchase orders</li>
+            <li>Batch number and expiry date tracking per item</li>
+            <li>Tax percent and discount per line item</li>
+            <li>Automatic inventory increment on creation</li>
+            <li>Inventory log entry (movement type: IN)</li>
+            <li>Status tracking (Pending, Completed)</li>
+            <li>Total amount calculation</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Purchase Data Model</h3>
+          <div class="code-block">
+<span class="type">Purchase</span>
+  <span class="keyword">&#9508;</span> purchaseCode: <span class="type">String</span> (unique)
+  <span class="keyword">&#9508;</span> supplierId: <span class="type">String</span> (FK)
+  <span class="keyword">&#9508;</span> totalAmount: <span class="type">Float</span>
+  <span class="keyword">&#9508;</span> taxAmount: <span class="type">Float</span>?
+  <span class="keyword">&#9508;</span> discount: <span class="type">Float</span>?
+  <span class="keyword">&#9508;</span> status: <span class="type">String</span> (<span class="string">"Pending"</span>)
+  <span class="keyword">&#9508;</span> purchaseDate: <span class="type">DateTime</span>
+  <span class="keyword">&#9474;</span>
+  <span class="keyword">&#9508;</span> <span class="type">PurchaseItem</span>[]
+      <span class="keyword">&#9508;</span> productId: <span class="type">String</span> (FK)
+      <span class="keyword">&#9508;</span> quantity: <span class="type">Int</span>
+      <span class="keyword">&#9508;</span> unitCost: <span class="type">Float</span>
+      <span class="keyword">&#9508;</span> totalCost: <span class="type">Float</span>
+      <span class="keyword">&#9508;</span> batchNumber: <span class="type">String</span>?
+      <span class="keyword">&#9508;</span> expiryDate: <span class="type">DateTime</span>?
+      <span class="keyword">&#9508;</span> taxPercent: <span class="type">Float</span>?
+      <span class="keyword">&#9508;</span> discount: <span class="type">Float</span>?
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box success">
+        <strong>Automatic Stock-In:</strong> When a purchase is created, the system automatically increments <code>quantityOnHand</code> in the Inventory table for each product and creates an InventoryLog entry with movement type <code>IN</code>. If no inventory record exists, one is created automatically.
+      </div>
+    </section>
+
+    <!-- SALES -->
+    <section id="sales" class="section">
+      <h2 class="section-title">&#128176; Sales & Invoices</h2>
+      <p class="section-subtitle">Customer invoicing with automatic stock-out</p>
+
+      <div class="card">
+        <h3>Sale Invoice Flow</h3>
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128101;</div>
+            <div class="step-label">Select Customer</div>
+            <div class="step-desc">Choose customer</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128230;</div>
+            <div class="step-label">Add Products</div>
+            <div class="step-desc">Select items & quantities</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128178;</div>
+            <div class="step-label">Set Prices</div>
+            <div class="step-desc">Unit price, tax, discount</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #ede9fe; border-color: #7c3aed;">&#128220;</div>
+            <div class="step-label">Complete</div>
+            <div class="step-desc">Stock auto-decrements</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Sale Invoice Features</h3>
+          <ul class="feature-list">
+            <li>Unique sale codes</li>
+            <li>Multi-item invoices</li>
+            <li>Per-item tax percent and discount</li>
+            <li>Automatic inventory decrement on creation</li>
+            <li>Inventory log entry (movement type: OUT)</li>
+            <li>Stock level validation (warns if insufficient)</li>
+            <li>Status tracking (Pending, Completed)</li>
+            <li>Total amount auto-calculation</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Sale Data Model</h3>
+          <div class="code-block">
+<span class="type">Sale</span>
+  <span class="keyword">&#9508;</span> saleCode: <span class="type">String</span> (unique)
+  <span class="keyword">&#9508;</span> customerId: <span class="type">String</span> (FK)
+  <span class="keyword">&#9508;</span> totalAmount: <span class="type">Float</span>
+  <span class="keyword">&#9508;</span> taxAmount: <span class="type">Float</span>?
+  <span class="keyword">&#9508;</span> discount: <span class="type">Float</span>?
+  <span class="keyword">&#9508;</span> status: <span class="type">String</span>
+  <span class="keyword">&#9508;</span> saleDate: <span class="type">DateTime</span>
+  <span class="keyword">&#9474;</span>
+  <span class="keyword">&#9508;</span> <span class="type">SaleItem</span>[]
+      <span class="keyword">&#9508;</span> productId: <span class="type">String</span> (FK)
+      <span class="keyword">&#9508;</span> quantity: <span class="type">Int</span>
+      <span class="keyword">&#9508;</span> unitPrice: <span class="type">Float</span>
+      <span class="keyword">&#9508;</span> totalPrice: <span class="type">Float</span>
+      <span class="keyword">&#9508;</span> taxPercent: <span class="type">Float</span>?
+      <span class="keyword">&#9508;</span> discount: <span class="type">Float</span>?
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box warning">
+        <strong>Stock Validation:</strong> The system checks available stock before completing a sale. If stock would go negative, a warning is logged. The inventory quantity is clamped to zero (never goes negative).
+      </div>
+    </section>
+
+    <!-- INVENTORY -->
+    <section id="inventory" class="section">
+      <h2 class="section-title">&#128230; Inventory Management</h2>
+      <p class="section-subtitle">Real-time stock tracking with movement logs and alerts</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>Stock Tracking</h3>
+          <ul class="feature-list">
+            <li>Real-time quantity on hand</li>
+            <li>Reserved quantity tracking</li>
+            <li>Reorder level configuration</li>
+            <li>Max stock level limits</li>
+            <li>Low stock alerts on dashboard</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Movement Types</h3>
+          <ul class="feature-list">
+            <li><span class="badge badge-green">IN</span> Stock received from purchases</li>
+            <li><span class="badge badge-red">OUT</span> Stock sold to customers</li>
+            <li><span class="badge badge-orange">ADJUSTMENT</span> Manual corrections</li>
+            <li><span class="badge badge-blue">TRANSFER</span> Location transfers</li>
+            <li><span class="badge badge-purple">RETURN</span> Customer returns</li>
+            <li><span class="badge badge-red">DAMAGED</span> Damaged goods</li>
+            <li><span class="badge badge-red">EXPIRED</span> Expired products</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Inventory Logs</h3>
+          <ul class="feature-list">
+            <li>Complete audit trail for every movement</li>
+            <li>Previous and new quantity recorded</li>
+            <li>User who made the change</li>
+            <li>Reason and reference document</li>
+            <li>Timestamp for each movement</li>
+            <li>Filterable by product</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Inventory Adjustment Flow</h3>
+        <div class="code-block">
+<span class="comment">// Adjustment sets absolute quantity</span>
+<span class="keyword">case</span> <span class="string">"ADJUSTMENT"</span>:
+  <span class="type">newQty</span> = data.quantity;  <span class="comment">// Set to exact value</span>
+
+<span class="comment">// Return adds back to stock</span>
+<span class="keyword">case</span> <span class="string">"RETURN"</span>:
+  <span class="type">newQty</span> = previousQty + data.quantity;
+
+<span class="comment">// Damaged/Expired removes from stock</span>
+<span class="keyword">case</span> <span class="string">"DAMAGED"</span>:
+<span class="keyword">case</span> <span class="string">"EXPIRED"</span>:
+  <span class="type">newQty</span> = previousQty - data.quantity;
+        </div>
+      </div>
+    </section>
+
+    <!-- RETURNS -->
+    <section id="returns" class="section">
+      <h2 class="section-title">&#128260; Returns Management</h2>
+      <p class="section-subtitle">Handle product returns with type classification</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Return Features</h3>
+          <ul class="feature-list">
+            <li>Unique return codes</li>
+            <li>Multi-item return orders</li>
+            <li>Return type classification (SALE, PURCHASE, EXPIRED, DAMAGED)</li>
+            <li>Per-item tax amount and discount tracking</li>
+            <li>Reason documentation</li>
+            <li>Linked to user who processed the return</li>
+            <li>Organization-scoped</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Return Types</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Type</th><th>Description</th><th>Stock Impact</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="badge badge-blue">SALE</span></td><td>Customer returned goods</td><td>Stock increases</td></tr>
+              <tr><td><span class="badge badge-orange">PURCHASE</span></td><td>Returned to supplier</td><td>Stock decreases</td></tr>
+              <tr><td><span class="badge badge-red">EXPIRED</span></td><td>Product expired</td><td>Stock decreases</td></tr>
+              <tr><td><span class="badge badge-red">DAMAGED</span></td><td>Product damaged</td><td>Stock decreases</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPORTS -->
+    <section id="reports" class="section">
+      <h2 class="section-title">&#128200; Reports & Analytics</h2>
+      <p class="section-subtitle">Comprehensive business intelligence with interactive charts</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>Sales Reports</h3>
+          <ul class="feature-list">
+            <li>Total sales and order count</li>
+            <li>Unique customer tracking</li>
+            <li>Daily sales totals with line chart</li>
+            <li>Sales by customer breakdown</li>
+            <li>Sales by product analysis</li>
+            <li>Date range filtering</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Purchase Reports</h3>
+          <ul class="feature-list">
+            <li>Total purchase amounts</li>
+            <li>Purchase by supplier analysis</li>
+            <li>Purchase by product breakdown</li>
+            <li>Purchase trend line chart</li>
+            <li>Date range filtering</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Inventory Reports</h3>
+          <ul class="feature-list">
+            <li>Current stock levels</li>
+            <li>Low stock alerts</li>
+            <li>Inventory movement history</li>
+            <li>Stock value analysis</li>
+            <li>Reorder level monitoring</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Dashboard Widgets</h3>
+        <div class="grid-4">
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #dbeafe;">&#128202;</div>
+            <h4>Sales Chart</h4>
+            <p>Interactive daily sales line chart</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #d1fae5;">&#128230;</div>
+            <h4>Inventory Chart</h4>
+            <p>Current stock levels visualization</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #fef3c7;">&#11088;</div>
+            <h4>Top Products</h4>
+            <p>Best performing products by revenue</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #fee2e2;">&#9888;</div>
+            <h4>Low Stock Alert</h4>
+            <p>Products below reorder level</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #ede9fe;">&#128337;</div>
+            <h4>Recent Activities</h4>
+            <p>Latest sales and purchases</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #cffafe;">&#128178;</div>
+            <h4>Revenue Stats</h4>
+            <p>Total revenue and order count</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #fce7f3;">&#128101;</div>
+            <h4>Customer Stats</h4>
+            <p>Active customer count</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" style="background: #e0e7ff;">&#128722;</div>
+            <h4>Purchase Stats</h4>
+            <p>Total procurement spending</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DATA FLOWS -->
+    <section id="data-flows" class="section">
+      <h2 class="section-title">&#128257; Data Flows</h2>
+      <p class="section-subtitle">End-to-end data flow diagrams for core processes</p>
+
+      <div class="card">
+        <h3>Purchase-to-Inventory Flow</h3>
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128666;</div>
+            <div class="step-label">Supplier</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128722;</div>
+            <div class="step-label">Purchase</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128230;</div>
+            <div class="step-label">PurchaseItem</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #ede9fe; border-color: #7c3aed;">&#128230;</div>
+            <div class="step-label">Inventory +</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #cffafe; border-color: #0891b2;">&#128202;</div>
+            <div class="step-label">InvLog(IN)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Sale-to-Inventory Flow</h3>
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128101;</div>
+            <div class="step-label">Customer</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128176;</div>
+            <div class="step-label">Sale</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128230;</div>
+            <div class="step-label">SaleItem</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fee2e2; border-color: #dc2626;">&#128230;</div>
+            <div class="step-label">Inventory -</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #cffafe; border-color: #0891b2;">&#128202;</div>
+            <div class="step-label">InvLog(OUT)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Return Flow</h3>
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-box" style="background: #dbeafe; border-color: #2563eb;">&#128260;</div>
+            <div class="step-label">Return</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #d1fae5; border-color: #059669;">&#128230;</div>
+            <div class="step-label">ReturnItem</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #fef3c7; border-color: #d97706;">&#128230;</div>
+            <div class="step-label">Inventory</div>
+          </div>
+          <div class="flow-arrow">&#10132;</div>
+          <div class="flow-step">
+            <div class="step-box" style="background: #cffafe; border-color: #0891b2;">&#128202;</div>
+            <div class="step-label">InvLog</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API LAYER -->
+    <section id="api-layer" class="section">
+      <h2 class="section-title">&#128737; API Layer</h2>
+      <p class="section-subtitle">Next.js Server Actions as the primary API layer</p>
+
+      <div class="card">
+        <h3>Server Actions Architecture</h3>
+        <p>All data mutations and queries are handled through Next.js Server Actions, providing a type-safe, direct frontend-to-database communication channel without traditional REST API overhead.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Action Modules</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Module</th><th>Key Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>product.ts</strong></td><td>addProduct, getProducts, updateProduct, deleteProduct</td></tr>
+              <tr><td><strong>purchase.ts</strong></td><td>addPurchase, getPurchases, updatePurchase, deletePurchase</td></tr>
+              <tr><td><strong>saleInvoice.ts</strong></td><td>addSaleInvoice, getSaleInvoices, updateSaleInvoice, deleteSaleInvoice</td></tr>
+              <tr><td><strong>inventory.ts</strong></td><td>getInventory, adjustInventory, fetchLowStock, updateSettings</td></tr>
+              <tr><td><strong>return.ts</strong></td><td>addReturn, getReturns, updateReturn, deleteReturn</td></tr>
+              <tr><td><strong>customer.ts</strong></td><td>addCustomer, getCustomers, updateCustomer, deleteCustomer</td></tr>
+              <tr><td><strong>supplier.ts</strong></td><td>addSupplier, getSuppliers, updateSupplier, deleteSupplier</td></tr>
+              <tr><td><strong>category.ts</strong></td><td>addCategory, getCategories, updateCategory, deleteCategory</td></tr>
+              <tr><td><strong>brand.ts</strong></td><td>addBrand, getBrands, updateBrand, deleteBrand</td></tr>
+              <tr><td><strong>organization.ts</strong></td><td>createOrg, setActiveOrg, getUserOrgs, getActiveOrg</td></tr>
+              <tr><td><strong>members.ts</strong></td><td>inviteMember, removeMember, updateRole</td></tr>
+              <tr><td><strong>permissions.ts</strong></td><td>checkPermission, getPermissions</td></tr>
+              <tr><td><strong>reports/*.ts</strong></td><td>getSalesReport, getPurchaseReport, getInventoryReport</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Auth API Route</h3>
+          <div class="code-block">
+<span class="comment">// src/app/api/auth/[...all]/route.ts</span>
+
+<span class="keyword">import</span> { auth } <span class="keyword">from</span> <span class="string">"@/lib/auth"</span>;
+<span class="keyword">import</span> { toNextJsHandler } <span class="keyword">from</span> <span class="string">"better-auth/next-js"</span>;
+
+<span class="keyword">export const</span> { POST, GET } = <span class="function">toNextJsHandler</span>(auth);
+          </div>
+          <p style="margin-top: 12px;">The auth API route handles all authentication endpoints:</p>
+          <ul class="feature-list">
+            <li><code>/api/auth/sign-in</code> - Email/password login</li>
+            <li><code>/api/auth/sign-up</code> - User registration</li>
+            <li><code>/api/auth/sign-out</code> - Logout</li>
+            <li><code>/api/auth/verify-email</code> - Email verification</li>
+            <li><code>/api/auth/organization/create</code> - Create organization</li>
+            <li><code>/api/auth/organization/set-active</code> - Switch organization</li>
+            <li><code>/api/auth/invite</code> - Invite members</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- KEY FEATURES -->
+    <section id="features" class="section">
+      <h2 class="section-title">&#11088; Key Features Summary</h2>
+      <p class="section-subtitle">Complete feature list organized by category</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>&#128640; Platform</h3>
+          <ul class="feature-list">
+            <li>Multi-tenant SaaS architecture</li>
+            <li>Organization switching from sidebar</li>
+            <li>Role-based access control (Owner/Admin/Member)</li>
+            <li>Email verification via Resend</li>
+            <li>Session management with org context</li>
+            <li>Member invitations via email</li>
+            <li>User ban/suspension support</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>&#128201; Business Operations</h3>
+          <ul class="feature-list">
+            <li>Complete purchase order management</li>
+            <li>Sale invoice generation</li>
+            <li>Automatic stock in/out tracking</li>
+            <li>Return processing with type classification</li>
+            <li>Batch number and expiry date tracking</li>
+            <li>Tax and discount per line item</li>
+            <li>Credit limit tracking for customers</li>
+            <li>Supplier and customer master data</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>&#128202; Analytics & UI</h3>
+          <ul class="feature-list">
+            <li>Interactive dashboard with KPIs</li>
+            <li>Sales line charts (Recharts)</li>
+            <li>Inventory status visualization</li>
+            <li>Top products by revenue</li>
+            <li>Low stock alerts</li>
+            <li>Recent activity feed</li>
+            <li>Date range filtering on reports</li>
+            <li>Responsive sidebar navigation</li>
+            <li>Fullscreen mode toggle</li>
+            <li>Real-time clock in header</li>
+            <li>Search bar in header</li>
+            <li>Toast notifications (Sonner)</li>
+            <li>Dark mode support (next-themes)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="highlight-box">
+        <strong>Architecture Highlights:</strong> The system follows a clean layered architecture with React Server Components for the frontend, Next.js Server Actions for business logic, a dedicated service layer for database operations, and Prisma ORM with PostgreSQL for data persistence. Multi-tenancy is achieved through organization-scoped queries on every model.
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <div style="text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px;">
+      <p>DistroManager - Distribution Management System</p>
+      <p style="margin-top: 4px;">Built with Next.js 15, React 19, Prisma 6, PostgreSQL, and Better Auth</p>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Smooth scroll for sidebar links
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      const targetId = this.getAttribute('href').substring(1);
+      const target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+      // Update active state
+      document.querySelectorAll('.sidebar-nav a').forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // Intersection observer for active nav highlighting
+  const sections = document.querySelectorAll('.section[id]');
+  const navLinks = document.querySelectorAll('.sidebar-nav a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        navLinks.forEach(link => {
+          link.classList.remove('active');
+          if (link.getAttribute('href') === `#${id}`) {
+            link.classList.add('active');
+          }
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  sections.forEach(section => observer.observe(section));
+</script>
+
+</body>
+</html>
