@@ -69,12 +69,18 @@ const classifyMovement = (movementType: InventoryMovementValue): MovementKind =>
 /**
  * The figure a log row records.
  *
- * A log's `quantity` carries its direction in the sign, so the identity a row
- * has to satisfy depends on the kind. Every directional movement logs the
- * magnitude and satisfies `previousQty - quantity = newQty`; a count logs the
- * difference it represents, signed, and satisfies `previousQty + quantity =
- * newQty`. Both are the legacy arithmetic, corrected so a row never contradicts
- * the change it describes.
+ * A log's `quantity` is a **magnitude** for `IN`, `OUT`, `RETURN`, `DAMAGED` and
+ * `EXPIRED` — the direction lives in `movementType`, so an `OUT` of 4 records
+ * `quantity: 4, previousQty: 10, newQty: 6` and an `IN` of 4 records the same
+ * `quantity: 4`. It is **signed** only for `ADJUSTMENT`, where it is the
+ * difference a physical count found: `previousQty + quantity = newQty`.
+ *
+ * So a directional row satisfies `|previousQty - newQty| = quantity`, and only
+ * the count row satisfies `previousQty + quantity = newQty`. Getting this
+ * distinction wrong is not hypothetical: checkpoint 2m's report work found the
+ * legacy basic inventory report summing this column and reporting the total as
+ * a quantity, which counts a delivery and a dispatch of the same size as twice
+ * the stock.
  */
 const loggedQuantityFor = (kind: MovementKind, previousQty: number, quantity: number) =>
   kind === "count" ? quantity - previousQty : quantity;

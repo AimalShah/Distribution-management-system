@@ -6,6 +6,7 @@ import { inventoryRouter } from "./inventory";
 import { productRouter } from "./product";
 import { purchaseRouter } from "./purchase";
 import { returnRouter } from "./return";
+import { inventoryReportRouter } from "./reports/inventory";
 import { saleRouter } from "./sale";
 import { supplierRouter } from "./supplier";
 
@@ -20,3 +21,4 @@ apiRouter.use("/customers", customerRouter);
 apiRouter.use("/suppliers", supplierRouter);
 apiRouter.use("/categories", categoryRouter);
 apiRouter.use("/brands", brandRouter);
+apiRouter.use("/reports/inventory", inventoryReportRouter);
