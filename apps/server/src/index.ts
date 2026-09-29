@@ -1,20 +1,11 @@
-import express, { type Express } from "express";
-import cors from "cors";
+import { createApp } from "./app";
 
-const app: Express = express();
+const app = createApp();
 
-app.use(cors());
-app.use(express.json());
+const port = Number(process.env.PORT ?? 4000);
 
-if (process.env.NODE_ENV !== "production") {
-  import("./routes/__debug").then(({ debugRouter }) => {
-    app.use("/__debug", debugRouter);
-  });
-}
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
 
 export { app };
