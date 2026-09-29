@@ -22,6 +22,7 @@
     "test:checkpoint2l": "vitest run src/middleware/permissions.test.ts",
     "test:checkpoint2m": "vitest run src/routes/reports/inventory.test.ts",
     "test:checkpoint2n": "vitest run src/routes/reports/purchase.test.ts",
+    "test:checkpoint2o": "vitest run src/routes/reports/sales.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
