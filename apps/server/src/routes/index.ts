@@ -1,5 +1,6 @@
 import { Router } from "express";
+import { productRouter } from "./product";
 
 export const apiRouter: Router = Router();
 
-// Routes will be added in Checkpoint 2
+apiRouter.use("/products", productRouter);
