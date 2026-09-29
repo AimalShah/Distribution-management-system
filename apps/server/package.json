@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:checkpoint2a": "vitest run src/routes/product.test.ts",
+    "test:checkpoint2b": "vitest run src/routes/purchase.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -3,6 +3,8 @@ import { badRequest } from "../http/errors";
 
 export const ORGANIZATION_HEADER = "x-organization-id";
 export const ORGANIZATION_ENV_VAR = "DMS_ORGANIZATION_ID";
+export const USER_HEADER = "x-user-id";
+export const USER_ENV_VAR = "DMS_USER_ID";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -36,6 +38,13 @@ export const authContext: RequestHandler = (req, _res, next) => {
     return;
   }
 
-  req.auth = { organizationId };
+  // Optional: only the routes that write an audit row (`InventoryLog`) insist on
+  // it, and they answer 400 USER_REQUIRED rather than writing an unattributed
+  // log entry.
+  req.auth = {
+    organizationId,
+    userId:
+      req.header(USER_HEADER)?.trim() || process.env[USER_ENV_VAR]?.trim() || undefined,
+  };
   next();
 };
