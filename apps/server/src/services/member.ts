@@ -5,15 +5,7 @@ import type {
   UpdateMemberRoleInput,
 } from "@dms/shared";
 import { conflict, forbidden, notFound } from "../http";
-
-/**
- * Roles that may change an organization's membership. "owner" and "adminRole"
- * are the two elevated names in the `memRole` set the legacy form submitted.
- * Case-sensitive and exact on purpose -- a row saying "ADMIN" is not elevated.
- */
-const ELEVATED_ROLES: readonly string[] = ["owner", "adminRole"];
-
-const isElevated = (role: string) => ELEVATED_ROLES.includes(role);
+import { isElevated, isOwner } from "../roles";
 
 /**
  * The transaction-scoped client `prisma.$transaction` hands to its callback.
@@ -33,8 +25,6 @@ type TransactionTx = Omit<
  * singleton, because the count and the write it guards have to share one
  * transaction: see `removeMember`.
  */
-const isOwner = (role: string) => role === "owner";
-
 const countOwners = (tx: TransactionTx, organizationId: string) =>
   tx.member.count({ where: { organizationId, role: "owner" } });
 
