@@ -8,3 +8,4 @@ export * from "./category";
 export * from "./brand";
 export * from "./auth";
 export * from "./inventory";
+export * from "./organization";

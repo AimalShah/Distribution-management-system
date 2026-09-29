@@ -22,6 +22,15 @@ export const conflict = (message: string, code = "CONFLICT", details?: unknown) 
   new HttpError(409, message, code, details);
 
 /**
+ * The caller is known -- they hold a valid user and session -- but this action
+ * is not theirs to take. Distinguished from 404 because "you are not a member of
+ * this organization" is the useful answer, and from 422 because nothing about
+ * the request was malformed.
+ */
+export const forbidden = (message: string, code = "FORBIDDEN", details?: unknown) =>
+  new HttpError(403, message, code, details);
+
+/**
  * A well-formed request that asks for something this tenant cannot use, such as
  * a body pointing at a row in another organization. Distinct from 400, which
  * says the request itself was malformed, and from 404, which would confirm
