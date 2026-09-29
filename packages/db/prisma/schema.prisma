@@ -230,6 +230,8 @@ model Purchase {
   organization   Organization   @relation(fields: [organizationId], references: [id])
   supplier       Supplier       @relation(fields: [supplierId], references: [id])
   purchaseItems  PurchaseItem[]
+  // Purchase returns point back at the receipt the goods are going out on.
+  returns        Return[]
 
   @@map("purchases")
 }
@@ -272,6 +274,8 @@ model Sale {
 
   customer Customer   @relation(fields: [customerId], references: [id])
   items    SaleItem[]
+  // Sale returns point back at the invoice the goods came off.
+  returns  Return[]
 
   @@map("sales")
 }
@@ -387,16 +391,31 @@ model Return {
   returnCode     String @unique
   organizationId String
 
-  returnType   ReturnType
-  returnDate   DateTime     @default(now())
-  reason       String?
-  userId       String
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  returnType ReturnType
+  returnDate DateTime     @default(now())
+  reason     String?
+  userId     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // The document the goods are going back against. `src/actions/return.ts`
+  // already asked the form for these and `addReturn` then dropped them on the
+  // floor, so a SALE return could not be checked against the invoice it claimed
+  // to be reversing and nothing tied the return to a customer. Both stay
+  // optional because EXPIRED and DAMAGED returns are not tied to a document.
+  saleId     String?
+  purchaseId String?
+
   user         User         @relation(fields: [userId], references: [id])
   items        ReturnItem[]
   organization Organization @relation(fields: [organizationId], references: [id])
+  sale         Sale?        @relation(fields: [saleId], references: [id])
+  purchase     Purchase?    @relation(fields: [purchaseId], references: [id])
 
+  // Every return against one document has to be summed before the next is
+  // allowed, so both sides of that sum are read by document.
+  @@index([saleId])
+  @@index([purchaseId])
   @@map("returns")
 }
 

@@ -30,6 +30,14 @@ export const translatePrismaError = (error: unknown): HttpError | null => {
       return badRequest("A required relation is missing", "RELATION_VIOLATION");
     case "P2025":
       return notFound("Record not found", "NOT_FOUND");
+    case "P2034":
+      // Two Serializable transactions wanted to write the same rows and the
+      // database aborted one of them. Nothing it wrote was committed, so this is
+      // a 409 the caller can retry, not a server fault.
+      return conflict(
+        "This change conflicted with another in-flight write. Please retry.",
+        "WRITE_CONFLICT"
+      );
     default:
       return null;
   }
