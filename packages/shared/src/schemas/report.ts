@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The window every inventory report accepts.
+ * The window every report accepts, in every report family.
  *
  * `z.coerce.date()` rather than `z.string()`: it is the one place where coercion
  * is what is wanted, because an HTTP query string is always a string and
@@ -11,21 +11,22 @@ import { z } from "zod";
  * legacy took `startDate` and `endDate` as required parameters and did
  * `new Date(undefined)` when they were absent, which is an `Invalid Date`, and
  * then compared it: every `createdAt >= Invalid Date` is false, so the report
- * came back empty and looked like a tenant with no stock.
+ * came back empty and looked like a tenant with no stock. The purchase reports
+ * did the same with `purchaseDate`, for the same reason.
  *
- * Both are optional rather than required, because two of the five reports are
- * about the present rather than about a period — what is on hand, what is below
- * its reorder level — and forcing a window on them would mean asking a question
- * the caller does not have. A report that ignores the window it was given is
- * worse than one that insists on it, so the two that read it document what they
- * do with it and the ones that do not, say so.
+ * Both are optional rather than required, because several reports are about the
+ * present rather than about a period — what is on hand, what is below its
+ * reorder level — and forcing a window on them would mean asking a question the
+ * caller does not have. A report that ignores the window it was given is worse
+ * than one that insists on it, so the ones that read it document what they do
+ * with it and the ones that do not, say so.
  *
  * `superRefine` for the ordering rather than a field-level rule, because "start
  * is after end" is a statement about the pair and no single field can express it.
  * The legacy never checked, and a reversed range silently returned the empty set
  * for the same reason an unparseable one did.
  */
-const dateRangeQuery = z
+export const reportRangeQuerySchema = z
   .object({
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),
@@ -51,7 +52,7 @@ const dateRangeQuery = z
  * put `expiryLimit` before `windowEnd` and silently return fewer rows rather
  * than failing, and a fractional day count is not a thing a caller means.
  */
-const expiryQuery = dateRangeQuery.extend({
+export const reportExpiryQuerySchema = reportRangeQuerySchema.extend({
   daysUntilExpiry: z.coerce
     .number()
     .int("daysUntilExpiry must be a whole number of days")
@@ -60,12 +61,19 @@ const expiryQuery = dateRangeQuery.extend({
     .optional(),
 });
 
-export const inventoryBasicQuerySchema = dateRangeQuery;
-export const inventoryMovementsQuerySchema = dateRangeQuery;
-export const inventoryLowStockQuerySchema = dateRangeQuery;
-export const inventoryStockValuationQuerySchema = dateRangeQuery;
-export const inventoryExpiryQuerySchema = expiryQuery;
-export const inventoryFullQuerySchema = expiryQuery;
+export const inventoryBasicQuerySchema = reportRangeQuerySchema;
+export const inventoryMovementsQuerySchema = reportRangeQuerySchema;
+export const inventoryLowStockQuerySchema = reportRangeQuerySchema;
+export const inventoryStockValuationQuerySchema = reportRangeQuerySchema;
+export const inventoryExpiryQuerySchema = reportExpiryQuerySchema;
+export const inventoryFullQuerySchema = reportExpiryQuerySchema;
 
-export type InventoryReportQuery = z.output<typeof dateRangeQuery>;
-export type InventoryExpiryQuery = z.output<typeof expiryQuery>;
+export const purchaseBasicQuerySchema = reportRangeQuerySchema;
+export const purchaseBySupplierQuerySchema = reportRangeQuerySchema;
+export const purchaseByProductQuerySchema = reportRangeQuerySchema;
+export const purchaseFullQuerySchema = reportRangeQuerySchema;
+
+export type ReportRangeQuery = z.output<typeof reportRangeQuerySchema>;
+export type InventoryReportQuery = z.output<typeof reportRangeQuerySchema>;
+export type InventoryExpiryQuery = z.output<typeof reportExpiryQuerySchema>;
+export type PurchaseReportQuery = z.output<typeof reportRangeQuerySchema>;
