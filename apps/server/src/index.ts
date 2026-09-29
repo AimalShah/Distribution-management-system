@@ -1,11 +1,12 @@
 import { createApp } from "./app";
+import { assertAuthShimIsSafe, host, port } from "./config/env";
+
+assertAuthShimIsSafe();
 
 const app = createApp();
 
-const port = Number(process.env.PORT ?? 4000);
-
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+app.listen(port, host, () => {
+  console.log(`Server running on http://${host}:${port}`);
 });
 
 export { app };
