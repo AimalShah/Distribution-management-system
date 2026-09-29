@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -9,6 +9,12 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# turbo
+.turbo/
+
+# build output
+dist/
 
 # testing
 /coverage
@@ -43,3 +49,6 @@ next-env.d.ts
 /src/generated/prisma
 
 /src/prisma
+
+# prisma generated client
+/packages/db/prisma/generated/

@@ -2,15 +2,9 @@ packages:
   - "apps/*"
   - "packages/*"
 
-onlyBuiltDependencies:
-  - "@prisma/client"
-  - "@prisma/engines"
-  - "esbuild"
-  - "electron"
-  - "prisma"
 allowBuilds:
-  '@prisma/client': set this to true or false
-  '@prisma/engines': set this to true or false
-  electron: set this to true or false
-  esbuild: set this to true or false
-  prisma: set this to true or false
+  "@prisma/client": true
+  "@prisma/engines": true
+  electron: true
+  esbuild: true
+  prisma: true

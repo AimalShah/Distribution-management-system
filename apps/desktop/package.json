@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "concurrently \"pnpm --filter @dms/web run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dist": "electron-builder",
     "dist:dir": "electron-builder --dir"
   },
   "devDependencies": {
+    "@dms/config-typescript": "workspace:*",
     "concurrently": "^8.0.0",
     "electron": "^30.0.0",
     "electron-builder": "^24.0.0",
