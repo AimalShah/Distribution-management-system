@@ -14,7 +14,8 @@ const { models, transaction } = vi.hoisted(() => {
       delete: vi.fn(),
     },
     product: { findMany: vi.fn() },
-    inventory: { findFirst: vi.fn(), upsert: vi.fn() },
+    supplier: { findFirst: vi.fn() },
+    inventory: { upsert: vi.fn() },
     inventoryLog: { create: vi.fn() },
   };
 
@@ -102,7 +103,9 @@ beforeEach(() => {
   models.purchase.update.mockResolvedValue(purchaseFixture());
   models.purchase.delete.mockResolvedValue(purchaseFixture());
   models.product.findMany.mockResolvedValue([{ id: "prod_1" }]);
-  models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 5 });
+  models.supplier.findFirst.mockResolvedValue({ id: "sup_1" });
+  // `upsert` returns the row as it stands after the statement, which is what the
+  // service derives the log's previousQty from.
   models.inventory.upsert.mockResolvedValue({ id: "inv_1", quantityOnHand: 15 });
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
 });
@@ -245,7 +248,7 @@ describe("POST /api/purchases", () => {
 
     expect(models.inventory.upsert).toHaveBeenCalledWith({
       where: { productId: "prod_1" },
-      update: { quantityOnHand: 15 },
+      update: { quantityOnHand: { increment: 10 } },
       create: expect.anything(),
     });
 
@@ -320,13 +323,14 @@ describe("POST /api/purchases", () => {
   });
 
   it("creates the inventory row when the product has none yet", async () => {
-    models.inventory.findFirst.mockResolvedValue(null);
+    // The row is created at `quantityOnHand: 10`, and `upsert` hands that back.
+    models.inventory.upsert.mockResolvedValue({ id: "inv_1", quantityOnHand: 10 });
 
     await request(app).post("/api/purchases").set(auth()).send(validBody);
 
     expect(models.inventory.upsert).toHaveBeenCalledWith({
       where: { productId: "prod_1" },
-      update: { quantityOnHand: 10 },
+      update: { quantityOnHand: { increment: 10 } },
       create: expect.objectContaining({
         productId: "prod_1",
         organizationId: ORG,
@@ -339,9 +343,10 @@ describe("POST /api/purchases", () => {
   });
 
   it("accumulates two lines for the same product", async () => {
-    models.inventory.findFirst
-      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 5 })
-      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 15 });
+    // Each line increments the same row, so the second `upsert` returns 19.
+    models.inventory.upsert
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 15 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 19 });
 
     await request(app)
       .post("/api/purchases")
@@ -360,6 +365,19 @@ describe("POST /api/purchases", () => {
     expect(models.inventoryLog.create).toHaveBeenNthCalledWith(2, {
       data: expect.objectContaining({ previousQty: 15, newQty: 19 }),
     });
+  });
+
+  it("leaves the increment to the database instead of writing an absolute quantity", async () => {
+    await request(app).post("/api/purchases").set(auth()).send(validBody);
+
+    // A read-modify-write cannot hold under READ COMMITTED: two concurrent
+    // purchases would both read 5, both write 15, and 20 units received would be
+    // recorded as 10. `{ increment }` is one statement against the row it
+    // updates, so the database serialises it.
+    const arg = models.inventory.upsert.mock.calls[0][0] as {
+      update: { quantityOnHand: unknown };
+    };
+    expect(arg.update.quantityOnHand).toEqual({ increment: 10 });
   });
 
   it("deduplicates the tenant check when a product repeats", async () => {
@@ -540,6 +558,38 @@ describe("PUT /api/purchases/:id", () => {
 
     const arg = models.purchase.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(arg.data).toEqual({});
+  });
+
+  it("refuses to re-point the purchase at another tenant's supplier", async () => {
+    models.supplier.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .put("/api/purchases/pur_1")
+      .set(auth())
+      .send({ supplierId: "sup_foreign" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("SUPPLIER_NOT_IN_ORGANIZATION");
+    expect(res.body.details).toEqual({ supplierId: "sup_foreign" });
+    expect(models.purchase.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a supplier that belongs to the organization", async () => {
+    const res = await request(app)
+      .put("/api/purchases/pur_1")
+      .set(auth())
+      .send({ supplierId: "sup_1" });
+
+    expect(res.status).toBe(200);
+    expect(models.supplier.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "sup_1", organizationId: ORG } })
+    );
+  });
+
+  it("does not look up a supplier when the body carries none", async () => {
+    await request(app).put("/api/purchases/pur_1").set(auth()).send({ status: "Completed" });
+
+    expect(models.supplier.findFirst).not.toHaveBeenCalled();
   });
 
   it("404s when the purchase belongs to another organization", async () => {

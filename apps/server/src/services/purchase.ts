@@ -152,17 +152,15 @@ export async function createPurchase(
     });
 
     for (const item of data.items) {
-      // `Inventory` is one row per product, so re-reading inside the loop also
-      // makes two lines for the same product accumulate instead of overwrite.
-      const existing = await tx.inventory.findFirst({
-        where: { productId: item.productId, organizationId },
-      });
-      const previousQty = existing?.quantityOnHand ?? 0;
-      const newQty = previousQty + item.quantity;
-
+      // The increment is left to the database rather than computed from a read.
+      // A read-modify-write cannot hold under READ COMMITTED: two purchases for
+      // the same product both read 5, both write 15, and 20 units received are
+      // recorded as 10. `{ increment }` is a single statement against the row it
+      // updates, so the database serialises it, and it also makes two lines for
+      // the same product accumulate because each one increments the same row.
       const inventory = await tx.inventory.upsert({
         where: { productId: item.productId },
-        update: { quantityOnHand: newQty },
+        update: { quantityOnHand: { increment: item.quantity } },
         create: {
           productId: item.productId,
           organizationId,
@@ -170,6 +168,13 @@ export async function createPurchase(
           reorderLevel: 10,
         },
       });
+
+      // `upsert` returns the row as it stands after this statement, so the
+      // ledger's opening figure is derived from it. previousQty + quantity =
+      // newQty therefore holds by construction, including when another
+      // purchase committed between two lines of the same document.
+      const newQty = inventory.quantityOnHand;
+      const previousQty = newQty - item.quantity;
 
       await tx.inventoryLog.create({
         data: {
@@ -198,6 +203,25 @@ export async function updatePurchase(
   data: PurchaseUpdateInput,
   organizationId: string
 ) {
+  // `Purchase.supplierId` is a plain foreign key with no organization
+  // constraint, so the database would let a PUT re-point the purchase at
+  // another tenant's supplier. `createPurchase` refuses exactly this above, and
+  // the update path has to refuse it too.
+  if (data.supplierId !== undefined) {
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: data.supplierId, organizationId },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      throw badRequest(
+        "The supplier does not exist in this organization",
+        "SUPPLIER_NOT_IN_ORGANIZATION",
+        { supplierId: data.supplierId }
+      );
+    }
+  }
+
   const updateData: Prisma.PurchaseUncheckedUpdateInput = { ...data };
 
   return prisma.purchase.update({
