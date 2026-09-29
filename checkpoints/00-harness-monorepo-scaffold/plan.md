@@ -80,30 +80,46 @@ packages:
 - `src/main.tsx`, `src/App.tsx` (router setup)
 - `src/lib/api.ts` — API client using Axios with base URL from env
 
-### 6. `apps/server` — Express API
+### 6. `packages/devtools` — Debug/introspection harness
+
+- `package.json` with `tsx`, `jsdom`, `@testing-library/react`, `playwright`, `pixelmatch`, `pngjs`
+- `src/cli.ts` — entry point with subcommands: `call`, `state`, `render`, `screenshot`, `diff`
+- `src/service-call.ts` — dynamic-imports service module and calls named export directly
+- `src/debug-state-client.ts` — fetches `GET /__debug/state` over HTTP
+- `src/render-headless.ts` — RTL render with JSDOM for client components
+- `src/use-debug-state.ts` — dev-only hook that exposes state on `window.__DEBUG_STATE__`
+- `src/fetch-html.ts` — fetches rendered HTML over HTTP (for Next.js Server Components)
+- `src/screenshot.ts` — Playwright screenshot capture
+- `src/diff.ts` — DOM + screenshot diff against checkpoint `before/` captures
+
+### 7. `apps/server` — Express API
 
 - `package.json` with Express, Cors, Zod, `@dms/db`, `@dms/shared`
 - `src/index.ts` — Express app setup with CORS, JSON parsing, route mounting
 - `src/routes/` — route files (to be populated in Checkpoint 2)
+- `src/routes/__debug.ts` — dev-only debug router:
+  - `GET /__debug/state` — returns recent query log + query count
+  - `POST /__debug/call` — calls a service function by name over HTTP
 - `src/middleware/auth.ts` — auth middleware (to be implemented in Checkpoint 3)
-- `src/harness/` — debug/introspection harness:
-  - `src/harness/registry.ts` — service registry (Map<string, Function>)
-  - `src/harness/router.ts` — Express router exposing `GET /__harness/:service` and `POST /__harness/:service/:method`
-  - `src/harness/cli.ts` — CLI script that calls registered service functions and prints JSON
 
-### 7. `apps/desktop` — Electron shell
+### 8. `packages/db` — Prisma client with query tracking
+
+- `src/debug-log.ts` — in-memory query log (model, action, ms, timestamp)
+- `src/client.ts` — PrismaClient singleton with `$use` middleware that calls `trackQuery` in non-production
+
+### 9. `apps/desktop` — Electron shell
 
 - `package.json` with Electron, electron-builder
 - `src/main.ts` — Electron main process, loads `apps/web` build output
 - `src/preload.ts` — context bridge
 - `electron-builder.yml` — packaging config
 
-### 8. Config packages
+### 10. Config packages
 
 - `packages/config-eslint/` — shared ESLint config
 - `packages/config-typescript/` — shared tsconfig base
 
-### 9. CI fitness functions
+### 11. CI fitness functions
 
 - `.github/workflows/fitness-functions.yml` — initial CI with bundle-size check (other fitness functions added as checkpoints complete)
 
@@ -111,6 +127,10 @@ packages:
 
 - `pnpm install` succeeds
 - `pnpm turbo run build` builds all packages
-- `pnpm --filter server run harness` starts the CLI and prints JSON for a registered service
+- `pnpm debug call product.getProducts '{"page":1,"pageSize":20}'` prints JSON result
+- `pnpm debug state` returns query log from running server
+- `pnpm debug render --mode=fetch http://localhost:3000/product out.json` captures HTML
+- `pnpm debug screenshot http://localhost:5173/products out.png` captures screenshot
+- `pnpm debug diff 04-products-page` exits 0 when parity passes
 - `pnpm --filter web run dev` starts Vite dev server
-- `pnpm --filter server run dev` starts Express with harness endpoints at `/__harness/*`
+- `pnpm --filter server run dev` starts Express with debug endpoints at `/__debug/*`
