@@ -15,7 +15,7 @@ const { models, transaction } = vi.hoisted(() => {
     },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
-    inventory: { findFirst: vi.fn(), update: vi.fn() },
+    inventory: { findFirst: vi.fn(), updateMany: vi.fn() },
     inventoryLog: { create: vi.fn() },
   };
 
@@ -101,7 +101,7 @@ beforeEach(() => {
   models.customer.findFirst.mockResolvedValue({ id: "cus_1" });
   models.product.findMany.mockResolvedValue([{ id: "prod_1" }]);
   models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 10 });
-  models.inventory.update.mockResolvedValue({ id: "inv_1", quantityOnHand: 8 });
+  models.inventory.updateMany.mockResolvedValue({ count: 1 });
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
 });
 
@@ -205,12 +205,29 @@ describe("GET /api/sales/customer/:customerId", () => {
     const res = await request(app).get("/api/sales/customer/cus_1").set(auth());
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+    expect(res.body.pageCount).toBe(1);
     expect(models.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { customerId: "cus_1", organizationId: ORG },
       })
     );
+  });
+
+  it("paginates instead of returning a lifetime of sales in one response", async () => {
+    await request(app).get("/api/sales/customer/cus_1?page=3&pageSize=10").set(auth());
+
+    expect(models.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 10 })
+    );
+  });
+
+  it("rejects an out of range page", async () => {
+    const res = await request(app).get("/api/sales/customer/cus_1?pageSize=500").set(auth());
+
+    expect(res.status).toBe(400);
+    expect(models.sale.findMany).not.toHaveBeenCalled();
   });
 
   it("does not fall through to the :id route", async () => {
@@ -222,6 +239,10 @@ describe("GET /api/sales/customer/:customerId", () => {
 
 describe("POST /api/sales", () => {
   it("creates the sale, deducts stock and logs the OUT movement", async () => {
+    models.inventory.findFirst
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 });
+
     const res = await request(app).post("/api/sales").set(auth()).send(validBody);
 
     expect(res.status).toBe(201);
@@ -247,9 +268,13 @@ describe("POST /api/sales", () => {
       })
     );
 
-    expect(models.inventory.update).toHaveBeenCalledWith({
-      where: { id: "inv_1" },
-      data: { quantityOnHand: 8 },
+    expect(models.inventory.updateMany).toHaveBeenCalledWith({
+      where: {
+        productId: "prod_1",
+        organizationId: ORG,
+        quantityOnHand: { gte: 2 },
+      },
+      data: { quantityOnHand: { decrement: 2 } },
     });
 
     expect(models.inventoryLog.create).toHaveBeenCalledWith({
@@ -297,7 +322,7 @@ describe("POST /api/sales", () => {
       shortages: [{ productId: "prod_1", available: 10, requested: 20 }],
     });
     expect(models.sale.create).not.toHaveBeenCalled();
-    expect(models.inventory.update).not.toHaveBeenCalled();
+    expect(models.inventory.updateMany).not.toHaveBeenCalled();
     expect(models.inventoryLog.create).not.toHaveBeenCalled();
   });
 
@@ -334,11 +359,12 @@ describe("POST /api/sales", () => {
   });
 
   it("deducts repeated lines in sequence", async () => {
+    // One availability read, then one read back after each line's decrement:
+    // 10 -> 8 -> 6.
     models.inventory.findFirst
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
-      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 })
-      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 });
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 6 });
 
     const res = await request(app)
       .post("/api/sales")
@@ -361,12 +387,50 @@ describe("POST /api/sales", () => {
   });
 
   it("logs an OUT whose quantities always balance", async () => {
+    models.inventory.findFirst
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 });
+
     await request(app).post("/api/sales").set(auth()).send(validBody);
 
     const arg = models.inventoryLog.create.mock.calls[0][0] as {
       data: { previousQty: number; quantity: number; newQty: number };
     };
     expect(arg.data.previousQty - arg.data.quantity).toBe(arg.data.newQty);
+  });
+
+  it("makes the stock check and the deduction one statement", async () => {
+    // A read-then-write pair cannot hold under READ COMMITTED: two concurrent
+    // sales of 8 against 10 on hand would both pass a pre-check and both write
+    // 2, so 16 units would be sold against 2 left. The `gte` guard is evaluated
+    // by the database against the row it is updating, so the second one to
+    // arrive matches nothing and is refused.
+    await request(app).post("/api/sales").set(auth()).send(validBody);
+
+    const arg = models.inventory.updateMany.mock.calls[0][0] as {
+      where: { quantityOnHand: { gte: number } };
+      data: { quantityOnHand: { decrement: number } };
+    };
+    expect(arg.where.quantityOnHand.gte).toBe(2);
+    expect(arg.data.quantityOnHand).toEqual({ decrement: 2 });
+  });
+
+  it("refuses the sale when the atomic decrement finds nothing to claim", async () => {
+    // The availability pass saw 10, but a concurrent transaction took 8 first,
+    // so the guarded update matched zero rows and only 2 remain.
+    models.inventory.findFirst
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 2 });
+    models.inventory.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app).post("/api/sales").set(auth()).send(validBody);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STOCK");
+    expect(res.body.details.shortages).toEqual([
+      { productId: "prod_1", available: 2, requested: 2 },
+    ]);
+    expect(models.inventoryLog.create).not.toHaveBeenCalled();
   });
 
   it("refuses a customer from another organization", async () => {
@@ -505,14 +569,19 @@ describe("POST /api/sales", () => {
   });
 
   it("surfaces a stock row that disappears mid transaction", async () => {
+    // The availability pass saw the row, but by the time the deduction runs a
+    // concurrent transaction has deleted it, so the guarded update matches
+    // nothing and the follow-up read finds no row either.
     models.inventory.findFirst
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
       .mockResolvedValueOnce(null);
+    models.inventory.updateMany.mockResolvedValue({ count: 0 });
 
     const res = await request(app).post("/api/sales").set(auth()).send(validBody);
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("INVENTORY_ROW_MISSING");
+    expect(models.inventoryLog.create).not.toHaveBeenCalled();
   });
 });
 
@@ -539,7 +608,7 @@ describe("PUT /api/sales/:id", () => {
 
     const arg = models.sale.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(arg.data).toEqual({ status: "Pending" });
-    expect(models.inventory.update).not.toHaveBeenCalled();
+    expect(models.inventory.updateMany).not.toHaveBeenCalled();
   });
 
   it("404s for a sale owned by another tenant", async () => {
@@ -554,11 +623,43 @@ describe("PUT /api/sales/:id", () => {
     expect(res.body.code).toBe("NOT_FOUND");
   });
 
+  it("refuses to re-point the invoice at another tenant's customer", async () => {
+    models.customer.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .put("/api/sales/sal_1")
+      .set(auth())
+      .send({ customerId: "cus_foreign" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("CUSTOMER_NOT_IN_ORGANIZATION");
+    expect(res.body.details).toEqual({ customerId: "cus_foreign" });
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a customer that belongs to the organization", async () => {
+    const res = await request(app)
+      .put("/api/sales/sal_1")
+      .set(auth())
+      .send({ customerId: "cus_1" });
+
+    expect(res.status).toBe(200);
+    expect(models.customer.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "cus_1", organizationId: ORG } })
+    );
+  });
+
+  it("does not look up a customer when the body carries none", async () => {
+    await request(app).put("/api/sales/sal_1").set(auth()).send({ status: "Completed" });
+
+    expect(models.customer.findFirst).not.toHaveBeenCalled();
+  });
+
   it("does not return stock when a sale is cancelled", async () => {
     await request(app).put("/api/sales/sal_1").set(auth()).send({ status: "Cancelled" });
 
     expect(models.sale.update).toHaveBeenCalled();
-    expect(models.inventory.update).not.toHaveBeenCalled();
+    expect(models.inventory.updateMany).not.toHaveBeenCalled();
     expect(models.inventoryLog.create).not.toHaveBeenCalled();
   });
 });
@@ -585,7 +686,7 @@ describe("DELETE /api/sales/:id", () => {
   it("does not return the consumed stock, matching the legacy delete", async () => {
     await request(app).delete("/api/sales/sal_1").set(auth());
 
-    expect(models.inventory.update).not.toHaveBeenCalled();
+    expect(models.inventory.updateMany).not.toHaveBeenCalled();
     expect(models.inventoryLog.create).not.toHaveBeenCalled();
   });
 });

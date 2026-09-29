@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   SaleInvoiceSchema,
   SaleUpdateSchema,
+  paginationQuerySchema,
   saleListQuerySchema,
 } from "@dms/shared";
 import { asyncHandler, badRequest, notFound } from "../http";
@@ -32,11 +33,14 @@ saleRouter.get(
 saleRouter.get(
   "/customer/:customerId",
   asyncHandler(async (req, res) => {
-    const sales = await getSalesByCustomer(
-      req.params.customerId,
-      req.auth.organizationId
-    );
-    res.json(sales);
+    const { page, pageSize } = paginationQuerySchema.parse(req.query);
+    const result = await getSalesByCustomer({
+      customerId: req.params.customerId,
+      organizationId: req.auth.organizationId,
+      page,
+      pageSize,
+    });
+    res.json(result);
   })
 );
 

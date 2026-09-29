@@ -80,13 +80,36 @@ export async function getSaleByIdOrCode(idOrCode: string, organizationId: string
 }
 
 // The legacy `getSaleByCustomer` filtered on `customerId` alone, so a customer
-// id from another tenant returned their whole sales history. Scoped here.
-export async function getSalesByCustomer(customerId: string, organizationId: string) {
-  return prisma.sale.findMany({
-    where: { customerId, organizationId },
-    include: detailInclude,
-    orderBy: { saleDate: "desc" },
-  });
+// id from another tenant returned their whole sales history. Scoped here, and
+// paginated like `getSales`: a customer's lifetime result set is unbounded, and
+// each row embeds its lines and their products.
+export type SaleCustomerListArgs = {
+  customerId: string;
+  organizationId: string;
+  page: number;
+  pageSize: number;
+};
+
+export async function getSalesByCustomer({
+  customerId,
+  organizationId,
+  page,
+  pageSize,
+}: SaleCustomerListArgs) {
+  const where: Prisma.SaleWhereInput = { customerId, organizationId };
+
+  const [data, total] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      include: detailInclude,
+      orderBy: { saleDate: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.sale.count({ where }),
+  ]);
+
+  return { data, pageCount: Math.ceil(total / pageSize), total };
 }
 
 export async function createSale(data: SaleInvoiceInput, organizationId: string, userId: string) {
@@ -151,6 +174,12 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     // previousQty/newQty pair said only 5 had moved. This refuses the document
     // instead, so the log always satisfies previousQty - quantity = newQty.
     //
+    // This pass is for the error message, not for the guarantee. It reports every
+    // short line at once instead of failing on the first, but the decision that
+    // actually protects stock is the guarded decrement in the loop below, which
+    // runs against the row as the database sees it. Relying on this read alone
+    // would leave a window between the check and the write.
+    //
     // `quantityOnHand` is the only figure consulted: nothing in the legacy code
     // reserves stock, so `quantityReserved` is not part of availability yet.
     const shortages: { productId: string; available: number; requested: number }[] = [];
@@ -190,17 +219,64 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     });
 
     for (const item of data.items) {
-      // Re-read inside the loop so two lines for the same product deduct in
-      // sequence instead of both starting from the same quantity.
-      const inventory = await tx.inventory.findFirst({
-        where: { productId: item.productId, organizationId },
+      // The availability check and the write are one statement, and that is the
+      // only part that has to be. A read-then-write pair cannot hold under READ
+      // COMMITTED: two concurrent sales of 8 against 10 on hand both pass a
+      // pre-check, both read 10, and both write 2, so 16 units are sold against
+      // 2 left. The `gte` guard is evaluated by the database against the row it
+      // is updating, so only one transaction can claim the units and the other
+      // is refused. Two lines for the same product still deduct in sequence,
+      // because each one sees the previous line's write.
+      const claimed = await tx.inventory.updateMany({
+        where: {
+          productId: item.productId,
+          organizationId,
+          quantityOnHand: { gte: item.quantity },
+        },
+        data: { quantityOnHand: { decrement: item.quantity } },
       });
 
-      // The availability pass above already refused any product with no
-      // inventory row, but it ran as a separate read: a concurrent delete of
-      // that row would be visible here under READ COMMITTED. Refuse rather than
-      // write a log entry pointing at nothing.
-      if (!inventory) {
+      if (claimed.count === 0) {
+        // The pre-pass above already refused a product with no inventory row,
+        // but it ran as a separate read, so a concurrent transaction may have
+        // taken the units, or deleted the row, since.
+        const current = await tx.inventory.findFirst({
+          where: { productId: item.productId, organizationId },
+          select: { quantityOnHand: true },
+        });
+
+        if (!current) {
+          throw conflict(
+            "The stock record for one of the products no longer exists",
+            "INVENTORY_ROW_MISSING",
+            { productId: item.productId }
+          );
+        }
+
+        throw conflict(
+          "Not enough stock to fulfil this sale",
+          "INSUFFICIENT_STOCK",
+          {
+            shortages: [
+              {
+                productId: item.productId,
+                available: current.quantityOnHand,
+                requested: item.quantity,
+              },
+            ],
+          }
+        );
+      }
+
+      // `updateMany` returns a count, not a row, so the ledger's opening figure
+      // is derived from the row as it stands after the write rather than read
+      // before it: previousQty - quantity = newQty holds by construction.
+      const current = await tx.inventory.findFirst({
+        where: { productId: item.productId, organizationId },
+        select: { id: true, quantityOnHand: true },
+      });
+
+      if (!current) {
         throw conflict(
           "The stock record for one of the products no longer exists",
           "INVENTORY_ROW_MISSING",
@@ -208,17 +284,12 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         );
       }
 
-      const previousQty = inventory.quantityOnHand;
-      const newQty = previousQty - item.quantity;
-
-      await tx.inventory.update({
-        where: { id: inventory.id },
-        data: { quantityOnHand: newQty },
-      });
+      const newQty = current.quantityOnHand;
+      const previousQty = newQty + item.quantity;
 
       await tx.inventoryLog.create({
         data: {
-          inventoryId: inventory.id,
+          inventoryId: current.id,
           productId: item.productId,
           userId,
           movementType: "OUT",
@@ -243,6 +314,25 @@ export async function updateSale(
   data: SaleUpdateInput,
   organizationId: string
 ) {
+  // `Sale.customerId` is a plain foreign key with no organization constraint,
+  // so the database would let a PUT re-point the invoice at another tenant's
+  // customer. `createSale` refuses exactly this above, and the update path has
+  // to refuse it too.
+  if (data.customerId !== undefined) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: data.customerId, organizationId },
+      select: { id: true },
+    });
+
+    if (!customer) {
+      throw badRequest(
+        "The customer does not exist in this organization",
+        "CUSTOMER_NOT_IN_ORGANIZATION",
+        { customerId: data.customerId }
+      );
+    }
+  }
+
   const updateData: Prisma.SaleUncheckedUpdateInput = { ...data };
 
   return prisma.sale.update({
