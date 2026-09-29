@@ -1,0 +1,39 @@
+{
+  "name": "@dms/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @dms/web run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0",
+    "typescript": "^5",
+    "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.inventioo.dms",
+    "productName": "Inventioo DMS",
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

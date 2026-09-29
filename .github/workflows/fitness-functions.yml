@@ -1,0 +1,29 @@
+name: fitness-functions
+on: [pull_request]
+jobs:
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@dms/web
+      - run: pnpm --filter @dms/web run size-limit
+
+  table-pagination-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          if grep -rn "<table" apps/web/src --include="*.tsx" | grep -v "packages/ui/src/components/data-table.tsx"; then
+            echo "Raw <table> found outside the shared DataTable wrapper"; exit 1
+          fi
+
+  checkpoint-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm vitest run "checkpoints/**/parity.test.ts"
