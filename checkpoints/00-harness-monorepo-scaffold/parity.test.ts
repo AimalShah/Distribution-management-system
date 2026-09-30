@@ -61,8 +61,8 @@ describe("Checkpoint 0 — Monorepo scaffold", () => {
     expect(fs.existsSync(path.join(root, "apps/web/vite.config.ts"))).toBe(true);
   });
 
-  it("apps/server has harness router", () => {
-    expect(fs.existsSync(path.join(root, "apps/server/src/harness/router.ts"))).toBe(true);
+  it("apps/server has the debug router the harness calls", () => {
+    expect(fs.existsSync(path.join(root, "apps/server/src/routes/__debug.ts"))).toBe(true);
   });
 
   it("apps/desktop has electron main", () => {
@@ -71,9 +71,15 @@ describe("Checkpoint 0 — Monorepo scaffold", () => {
 });
 
 describe("Checkpoint 0 — Harness", () => {
-  it("harness CLI prints JSON for a registered service", () => {
-    // This test assumes the server package has a test harness setup
-    // The actual test will be implemented once the harness is built
-    expect(true).toBe(true);
+  it("ships the devtools harness CLI", () => {
+    expect(fs.existsSync(path.join(root, "packages/devtools/src/cli.ts"))).toBe(true);
+  });
+
+  it("wires the debug router the harness calls", () => {
+    const router = fs.readFileSync(
+      path.join(root, "apps/server/src/routes/__debug.ts"),
+      "utf-8"
+    );
+    expect(router).toContain("debugRouter");
   });
 });
