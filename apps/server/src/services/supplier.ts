@@ -10,14 +10,12 @@ const listInclude = {
   _count: { select: { purchase: true } },
 } satisfies Prisma.SupplierInclude;
 
-// The legacy detail embedded the same purchases and 02b added no
-// `supplierId` filter or `/api/purchases/supplier/:supplierId` route, so this is
-// the only way a supplier's purchase history is reachable. It is left as the
-// legacy had it rather than silently dropping the history from the response; the
-// paginated equivalent belongs to the purchase router and is still missing.
-const detailInclude = {
-  purchase: true,
-} satisfies Prisma.SupplierInclude;
+// The legacy detail embedded every purchase the supplier had ever been billed on
+// -- `purchase: true` against a `Purchase[]` relation, so the response grew with
+// the supplier's entire history and never stopped. `getPurchasesBySupplier` on
+// `GET /api/purchases/supplier/:supplierId` is the paginated equivalent, and the
+// count on the list row already says how many there are.
+const detailInclude = {} satisfies Prisma.SupplierInclude;
 
 export type SupplierListArgs = {
   organizationId: string;

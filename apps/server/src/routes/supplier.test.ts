@@ -243,14 +243,19 @@ describe("GET /api/suppliers/:id", () => {
     );
   });
 
-  it("still carries the purchase history the legacy detail had", async () => {
+  it("no longer embeds the whole purchase history", async () => {
+    // The legacy detail embedded `purchase: true` against a `Purchase[]` relation,
+    // so the response grew with every purchase the supplier had ever been billed
+    // on and never stopped. The history is reachable, paginated, at
+    // `GET /api/purchases/supplier/:supplierId`; the count is already on the list
+    // row. What the detail route must not do is carry it inline.
     await request(app)
       .get("/api/suppliers/sup_1")
       .set(ORGANIZATION_HEADER, ORG);
 
     const { include } = supplierModel.findFirst.mock.calls[0][0];
 
-    expect(include).toEqual({ purchase: true });
+    expect(include).not.toHaveProperty("purchase");
   });
 
   it("404s when the supplier belongs to another organization", async () => {
