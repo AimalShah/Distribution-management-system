@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { ORGANIZATION_HEADER } from "../middleware/auth-context";
 
-const { productModel } = vi.hoisted(() => ({
+const { productModel, categoryModel, brandModel } = vi.hoisted(() => ({
   productModel: {
     findMany: vi.fn(),
     count: vi.fn(),
@@ -12,11 +12,26 @@ const { productModel } = vi.hoisted(() => ({
     update: vi.fn(),
     delete: vi.fn(),
   },
+  // The service proves a product's `category` and `brand` belong to the caller's
+  // own tenant before writing the foreign keys. `findFirst` scoped by
+  // organizationId is the whole check, so a hit means "mine" and a miss means
+  // "not mine" -- the same query shape that lets the service refuse a cross-tenant
+  // reference.
+  categoryModel: { findFirst: vi.fn() },
+  brandModel: { findFirst: vi.fn() },
 }));
 
 vi.mock("@dms/db", () => ({
-  default: { product: productModel },
-  prisma: { product: productModel },
+  default: {
+    product: productModel,
+    category: categoryModel,
+    brand: brandModel,
+  },
+  prisma: {
+    product: productModel,
+    category: categoryModel,
+    brand: brandModel,
+  },
 }));
 
 const app = createApp();
@@ -70,6 +85,10 @@ beforeEach(() => {
   productModel.create.mockResolvedValue(productFixture());
   productModel.update.mockResolvedValue(productFixture());
   productModel.delete.mockResolvedValue(productFixture());
+  // Default: the tenant owns both referenced rows, so the reference check passes.
+  // A test that wants a foreign reference overrides one of these with `null`.
+  categoryModel.findFirst.mockResolvedValue({ id: "cat_1" });
+  brandModel.findFirst.mockResolvedValue({ id: "brand_1" });
 });
 
 describe("organization context", () => {
@@ -335,7 +354,55 @@ describe("POST /api/products", () => {
     expect(res.body.details).toEqual({ target: ["productCode"] });
   });
 
-  it("maps an unknown category or brand to 400", async () => {
+  it("refuses a category or brand from another tenant", async () => {
+    // The check runs before the write, so `create` is never reached. Previously
+    // the foreign key was written straight from the body and the database caught
+    // it as a bare P2003 -- which also meant a product could not be pointed at
+    // another tenant's category at all without a 400 that named neither cause.
+    categoryModel.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post("/api/products")
+      .set(ORGANIZATION_HEADER, ORG)
+      .send(validBody);
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe("CATEGORY_NOT_IN_ORGANIZATION");
+    expect(productModel.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a brand from another tenant", async () => {
+    brandModel.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post("/api/products")
+      .set(ORGANIZATION_HEADER, ORG)
+      .send(validBody);
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe("BRAND_NOT_IN_ORGANIZATION");
+    expect(productModel.create).not.toHaveBeenCalled();
+  });
+
+  it("scopes the reference check to the caller's own tenant", async () => {
+    await request(app)
+      .post("/api/products")
+      .set(ORGANIZATION_HEADER, ORG)
+      .send(validBody);
+
+    // A bare `findUnique({ where: { id } })` would pass for any tenant's row.
+    // The tenant is part of the predicate, so the answer is "mine" or not.
+    expect(categoryModel.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "cat_1", organizationId: ORG } })
+    );
+    expect(brandModel.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "brand_1", organizationId: ORG } })
+    );
+  });
+
+  it("still maps a genuine foreign key violation to 400", async () => {
+    // The reference check covers category and brand. Any other foreign key the
+    // database rejects keeps the central P2003 mapping.
     productModel.create.mockRejectedValue(prismaError("P2003"));
 
     const res = await request(app)

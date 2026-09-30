@@ -1,6 +1,58 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { ProductInput, ProductUpdateInput } from "@dms/shared";
+import { unprocessable } from "../http";
+
+/**
+ * A product may only point at a category or a brand its own tenant owns.
+ *
+ * Checkpoint 2i added exactly this check to `addBrand`/`updateBrand`, because a
+ * brand could otherwise be created against another tenant's category. The same
+ * hole is one level up, and it is wider: `Product.categoryId` and
+ * `Product.brandId` were written straight from the body, so a tenant could file
+ * its products under another tenant's category or brand.
+ *
+ * Nothing downstream notices. Every read scopes the product by
+ * `organizationId` and then follows the foreign key, so the foreign row's name is
+ * rendered inside this tenant's product. Worse, the in-use guards on
+ * `removeBrand` and `removeCategory` count *this* tenant's products before
+ * refusing a delete -- so a brand that only looks in-use to someone else reads as
+ * unused here, the delete is attempted, and the answer is a 400 about a foreign
+ * key that describes neither cause.
+ */
+async function assertRefsInOrganization(
+  refs: { categoryId?: string | null; brandId?: string | null },
+  organizationId: string
+) {
+  const [category, brand] = await Promise.all([
+    refs.categoryId
+      ? prisma.category.findFirst({
+          where: { id: refs.categoryId, organizationId },
+          select: { id: true },
+        })
+      : null,
+    refs.brandId
+      ? prisma.brand.findFirst({
+          where: { id: refs.brandId, organizationId },
+          select: { id: true },
+        })
+      : null,
+  ]);
+
+  if (refs.categoryId && !category) {
+    throw unprocessable(
+      "Select a category that belongs to this organization.",
+      "CATEGORY_NOT_IN_ORGANIZATION"
+    );
+  }
+
+  if (refs.brandId && !brand) {
+    throw unprocessable(
+      "Select a brand that belongs to this organization.",
+      "BRAND_NOT_IN_ORGANIZATION"
+    );
+  }
+}
 
 const listInclude = {
   category: true,
@@ -71,6 +123,8 @@ export async function getProductById(id: string, organizationId: string) {
 export async function addProduct(data: ProductInput, organizationId: string) {
   const { category, brand, ...fields } = data;
 
+  await assertRefsInOrganization({ categoryId: category, brandId: brand }, organizationId);
+
   return prisma.product.create({
     data: {
       ...fields,
@@ -93,6 +147,17 @@ export async function updateProduct(
 
   if (category !== undefined) updateData.categoryId = category;
   if (brand !== undefined) updateData.brandId = brand;
+
+  // Only the references this update actually touches are checked. An update that
+  // leaves `brand` alone must not fail because the brand already on the product
+  // belongs to somebody else, and equally must not be the thing that fixes it.
+  await assertRefsInOrganization(
+    {
+      categoryId: category === undefined ? null : category,
+      brandId: brand === undefined ? null : brand,
+    },
+    organizationId
+  );
 
   return prisma.product.update({
     where: { id, organizationId },
