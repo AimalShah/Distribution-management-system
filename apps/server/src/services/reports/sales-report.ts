@@ -140,42 +140,47 @@ export async function getSalesByCustomer(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  const sales = await prisma.sale.findMany({
+  // Counted and summed by the database, not by pulling every matching sale into
+  // this process and folding it in a `Map`. The old shape was `findMany` over the
+  // whole window -- every sale a tenant has ever made, with a join to `Customer`
+  // on each -- and then a JavaScript loop to add up numbers the database can add.
+  // The result was identical and the memory was not: the response had one entry
+  // per customer, but the query had one row per sale.
+  const groups = await prisma.sale.groupBy({
+    by: ["customerId"],
     where: saleWindow(organizationId, query),
-    select: {
-      customerId: true,
-      totalAmount: true,
-      customer: { select: { name: true, customerCode: true, isActive: true } },
-    },
+    _count: { _all: true },
+    _sum: { totalAmount: true },
+    orderBy: { _sum: { totalAmount: "desc" } },
   });
 
-  const totals = new Map<
-    string,
-    {
-      name: string;
-      customerCode: string;
-      isActive: boolean;
-      orders: number;
-      totalAmount: number;
-    }
-  >();
+  const customers = await prisma.customer.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((group) => group.customerId) },
+    },
+    select: { id: true, name: true, customerCode: true, isActive: true },
+  });
+  const byId = new Map(customers.map((customer) => [customer.id, customer]));
 
-  for (const sale of sales) {
-    const bucket = totals.get(sale.customerId) ?? {
-      name: sale.customer.name,
-      customerCode: sale.customer.customerCode,
-      isActive: sale.customer.isActive,
-      orders: 0,
-      totalAmount: 0,
-    };
-    bucket.orders += 1;
-    bucket.totalAmount += sale.totalAmount;
-    totals.set(sale.customerId, bucket);
-  }
+  // A group whose customer row has since been deleted has no name to report.
+  // `Sale.customerId` is a required relation, so this cannot normally happen; the
+  // filter is here so a dangling row drops one line rather than throwing.
+  return groups.flatMap((group) => {
+    const customer = byId.get(group.customerId);
+    if (!customer) return [];
 
-  return [...totals.entries()]
-    .map(([customerId, bucket]) => ({ customerId, ...bucket }))
-    .sort((a, b) => b.totalAmount - a.totalAmount);
+    return [
+      {
+        customerId: group.customerId,
+        name: customer.name,
+        customerCode: customer.customerCode,
+        isActive: customer.isActive,
+        orders: group._count._all,
+        totalAmount: group._sum.totalAmount ?? 0,
+      },
+    ];
+  });
 }
 
 /**
@@ -190,59 +195,52 @@ export async function getSalesByProduct(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  const items = await prisma.saleItem.findMany({
+  // Aggregated in the database, as the customer report above is. The old shape
+  // loaded every line of every sale in the window into this process and folded it
+  // in a `Map`, when the response only ever had one entry per product.
+  //
+  // The average unit price is the mean of the `unitPrice` *on the lines*, not the
+  // revenue-weighted one -- `sum(unitPrice) / count(lines)`, which is what the
+  // loop computed and is preserved here. A revenue-weighted average would be a
+  // different number and a different question.
+  const groups = await prisma.saleItem.groupBy({
+    by: ["productId"],
     where: { sale: saleWindow(organizationId, query) },
-    select: {
-      productId: true,
-      quantity: true,
-      unitPrice: true,
-      totalPrice: true,
-      product: { select: { name: true, productCode: true, unit: true } },
-    },
+    _count: { _all: true },
+    _sum: { quantity: true, totalPrice: true, unitPrice: true },
+    orderBy: { _sum: { totalPrice: "desc" } },
   });
 
-  const totals = new Map<
-    string,
-    {
-      name: string;
-      productCode: string;
-      unit: string;
-      quantity: number;
-      totalPrice: number;
-      priceSum: number;
-      priceCount: number;
-    }
-  >();
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((group) => group.productId) },
+    },
+    select: { id: true, name: true, productCode: true, unit: true },
+  });
+  const byId = new Map(products.map((product) => [product.id, product]));
 
-  for (const item of items) {
-    const bucket = totals.get(item.productId) ?? {
-      name: item.product.name,
-      productCode: item.product.productCode,
-      unit: item.product.unit,
-      quantity: 0,
-      totalPrice: 0,
-      priceSum: 0,
-      priceCount: 0,
-    };
-    bucket.quantity += item.quantity;
-    bucket.totalPrice += item.totalPrice;
-    bucket.priceSum += item.unitPrice;
-    bucket.priceCount += 1;
-    totals.set(item.productId, bucket);
-  }
+  // `SaleItem.productId` is a required relation, so a group always resolves. The
+  // filter is here so a dangling row drops one line rather than throwing.
+  return groups.flatMap((group) => {
+    const product = byId.get(group.productId);
+    if (!product) return [];
 
-  return [...totals.entries()]
-    .map(([productId, bucket]) => ({
-      productId,
-      name: bucket.name,
-      productCode: bucket.productCode,
-      unit: bucket.unit,
-      quantity: bucket.quantity,
-      totalPrice: bucket.totalPrice,
-      averageUnitPrice:
-        bucket.priceCount > 0 ? bucket.priceSum / bucket.priceCount : 0,
-    }))
-    .sort((a, b) => b.totalPrice - a.totalPrice);
+    const lineCount = group._count._all;
+    const priceSum = group._sum.unitPrice ?? 0;
+
+    return [
+      {
+        productId: group.productId,
+        name: product.name,
+        productCode: product.productCode,
+        unit: product.unit,
+        quantity: group._sum.quantity ?? 0,
+        totalPrice: group._sum.totalPrice ?? 0,
+        averageUnitPrice: lineCount > 0 ? priceSum / lineCount : 0,
+      },
+    ];
+  });
 }
 
 export async function getFullSalesReport(
