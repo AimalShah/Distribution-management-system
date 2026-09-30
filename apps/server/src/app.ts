@@ -5,6 +5,10 @@ import { errorHandler, notFoundHandler } from "./http";
 import { authContext, bootstrapAuthContext } from "./middleware/auth-context";
 import { apiRouter } from "./routes";
 import { organizationRouter } from "./routes/organization";
+import {
+  memberRouter,
+  organizationMemberRouter,
+} from "./routes/member";
 import { debugRouter } from "./routes/__debug";
 
 export function createApp(): Express {
@@ -37,6 +41,11 @@ export function createApp(): Express {
   // fifteen routers all read a tenant from `req.auth.organizationId` and have no
   // reason to be reachable without one, so they stay on the strict middleware.
   //
+  // `organizationMemberRouter` is in this stack and not in `apiRouter` because
+  // its paths start `/organizations/:id/...`: mounted here, ahead of
+  // `organizationRouter`, they reach their handler. Mounted anywhere later they
+  // would be swallowed by the `notFoundHandler` that terminates this stack.
+  //
   // `notFoundHandler` terminates this mount rather than letting an unmatched
   // organization path fall through: it would reach `authContext` below, which
   // answers 400 ORGANIZATION_REQUIRED for a path that does not exist, and a
@@ -44,9 +53,16 @@ export function createApp(): Express {
   app.use(
     "/api/organizations",
     bootstrapAuthContext,
+    organizationMemberRouter,
     organizationRouter,
     notFoundHandler
   );
+
+  // Same reasoning as the stack above, and it has to be mounted before the
+  // `/api` line below for the same reason -- `authContext` there would answer
+  // 400 ORGANIZATION_REQUIRED for a by-id member route that needs no tenant
+  // header of its own.
+  app.use("/api/members", bootstrapAuthContext, memberRouter, notFoundHandler);
 
   app.use("/api", authContext, apiRouter);
 

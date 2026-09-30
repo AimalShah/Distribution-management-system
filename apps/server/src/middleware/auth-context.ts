@@ -87,3 +87,33 @@ export const bootstrapAuthContext: RequestHandler = (req, _res, next) => {
   next();
 };
 
+/**
+ * The counterpart to `bootstrapAuthContext`: behind it the two values a route
+ * cannot work without are `undefined` rather than present, and a route that
+ * needs one has to say so.
+ *
+ * These live here, next to the middleware that fills `req.auth` and to the
+ * Checkpoint 3 note about replacing it, because they are the same concern read
+ * the other way around. They are assertions about request context, not about
+ * the request body, which is what the schemas in `@dms/shared` are for.
+ */
+export const requireUserId = (userId?: string): string => {
+  if (!userId) {
+    throw badRequest(
+      `Missing user context. Send the ${USER_HEADER} header.`,
+      "USER_REQUIRED"
+    );
+  }
+  return userId;
+};
+
+export const requireSessionId = (sessionId?: string): string => {
+  if (!sessionId) {
+    throw badRequest(
+      `Missing session context. Send the ${SESSION_HEADER} header.`,
+      "SESSION_REQUIRED"
+    );
+  }
+  return sessionId;
+};
+
