@@ -24,7 +24,7 @@ not from what a `plan.md` claims.
 
 | Area | Status |
 |---|---|
-| 00 — Harness + Monorepo Scaffold | **Partial** |
+| 00 — Harness + Monorepo Scaffold | **Implemented** |
 | 01 — Shared Packages | **Implemented** |
 | 02a–02o — Express API | **Implemented** (13/15 direct, 2 partial) |
 | 03 — Auth | **Partial** (shim only) |
@@ -37,19 +37,36 @@ not from what a `plan.md` claims.
 
 ---
 
-## 00 — Harness + Monorepo Scaffold · Partial
+## 00 — Harness + Monorepo Scaffold · Implemented
 
 Monorepo works: Turborepo + pnpm workspaces, `apps/{web,server,desktop}`,
 `packages/{ui,db,shared,config-eslint,config-typescript}` all exist.
 
-Missing: `apps/server/src/harness/router.ts`. The parity test asserts it and asserts the
-harness CLI prints JSON, but that test body is `expect(true).toBe(true)` — a placeholder
-that passes without testing anything.
+`apps/server/src/harness/router.ts` now exists and is the real thing: validated
+service/function dispatch, traversal rejection, argument limits, a `/state` route, and a
+`/call` route. Ten tests cover it, and `apps/server/src/routes/__debug.ts` re-exports it
+instead of holding an inline handler.
 
 ## 01 — Shared Packages · Implemented
 
 `packages/shared` has `pagination.ts`, `inputs.ts`, and 15 schemas (auth, product, purchase,
 sale, return, inventory, customer, supplier, organization, member, category, brand, report).
+
+`packages/ui` has all 28 shadcn components plus `data-table` and a `date-range` picker that
+shadcn does not ship, re-exported from `src/index.ts`. Two constraints are worth knowing
+before editing anything in there, because both fail silently until something is consumed:
+
+- **No `@/` path aliases.** `@dms/ui` ships raw TypeScript (`main: ./src/index.ts`), so the
+  consuming app's `tsc` compiles these files with the *app's* tsconfig. An `@/lib/utils`
+  import resolves here and nowhere else, and the breakage lands on every component at once
+  with no error in this package. `packages/shared` already works this way; the parity test
+  enforces it.
+- **The theme is imported by the app, not the package.** `packages/ui/src/theme.css` holds
+  the shadcn tokens but deliberately does not `@import "tailwindcss"`, which is not
+  resolvable from this package. `apps/web/src/index.css` imports Tailwind first and the
+  theme second, and `@source`s `packages/ui/src` so the components' utility classes are
+  actually generated. Both paths are relative to the stylesheet, and both were wrong by one
+  level until the parity test caught it — Tailwind ignores a bad `@source` without a word.
 
 ## 02 — Express API · Implemented
 
@@ -183,7 +200,7 @@ The parity suites under `checkpoints/` are outside the pnpm workspace globs, so 
 
 | Job | State |
 |---|---|
-| `bundle-size` | Works. `apps/web` now has a `size-limit` script and `.size-limit.json` (100 kB brotli budget, currently 73.04 kB). |
+| `bundle-size` | Works. `apps/web` has a `size-limit` script and `.size-limit.json`. Budget is **175 kB** brotli, see the note below for how that number was chosen. |
 | `checkpoint-parity` | Works. Runs `pnpm run test:parity`; the dead `pnpm exec vitest` and `playwright install` steps are gone. |
 | `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
@@ -191,15 +208,40 @@ The parity suites under `checkpoints/` are outside the pnpm workspace globs, so 
 `checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
 with the reason it is not enforced, and `checkpoints/parity-gate.test.ts` fails if a
 checkpoint gains a parity suite without a decision, or if a `gated` entry matches no files
-on disk. Today only `00` is `gated` (16 tests). `pnpm run test:parity:all` runs the full
-28-suite set for progress tracking; the `pending` suites fail there by design.
+on disk. `00` and `01` are now `gated` (24 tests). `pnpm run test:parity:all` runs the full
+set for progress tracking; the `pending` suites fail there by design.
 
-The 22 `02x` failures that gate exposed are **not regressions**. Those 16 suites are
+### The bundle budget is measured, not guessed
+
+The 100 kB budget from the first CI pass was set against a 73.04 kB shell that imported
+nothing from `@dms/ui`, so it left 27 kB of headroom for a library that did not exist. It was
+recalibrated once the UI package landed, against brotli measurements of the real thing:
+
+| Build | Brotli |
+|---|---|
+| Shell, no `@dms/ui` import | 73.04 kB |
+| `Button` only, via the barrel | 89.49 kB |
+| `Button` + `DataTable` + `DateRangePicker` (one report screen) | 128.23 kB |
+
+**175 kB** is set from the 128.23 kB worst case with roughly 35% headroom. Past that, charts,
+tables and the date range need `React.lazy` splitting rather than a bigger number — the
+measurements above are how to tell the difference between the two.
+
+Getting there needed `"sideEffects": false` on `@dms/ui`. Without it Rollup treats every
+`export *` in the barrel as potentially effectful and pulls all of recharts in for a single
+`Button`; with it, `Button`-only is 89.49 kB rather than 155.62 kB.
+
+The 23 remaining failures in `test:parity:all` are **not regressions**. Those suites are
 unfinished stubs: `beforeAll` never seeds a tenant, they authenticate with
 `Authorization: Bearer <token>` against an API that has read `x-organization-id` since 02a,
 and several `it` blocks are bare comments that pass vacuously. They have never run, because
 the job died before executing anything. They need rewriting against the header-based tenant
 context, reconciled against the existing 628 server tests rather than duplicated.
+
+Counting them precisely, because it is easy to overstate: the full run is 29 files / 172
+tests, 23 failing across 14 files — **20 in the 16 `02x` suites**, 3 in `03-auth`, and 0
+elsewhere. An earlier draft of this file said "22 `02x` failures"; the real number is 20, and
+the run total is 23.
 
 ### Schema migrations exist now
 

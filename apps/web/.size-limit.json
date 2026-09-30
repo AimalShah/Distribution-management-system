@@ -2,6 +2,6 @@
   {
     "name": "Web app (gzipped JS + CSS)",
     "path": "dist/assets/*.{js,css}",
-    "limit": "100 kB"
+    "limit": "175 kB"
   }
 ]
