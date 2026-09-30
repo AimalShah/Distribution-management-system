@@ -16,6 +16,7 @@
     "test:checkpoint2f": "vitest run src/routes/customer.test.ts",
     "test:checkpoint2g": "vitest run src/routes/supplier.test.ts",
     "test:checkpoint2h": "vitest run src/routes/category.test.ts",
+    "test:checkpoint2i": "vitest run src/routes/brand.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
