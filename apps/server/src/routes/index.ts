@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { customerRouter } from "./customer";
 import { inventoryRouter } from "./inventory";
 import { productRouter } from "./product";
 import { purchaseRouter } from "./purchase";
@@ -12,3 +13,4 @@ apiRouter.use("/purchases", purchaseRouter);
 apiRouter.use("/sales", saleRouter);
 apiRouter.use("/inventory", inventoryRouter);
 apiRouter.use("/returns", returnRouter);
+apiRouter.use("/customers", customerRouter);
