@@ -38,9 +38,7 @@ export const GATE: readonly GateEntry[] = [
   },
   {
     dir: "01-shared-packages",
-    status: "pending",
-    reason:
-      "`packages/ui` exports no components, so the 28 shadcn components the suite requires do not exist. This is the next checkpoint.",
+    status: "gated",
   },
   {
     dir: "02-express-api",
@@ -58,7 +56,7 @@ export const GATE: readonly GateEntry[] = [
     dir: "04-react-web-app",
     status: "pending",
     reason:
-      "`apps/web` is a 4-file shell with no screens, so the ten suites have nothing to assert against. Blocked on 01 (shared UI) and 03 (real sessions).",
+      "`apps/web` is a 4-file shell with no screens, so the ten suites have nothing to assert against. Blocked on 01 (shared UI, now landed) and 03 (real sessions).",
   },
 ];
 

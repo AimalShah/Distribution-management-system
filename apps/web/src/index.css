@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* The shadcn tokens (`--background`, `--primary`, `chart-1`..`chart-5`, the
+   Tailwind v4 `@theme` mapping) belong to @dms/ui because the components are what
+   reference those class names. Importing them here means a component that
+   compiles still renders styled. `tailwindcss` is imported above, not in
+   theme.css, because this app owns the Tailwind build.
+
+   Three levels up, not two: paths are relative to this file, and two levels up
+   from `apps/web/src` is `apps`, not the repository root. Vite reports the miss
+   but Tailwind's `@source` below is silent about the same mistake. */
+@import "../../../packages/ui/src/theme.css";
+
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
-@source "../../packages/ui/src/**/*.{ts,tsx}";
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
