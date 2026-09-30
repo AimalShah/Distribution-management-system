@@ -119,6 +119,14 @@ model Member {
   role           String
   createdAt      DateTime
 
+  // One membership per user per organization, enforced by the database. The
+  // read-then-create check in `addMember` cannot make this true on its own: two
+  // concurrent requests both see no existing row and both insert. Duplicate owner
+  // rows are not merely untidy -- `countOwners` counts rows, not distinct users,
+  // so a tenant with one real owner and two owner rows reports two owners and the
+  // LAST_OWNER guard lets both be demoted away, leaving the organization with no
+  // owner and no route to appoint one.
+  @@unique([organizationId, userId])
   @@map("member")
 }
 
@@ -239,7 +247,7 @@ model PurchaseItem {
   discount    Float?
 
   // Relations
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id])
 
   @@map("purchase_items")
@@ -279,7 +287,7 @@ model SaleItem {
   discount   Float?
 
   // Relations
-  sale    Sale    @relation(fields: [saleId], references: [id])
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 
   @@map("sale_items")
@@ -401,7 +409,7 @@ model ReturnItem {
   discount  Float
   unitPrice Float
   note      String?
-  return    Return  @relation(fields: [returnId], references: [id])
+  return    Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
 
   @@map("return_items")

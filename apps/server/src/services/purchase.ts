@@ -75,6 +75,46 @@ export async function getPurchases({
 // and returned an array, so the detail route answered with a list of every
 // matching purchase across all tenants. `findFirst` scoped to the tenant returns
 // the single document the route contract promises.
+export type PurchaseSupplierListArgs = {
+  supplierId: string;
+  organizationId: string;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * A supplier's purchase history, paginated.
+ *
+ * The only other way to read this was `GET /api/suppliers/:id`, whose detail
+ * include embedded `purchase: true` -- every purchase the supplier was ever
+ * billed on, unbounded. A supplier with a few thousand invoices answered with a
+ * few thousand full invoice documents, and it grew without limit until it did.
+ *
+ * This is the shape `getSalesByCustomer` already has for the customer side, and
+ * it is what lets the detail route drop the embed.
+ */
+export async function getPurchasesBySupplier({
+  supplierId,
+  organizationId,
+  page,
+  pageSize,
+}: PurchaseSupplierListArgs) {
+  const where: Prisma.PurchaseWhereInput = { supplierId, organizationId };
+
+  const [data, total] = await Promise.all([
+    prisma.purchase.findMany({
+      where,
+      include: detailInclude,
+      orderBy: { purchaseDate: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.purchase.count({ where }),
+  ]);
+
+  return { data, pageCount: Math.ceil(total / pageSize), total };
+}
+
 export async function getPurchaseById(id: string, organizationId: string) {
   return prisma.purchase.findFirst({
     where: { id, organizationId },

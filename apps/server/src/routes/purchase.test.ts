@@ -195,6 +195,60 @@ describe("GET /api/purchases", () => {
   });
 });
 
+describe("GET /api/purchases/supplier/:supplierId", () => {
+  // The replacement for the unbounded `purchase: true` embed the supplier detail
+  // route used to carry. Mirrors `GET /api/sales/customer/:customerId`.
+
+  it("pages the supplier's purchases", async () => {
+    models.purchase.count.mockResolvedValue(42);
+
+    const res = await request(app)
+      .get("/api/purchases/supplier/sup_1?page=2&pageSize=5")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(models.purchase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { supplierId: "sup_1", organizationId: ORG },
+        skip: 5,
+        take: 5,
+      })
+    );
+    // 42 purchases at 5 a page is 9 pages, and the total comes back with them so
+    // a caller can page without guessing.
+    expect(res.body.pageCount).toBe(9);
+    expect(res.body.total).toBe(42);
+  });
+
+  it("scopes the page to the tenant as well as the supplier", async () => {
+    // Without organizationId a supplier id from another tenant would answer with
+    // this tenant's -- or, since ids are guessable, another tenant's purchases.
+    await request(app)
+      .get("/api/purchases/supplier/sup_1")
+      .set(auth());
+
+    expect(models.purchase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { supplierId: "sup_1", organizationId: ORG },
+      })
+    );
+    expect(models.purchase.count).toHaveBeenCalledWith({
+      where: { supplierId: "sup_1", organizationId: ORG },
+    });
+  });
+
+  it("is not shadowed by /:id", async () => {
+    // Registered ahead of the `/:id` route, so the literal segment wins and
+    // "supplier" is never read as a purchase id.
+    const res = await request(app)
+      .get("/api/purchases/supplier/sup_1")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(models.purchase.findFirst).not.toHaveBeenCalled();
+  });
+});
+
 describe("GET /api/purchases/:id", () => {
   it("returns one purchase with supplier and lines", async () => {
     const res = await request(app).get("/api/purchases/pur_1").set(auth());
