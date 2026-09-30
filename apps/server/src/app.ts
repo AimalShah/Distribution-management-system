@@ -2,8 +2,9 @@ import cors from "cors";
 import express, { type Express } from "express";
 import { allowedOrigins } from "./config/env";
 import { errorHandler, notFoundHandler } from "./http";
-import { authContext } from "./middleware/auth-context";
+import { authContext, bootstrapAuthContext } from "./middleware/auth-context";
 import { apiRouter } from "./routes";
+import { organizationRouter } from "./routes/organization";
 import { debugRouter } from "./routes/__debug";
 
 export function createApp(): Express {
@@ -29,6 +30,23 @@ export function createApp(): Express {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  // Mounted ahead of the strict `authContext` below, and not through `apiRouter`,
+  // because POST /organizations is how a user creates their first organization
+  // and therefore cannot require an active organization to get there. The other
+  // fifteen routers all read a tenant from `req.auth.organizationId` and have no
+  // reason to be reachable without one, so they stay on the strict middleware.
+  //
+  // `notFoundHandler` terminates this mount rather than letting an unmatched
+  // organization path fall through: it would reach `authContext` below, which
+  // answers 400 ORGANIZATION_REQUIRED for a path that does not exist, and a
+  // caller with a perfectly good organization header would be told to send one.
+  app.use(
+    "/api/organizations",
+    bootstrapAuthContext,
+    organizationRouter,
+    notFoundHandler
+  );
 
   app.use("/api", authContext, apiRouter);
 
