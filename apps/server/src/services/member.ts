@@ -5,7 +5,7 @@ import type {
   UpdateMemberRoleInput,
 } from "@dms/shared";
 import { conflict, forbidden, notFound } from "../http";
-import { isElevated, isOwner } from "../roles";
+import { isElevated, isOwner, MEMBER_ROLES } from "../roles";
 
 /**
  * The transaction-scoped client `prisma.$transaction` hands to its callback.
@@ -98,7 +98,7 @@ async function requireOwnerForRoleChange(
   nextRole: string
 ) {
   if (
-    (currentRole === "owner" || nextRole === "owner") &&
+    (currentRole === MEMBER_ROLES.owner || nextRole === MEMBER_ROLES.owner) &&
     !isOwner(callerMembership.role)
   ) {
     throw forbidden(
@@ -238,7 +238,7 @@ export async function addMember(
     organizationId
   );
 
-  await requireOwnerForRoleChange(callerMembership, "member", data.role);
+  await requireOwnerForRoleChange(callerMembership, MEMBER_ROLES.member, data.role);
 
   const target = await prisma.user.findFirst({
     where: { id: data.userId },
@@ -309,7 +309,7 @@ export async function removeMember(
   await requireOwnerForRoleChange(
     callerMembership,
     membership.role,
-    "owner"
+    MEMBER_ROLES.owner
   );
 
   // A tenant with exactly one owner can delete its own way out of existence:
