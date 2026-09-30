@@ -71,12 +71,19 @@ const lineFixture = (overrides: Record<string, unknown> = {}) => ({
 //
 // Each row carries its `saleId`, because Prisma returns the `by` columns on
 // every grouped row and the service keys both sums by it.
+//
+// `_count` is how the number of lines is counted, and it is not decoration: the
+// groups are keyed on `saleId`, so there is one group per invoice that has a line
+// rather than one per line. `lineCounts` says how many lines each of those
+// invoices has, and defaults to one so the callers that do not care about it stay
+// short.
 type SaleLineGroups = {
   quantities: Record<string, number>;
   subtotals: Record<string, number>;
+  lineCounts?: Record<string, number>;
 };
 
-const mockSaleLineGroups = ({ quantities, subtotals }: SaleLineGroups) =>
+const mockSaleLineGroups = ({ quantities, subtotals, lineCounts }: SaleLineGroups) =>
   saleItemModel.groupBy.mockImplementation(
     (args: { by: string[]; _sum: Record<string, boolean> }) => {
       // Three reports share this model and two different grouping keys: the basic
@@ -91,6 +98,7 @@ const mockSaleLineGroups = ({ quantities, subtotals }: SaleLineGroups) =>
       return Promise.resolve(
         Object.entries(source).map(([saleId, value]) => ({
           saleId,
+          _count: { _all: lineCounts?.[saleId] ?? 1 },
           _sum: { [column]: value },
         }))
       );
@@ -161,6 +169,9 @@ const seedSaleProductGroups = (rows: Record<string, unknown>[]) => {
       return Promise.resolve(
         Object.entries(source).map(([saleId, value]) => ({
           saleId,
+          // The basic report reads the line count off the same rows, so a group
+          // without one leaves it summing `undefined`.
+          _count: { _all: 1 },
           _sum: { [column]: value },
         }))
       );
@@ -282,6 +293,28 @@ describe("GET /api/reports/sales/basic", () => {
     expect(res.body.totalLineItems).toBe(1);
     expect(res.body.totalQuantity).toBe(500);
     expect(res.body).not.toHaveProperty("totalItems");
+  });
+
+  it("counts the lines on an invoice, not the invoices that have lines", async () => {
+    // The groups are keyed on `saleId`, so one group is one invoice however many
+    // lines it has. Reading the group count answered `totalOrders` again under a
+    // name that promises lines, which is the confusion the rename was meant to
+    // end: three lines on one invoice is three lines.
+    mockSaleLineGroups({
+      quantities: { sale_1: 4, sale_2: 1 },
+      subtotals: { sale_1: 300, sale_2: 50 },
+      lineCounts: { sale_1: 3, sale_2: 1 },
+    });
+    saleModel.findMany.mockResolvedValue([
+      saleFixture(),
+      saleFixture({ id: "sale_2", totalAmount: 50 }),
+    ]);
+
+    const res = await asTenant(request(app).get("/api/reports/sales/basic"));
+
+    expect(res.body.totalLineItems).toBe(4);
+    expect(res.body.totalOrders).toBe(2);
+    expect(res.body.totalQuantity).toBe(5);
   });
 
   it("counts an invoice whose header disagrees with its own lines", async () => {
