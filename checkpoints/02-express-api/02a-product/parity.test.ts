@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
-import { createApp } from "../src/app";
+import { createApp } from "../../../apps/server/src/app";
 import prisma from "@dms/db";
 
 describe("Checkpoint 2a — Product API", () => {

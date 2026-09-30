@@ -8,11 +8,12 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import { describe, it, expect } from "vitest";
+
+// `checkpoints/<name>/parity.test.ts` -> repo root is two levels up. This was
+// three, which pointed at the parent of the repository.
+const root = path.resolve(__dirname, "../..");
 
 describe("Checkpoint 1 — Shared packages", () => {
-  const root = path.resolve(__dirname, "../../..");
-
   it("packages/db has prisma schema with all models", () => {
     const schema = fs.readFileSync(path.join(root, "packages/db/prisma/schema.prisma"), "utf-8");
     const models = ["User", "Session", "Account", "Verification", "Organization", "Member", "Invitation", "Supplier", "Customer", "Product", "Purchase", "PurchaseItem", "Sale", "SaleItem", "Category", "Brand", "Inventory", "InventoryLog", "Return", "ReturnItem"];
