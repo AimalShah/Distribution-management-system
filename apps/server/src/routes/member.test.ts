@@ -71,6 +71,13 @@ beforeEach(() => {
   memberModel.delete.mockResolvedValue({ id: "mem_2" });
   userModel.findMany.mockResolvedValue([userFixture()]);
   userModel.findFirst.mockResolvedValue({ id: TARGET });
+
+  // The last-owner guard and the write it guards share one transaction, so the
+  // stub hands the callback the same models rather than a separate object. The
+  // real client is extended with a query logger, so the transaction client is not
+  // the bare `Prisma.TransactionClient` -- it carries the extension, which is why
+  // the service types it as `Omit<typeof prisma, ...>`.
+  dbStub.$transaction.mockImplementation(async (fn) => fn(dbStub));
 });
 
 describe("GET /api/organizations/:id/members", () => {
@@ -98,6 +105,40 @@ describe("GET /api/organizations/:id/members", () => {
     ]);
     expect(select.user.select.banned).toBeUndefined();
     expect(select.user.select.isOwner).toBeUndefined();
+  });
+
+  it("403s a caller who is not a member of the organization", async () => {
+    // The legacy took a userId, looked up the caller's membership, and then threw
+    // the result away -- so the roster answered for any organization to anyone
+    // with any session at all: names and email addresses of other tenants.
+    const res = await request(app)
+      .get(`/api/organizations/${ORG}/members`)
+      .set(USER_HEADER, STRANGER);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("NOT_A_MEMBER");
+    expect(memberModel.findMany).not.toHaveBeenCalled();
+  });
+
+  it("403s on an organization the caller is not a member of", async () => {
+    // The default mock answers on `userId` alone, which would report the caller
+    // as a member of every organization. This one is faithful: the caller is an
+    // owner of ORG and of nothing else, so the check has to be against the
+    // organization in the path rather than "is a member of something".
+    memberModel.findFirst.mockImplementation(async ({ where }) => {
+      if (where.id) return memberFixture(where);
+      return where.userId === OWNER && where.organizationId === ORG
+        ? memberFixture({ userId: where.userId, organizationId: where.organizationId })
+        : null;
+    });
+
+    const res = await asCaller(
+      request(app).get(`/api/organizations/org_other/members`)
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("NOT_A_MEMBER");
+    expect(memberModel.findMany).not.toHaveBeenCalled();
   });
 
   it("400s without a user context", async () => {
@@ -147,6 +188,18 @@ describe("GET /api/organizations/:id/available-users", () => {
     expect(
       Object.keys(userModel.findMany.mock.calls[0][0].select).sort()
     ).toEqual(["email", "id", "image", "name"]);
+  });
+
+  it("403s a caller who is not a member of the organization", async () => {
+    // The same discarded check as the roster: this endpoint is the one that
+    // enumerates email addresses, so it was the worse half of the pair.
+    const res = await request(app)
+      .get(`/api/organizations/${ORG}/available-users`)
+      .set(USER_HEADER, STRANGER);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("NOT_A_MEMBER");
+    expect(userModel.findMany).not.toHaveBeenCalled();
   });
 
   it("400s without a user context", async () => {
@@ -222,6 +275,30 @@ describe("POST /api/organizations/:id/members", () => {
     const res = await add({ userId: TARGET });
 
     expect(res.status).toBe(201);
+  });
+
+  it("403s adminRole granting the owner role", async () => {
+    // adminRole outranks member, so the legacy `requireRole([owner, adminRole])`
+    // let an admin hand out the one role that outranks it -- and, on the role
+    // endpoint below, an admin could demote an owner and then be un-demotable.
+    // Ownership is granted by owners, not by admins.
+    memberModel.findFirst.mockImplementation(async ({ where }) =>
+      where.userId === OWNER
+        ? memberFixture({ userId: where.userId, role: "adminRole" })
+        : null
+    );
+
+    const res = await add({ userId: TARGET, role: "owner" });
+
+    expect(res.status).toBe(403);
+    expect(memberModel.create).not.toHaveBeenCalled();
+  });
+
+  it("lets an owner grant the owner role", async () => {
+    const res = await add({ userId: TARGET, role: "owner" });
+
+    expect(res.status).toBe(201);
+    expect(memberModel.create.mock.calls[0][0].data.role).toBe("owner");
   });
 
   it("does not treat a differently-cased role as elevated", async () => {
@@ -430,6 +507,55 @@ describe("PATCH /api/members/:id/role", () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("LAST_OWNER");
     expect(memberModel.update).not.toHaveBeenCalled();
+  });
+
+  it("403s adminRole demoting an owner", async () => {
+    // The mirror of granting: without this an admin strips an owner of the role,
+    // then promotes itself, and the organization now has an owner it did not
+    // consent to.
+    memberModel.findFirst.mockImplementation(async ({ where }) =>
+      where.id
+        ? memberFixture({ id: where.id, role: "owner" })
+        : memberFixture({ userId: where.userId, role: "adminRole" })
+    );
+
+    const res = await asCaller(
+      request(app).patch("/api/members/mem_2/role").send({ role: "member" })
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("OWNER_REQUIRED_FOR_OWNERSHIP");
+    expect(memberModel.update).not.toHaveBeenCalled();
+  });
+
+  it("403s adminRole promoting itself to owner", async () => {
+    memberModel.findFirst.mockImplementation(async ({ where }) =>
+      where.id
+        ? memberFixture({ id: where.id, role: "adminRole" })
+        : memberFixture({ userId: where.userId, role: "adminRole" })
+    );
+
+    const res = await asCaller(
+      request(app).patch("/api/members/mem_2/role").send({ role: "owner" })
+    );
+
+    expect(res.status).toBe(403);
+    expect(memberModel.update).not.toHaveBeenCalled();
+  });
+
+  it("reads the owner count and writes the role in one transaction", async () => {
+    // The legacy counted owners and then, in a second statement, wrote the role.
+    // Two concurrent demotions each saw two owners and each removed one, leaving
+    // an organization with none -- permanently unadministrable, since only owners
+    // may appoint owners. Serializable plus a single transaction closes it.
+    await asCaller(
+      request(app).patch("/api/members/mem_2/role").send({ role: "member" })
+    );
+
+    expect(dbStub.$transaction).toHaveBeenCalledTimes(1);
+    // `prisma.$transaction(callback, options)`.
+    const [, options] = dbStub.$transaction.mock.calls[0];
+    expect(options).toMatchObject({ isolationLevel: "Serializable" });
   });
 
   it("allows the last owner to be re-affirmed as owner", async () => {

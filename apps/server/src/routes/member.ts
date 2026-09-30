@@ -44,16 +44,16 @@ export const memberRouter: Router = Router();
 organizationMemberRouter.get(
   "/:id/members",
   asyncHandler(async (req, res) => {
-    requireUserId(req.auth.userId);
-    res.json(await listMembers(req.params.id));
+    const callerUserId = requireUserId(req.auth.userId);
+    res.json(await listMembers(req.params.id, callerUserId));
   })
 );
 
 organizationMemberRouter.get(
   "/:id/available-users",
   asyncHandler(async (req, res) => {
-    requireUserId(req.auth.userId);
-    res.json(await listAvailableUsers(req.params.id));
+    const callerUserId = requireUserId(req.auth.userId);
+    res.json(await listAvailableUsers(req.params.id, callerUserId));
   })
 );
 
