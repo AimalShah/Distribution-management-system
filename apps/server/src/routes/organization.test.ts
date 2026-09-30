@@ -153,9 +153,30 @@ describe("GET /api/organizations/active", () => {
       .set(SESSION_HEADER, SESSION);
 
     expect(sessionModel.findFirst).toHaveBeenCalledWith({
-      where: { id: SESSION, userId: USER },
+      where: {
+        id: SESSION,
+        userId: USER,
+        // An expired or revoked session resolves nothing. `expiresAt` is on the
+        // model and was not in the predicate, so a dead session id answered the
+        // same as a live one.
+        expiresAt: { gt: expect.any(Date) },
+      },
       select: { activeOrganizationId: true },
     });
+  });
+
+  it("refuses a session whose expiry has passed", async () => {
+    // The predicate above is what enforces this; the assertion is on the shape
+    // because the mock cannot evaluate a `gt` against the clock.
+    sessionModel.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/organizations/active")
+      .set(USER_HEADER, USER)
+      .set(SESSION_HEADER, SESSION);
+
+    expect(res.status).toBe(404);
+    expect(organizationModel.findFirst).not.toHaveBeenCalled();
   });
 
   it("re-checks membership before returning the organization", async () => {

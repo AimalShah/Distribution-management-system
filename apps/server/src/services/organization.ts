@@ -1,6 +1,6 @@
 import prisma from "@dms/db";
 import type { OrganizationCreateInput } from "@dms/shared";
-import { forbidden } from "../http";
+import { forbidden, notFound } from "../http";
 
 async function findMembership(userId: string, organizationId: string) {
   return prisma.member.findFirst({
@@ -23,7 +23,12 @@ async function findMembership(userId: string, organizationId: string) {
  */
 export async function getActiveOrganization(userId: string, sessionId: string) {
   const session = await prisma.session.findFirst({
-    where: { id: sessionId, userId },
+    // `expiresAt` is on the model and was not in the predicate, so an expired or
+    // revoked session id resolved an active organization just as a live one did.
+    // Under the stand-in middleware the session id is client-chosen, so this is
+    // the difference between "a session the user still holds" and "a string that
+    // matches a row". Checkpoint 3 replaces the shim, not this predicate.
+    where: { id: sessionId, userId, expiresAt: { gt: new Date() } },
     select: { activeOrganizationId: true },
   });
 
@@ -142,10 +147,21 @@ export async function setActiveOrganization(
     );
   }
 
-  return prisma.session.updateMany({
+  // `{ id, userId }` matches nothing for a session that is not the caller's, or
+  // that does not exist. That scoping is the security fix above and it holds; but
+  // the route answered 204 regardless of the count, so a caller naming someone
+  // else's session -- or a stale one of their own -- got a success for a write
+  // that touched no rows. The caller is told which of the two happened.
+  const result = await prisma.session.updateMany({
     where: { id: sessionId, userId },
     data: { activeOrganizationId: organizationId },
   });
+
+  if (result.count === 0) {
+    throw notFound("Session not found", "SESSION_NOT_FOUND");
+  }
+
+  return result;
 }
 
 /**
