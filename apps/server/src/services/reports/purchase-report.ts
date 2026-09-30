@@ -50,10 +50,18 @@ export async function getBasicPurchaseReport(
     }),
     prisma.purchaseItem.groupBy({
       by: ["purchaseId"],
+      _count: { _all: true },
       _sum: { quantity: true },
       where: { purchase: purchaseWindow(organizationId, query) },
     }),
   ]);
+
+  // `_count` rather than the number of groups: the groups are keyed on
+  // `purchaseId`, so there is one per purchase that has a line, not one per line.
+  // A five-order window with one two-line order is seven lines, and reading the
+  // group count answered five — the same count as `totalOrders`, sitting next to
+  // a figure named for lines.
+  const totalLineItems = quantities.reduce((sum, group) => sum + group._count._all, 0);
 
   const totalQuantity = quantities.reduce(
     (sum, group) => sum + (group._sum.quantity ?? 0),
@@ -85,7 +93,7 @@ export async function getBasicPurchaseReport(
     ),
     totalOrders: purchases.length,
     uniqueSuppliers: new Set(purchases.map((p) => p.supplierId)).size,
-    totalLineItems: quantities.length,
+    totalLineItems,
     totalQuantity,
     // Sorted rather than left in insertion order. The legacy built a plain object
     // and returned `Object.entries` of it, which happened to be chronological

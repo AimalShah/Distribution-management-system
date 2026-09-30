@@ -45,6 +45,7 @@ export async function getBasicSalesReport(
     }),
     prisma.saleItem.groupBy({
       by: ["saleId"],
+      _count: { _all: true },
       _sum: { quantity: true },
       where: { sale: saleWindow(organizationId, query) },
     }),
@@ -59,6 +60,12 @@ export async function getBasicSalesReport(
     (sum, group) => sum + (group._sum.quantity ?? 0),
     0
   );
+
+  // `_count` rather than the number of groups: the groups are keyed on `saleId`,
+  // so there is one per invoice that has a line, not one per line. A five-invoice
+  // window with one two-line invoice is six lines, and reading the group count
+  // answered five — `totalOrders` again, under a name that says lines.
+  const totalLineItems = quantities.reduce((sum, group) => sum + group._count._all, 0);
 
   // The line subtotal per sale, so a header that disagrees with its own lines
   // can be found. See the note on `unreconciledOrders` below.
@@ -104,7 +111,7 @@ export async function getBasicSalesReport(
     totalLineSubtotal,
     totalOrders: sales.length,
     uniqueCustomers: new Set(sales.map((s) => s.customerId)).size,
-    totalLineItems: quantities.length,
+    totalLineItems,
     totalQuantity,
     unreconciledOrders,
     // Sorted rather than left in insertion order, which depended on the query

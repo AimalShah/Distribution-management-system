@@ -306,11 +306,17 @@ export async function removeMember(
     membership.organizationId
   );
 
-  await requireOwnerForRoleChange(
-    callerMembership,
-    membership.role,
-    MEMBER_ROLES.owner
-  );
+  // A removal revokes exactly the role the row already holds, so that role is both
+  // the `currentRole` and the `nextRole` here.
+  //
+  // Passing `MEMBER_ROLES.owner` as the next role looked like a way to say "this
+  // call revokes", but it is indistinguishable from "this call makes the target an
+  // owner", and `requireOwnerForRoleChange` reads it as the latter. Every removal
+  // by an `adminRole` therefore tripped the ownership guard -- including removing a
+  // plain member, which is the one thing `requireElevatedMember` exists to permit.
+  // The comment on that helper promises "an admin may add and remove members"; this
+  // is what makes that true.
+  await requireOwnerForRoleChange(callerMembership, membership.role, membership.role);
 
   // A tenant with exactly one owner can delete its own way out of existence:
   // afterwards nobody holds an elevated role, so nobody can add anyone back.

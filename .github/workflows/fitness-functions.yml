@@ -24,12 +24,55 @@ jobs:
 
   checkpoint-parity:
     runs-on: ubuntu-latest
+
+    # The Checkpoint 2 parity suites run against a real PostgreSQL, because the
+    # constraints they assert -- `productCode @unique`, the `Brand.categoryId`
+    # foreign key, the composite uniques, and the row counts behind the report
+    # `groupBy`s -- are exactly the things the 630 mocked server tests cannot
+    # observe. A mocked `product.create` succeeds with anything it is handed. That
+    # gap was not theoretical: it is what hid the `totalLineItems` and
+    # `removeMember` defects below from the mocked suite.
+    #
+    # So the service is not optional for this job. `requires-database.test.ts`
+    # fails the run if a gated suite skipped, which is what stops "no database"
+    # from being reported as parity passing.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dms_test
+        ports:
+          - 5432:5432
+        # `pg_isready` rather than a sleep: without it the first migration can
+        # race the server's own startup and fail the job for a reason that has
+        # nothing to do with the code.
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dms_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dms_test?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/dms_test?schema=public
+
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      # Runs the suites listed in checkpoints/parity-gate.ts, plus the gate's own
-      # consistency test. `pnpm exec vitest` was here before and resolved
+      # The client is generated against a schema, not a live database, so this
+      # does not need the service -- but it does need to run before anything
+      # imports `@dms/db`, which the parity suites do.
+      - run: pnpm run db:generate
+      # The parity suites assert against real tables, so the baseline migration
+      # has to be applied before they run. This is the same migration the status
+      # doc says applies cleanly to an empty database.
+      - run: pnpm --filter @dms/db exec prisma migrate deploy
+      # Runs the suites listed in checkpoints/parity-gate.ts -- now 00, 01 and the
+      # fifteen 02x suites -- plus the gate's own consistency test and the
+      # database-readiness guard. `pnpm exec vitest` was here before and resolved
       # nothing: the root had no vitest dependency, so the step failed before any
       # test executed while the workflow still read as if it were checking
       # parity. Playwright was installed here for the same reason of
