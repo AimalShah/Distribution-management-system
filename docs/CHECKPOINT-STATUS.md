@@ -1,0 +1,243 @@
+# Checkpoint Implementation Status
+
+**Last updated:** 2026-09-30
+**Repo:** `Distribution-management-system`
+**Branch:** `main` @ `64e70d6`
+
+Status of every checkpoint in `checkpoints/`, derived from what is actually on `main` —
+not from what a `plan.md` claims.
+
+---
+
+## Legend
+
+| Status | Meaning |
+|---|---|
+| **Implemented** | Code exists on `main`, routes mounted, tests pass |
+| **Partial** | Some parts landed, others missing or unmounted |
+| **Planned** | Only `plan.md` + `plan.lock` exist. No code. |
+| **Spec only** | Plan exists, acceptance test is an empty stub |
+
+---
+
+## Summary
+
+| Area | Status |
+|---|---|
+| 00 — Harness + Monorepo Scaffold | **Partial** |
+| 01 — Shared Packages | **Implemented** |
+| 02a–02o — Express API | **Implemented** (13/15 direct, 2 partial) |
+| 03 — Auth | **Partial** (shim only) |
+| 04a–04j — React Web App | **Planned** |
+| 05 — Electron Shell | **Partial** |
+| 06 — RBAC Rebuild | **Planned** |
+| 07–12 — Domain features | **Spec only** |
+
+**The API layer is done. There is no UI.**
+
+---
+
+## 00 — Harness + Monorepo Scaffold · Partial
+
+Monorepo works: Turborepo + pnpm workspaces, `apps/{web,server,desktop}`,
+`packages/{ui,db,shared,config-eslint,config-typescript}` all exist.
+
+Missing: `apps/server/src/harness/router.ts`. The parity test asserts it and asserts the
+harness CLI prints JSON, but that test body is `expect(true).toBe(true)` — a placeholder
+that passes without testing anything.
+
+## 01 — Shared Packages · Implemented
+
+`packages/shared` has `pagination.ts`, `inputs.ts`, and 15 schemas (auth, product, purchase,
+sale, return, inventory, customer, supplier, organization, member, category, brand, report).
+
+## 02 — Express API · Implemented
+
+| ID | Checkpoint | PR | Status | Routes |
+|---|---|---|---|---|
+| 02a | Product | #5 | Implemented | `/api/products` |
+| 02b | Purchase | #3 | Implemented | `/api/purchases` |
+| 02c | Sale Invoice | #4 | Implemented | `/api/sales` |
+| 02d | Inventory | #6 | Implemented | `/api/inventory` |
+| 02e | Return | #7 | Implemented | `/api/returns` |
+| 02f | Customer | #8 | Implemented | `/api/customers` |
+| 02g | Supplier | #9 | Implemented | `/api/suppliers` |
+| 02h | Category | #10 | Implemented | `/api/categories` |
+| 02i | Brand | #11 | Implemented | `/api/brands` |
+| 02j | Organization | #12 | **Partial** — router built, **not in `routes/index.ts`**; mounted separately in `app.ts` |
+| 02k | Members | #13 | **Partial** — same, mounted in `app.ts` not the API router |
+| 02l | Permissions | #14 | **Partial** — `services/permissions.ts` + `middleware/permissions.ts` exist, **router never mounted** |
+| 02m | Inventory Reports | #15 | Implemented | `/api/reports/inventory` |
+| 02n | Purchase Reports | #16 | Implemented | `/api/reports/purchase` |
+| 02o | Sales Reports | #17 | Implemented | `/api/reports/sales` |
+
+12 routers registered in `apps/server/src/routes/index.ts`. Organization, members and
+permissions are mounted directly in `app.ts` instead — intentional (documented in a comment
+there) but worth knowing before you add a route that expects them in the shared router.
+
+**618 tests pass, `tsc --noEmit` clean.**
+
+### Defects found and fixed in review (PR #18 + per-checkpoint fixes)
+
+| Defect | Fixed in |
+|---|---|
+| Member roster leaked other tenants' names + emails (membership check resolved then discarded) | #13 |
+| `adminRole` could grant **and** revoke ownership | #13 |
+| Last-owner check was a TOCTOU race (count and write in separate statements) | #13 |
+| `Member` had no unique index on `(organizationId, userId)` | #18 |
+| `SaleItem`/`PurchaseItem`/`ReturnItem` lacked `onDelete: Cascade` | #18 |
+| Products accepted cross-tenant `categoryId` / `brandId` | #18 |
+| Supplier detail embedded every purchase ever billed | #9 |
+| 4 report endpoints loaded every row into JS | #16, #17 |
+| Active-session lookup ignored `expiresAt` | #12 |
+| `setActiveOrganization` returned 204 on a zero-row write | #12 |
+
+## 03 — Auth · Partial
+
+The stand-in middleware reads a `USER_HEADER` and `ORGANIZATION_HEADER`. `app.ts` refuses to
+start in production with the shim enabled. Real auth is checkpoint 3 and is **not done**.
+
+Every authorization check built so far depends on this shim being replaced with something
+that makes `req.auth.userId` trustworthy.
+
+## 04 — React Web App · Planned (0%)
+
+`apps/web` is 4 files. The whole app:
+
+```tsx
+<Route path="/" element={<div>Inventioo DMS</div>} />
+```
+
+- `packages/ui` — one component: `DataTable` (TanStack, manual pagination)
+- `apps/desktop` — Electron shell, 1400×900, loads web dev server or built bundle
+- `apps/web/src/lib/api.ts` — axios + Bearer interceptor
+
+No pages, no forms, no auth flow, no navigation. Every route merged in checkpoint 2 has
+zero screens calling it. Each sub-checkpoint below is a written plan only — **no `.tsx` files
+exist anywhere in `checkpoints/`**.
+
+| ID | Checkpoint | Status |
+|---|---|---|
+| 04a | Dashboard | Planned |
+| 04b | Product Pages | Planned |
+| 04c | Purchase Pages | Planned |
+| 04d | Sale Invoice Pages | Planned |
+| 04e | Inventory Page | Planned |
+| 04f | Returns Pages | Planned |
+| 04g | Customer Page | Planned |
+| 04h | Supplier Page | Planned |
+| 04i | Reports Page | Planned |
+| 04j | Settings Pages | Planned |
+
+## 05 — Electron Shell · Partial
+
+`BrowserWindow` with `contextIsolation: true`, `nodeIntegration: false`, preload script, and
+dev/prod load paths all present. Acceptance test asserts 6 things but has no real Electron
+runtime behind it.
+
+## 06–12 — Domain features · Spec only
+
+Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
+
+| ID | Checkpoint | Empty stubs |
+|---|---|---|
+| 06 | RBAC Rebuild | 7 of 7 |
+| 07 | Batch/Lot Inventory + Expiry KPI | 7 |
+| 08 | GST Fields + Sale Tax Invoice | 6 |
+| 09 | Brand-Scoping on Sale/Purchase | 5 |
+| 10 | Bulk Import, Wired for Real | 7 |
+| 11 | Return Policy, Credit Terms, Customer GST | 6 |
+| 12 | Client's Invoice Layout Swap-In | 6 |
+
+Checkpoint 6 matters more than its empty tests suggest: it owns reconciling the role
+vocabulary. `Member.role` is a plain `String` with three competing spellings in the codebase —
+`Member.role` uses `owner`/`adminRole`, `User.role` spells it `admin`, and `prisma/seed.ts`
+writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a row saying
+`ADMIN` is not elevated.
+
+---
+
+## Build and test
+
+```bash
+# API tests — 618 pass
+cd apps/server && ./node_modules/.bin/vitest run
+
+# Typecheck
+cd apps/server && ./node_modules/.bin/tsc --noEmit
+
+# Prisma client (required before typecheck on a fresh clone)
+cd packages/db && ./node_modules/.bin/prisma generate
+```
+
+Avoid `pnpm turbo run test` — it triggers a full install that hangs.
+
+### CI is broken repo-wide (pre-existing, unrelated to checkpoint work)
+
+| Job | Problem |
+|---|---|
+| `bundle-size` | Runs `pnpm --filter @dms/web run size-limit`. `apps/web` has no `size-limit` script. |
+| `checkpoint-parity` | Runs `pnpm exec playwright install`. Playwright is not a dependency. |
+| `table-pagination-check` | Passes. |
+
+Confirmed identical failures on PR #17 before any of the review work. **`checkpoint-parity`
+is the job that would gate UI work, so building checkpoint 4 against it means merging with
+that check silently non-functional.** Fix it before starting UI.
+
+### Schema has no migrations
+
+There is no `migrations/` directory. Two schema changes shipped to `main` are not applied to
+any live database:
+
+- `@@unique([organizationId, userId])` on `Member` — **will fail to create if duplicate
+  memberships exist. Dedupe before applying.**
+- `onDelete: Cascade` on sale / purchase / return lines
+
+---
+
+## For AI agents
+
+If you are reading this to update it: **verify before you write.**
+
+### Procedure
+
+1. `git checkout main && git pull`
+2. Check what actually exists — do not trust the `Status` column, including this file:
+   ```bash
+   rg -n "apiRouter.use" apps/server/src/routes/index.ts
+   ls apps/web/src/pages 2>/dev/null || echo "no pages"
+   find checkpoints -name "*.tsx" -not -path "*/node_modules/*"
+   ```
+3. Run the suite: `cd apps/server && ./node_modules/.bin/vitest run`
+4. Update only the rows whose status actually changed
+5. Update **Last updated** to today's date
+6. Commit the doc change **separately** from implementation code, so the status file is never
+   part of a feature diff
+
+### Rules
+
+- **Never mark Implemented from a `plan.md`.** Every checkpoint from 04 onward has a complete
+  written plan. Plans are not code. Require: files exist on `main`, routes mounted, tests passing.
+- **A passing test is not proof if the test is a stub.** Checkpoint 00's harness test is
+  `expect(true).toBe(true)`. All of 06–12 are `{}`. Count real assertions before citing a
+  green suite as evidence.
+- **Record the PR number** when a checkpoint lands. If it has no PR, it is not done.
+- **Preserve the "Defects found and fixed" tables.** They are the reason to trust this file.
+  If a review pass finds new defects in already-merged code, add a row and note the PR that
+  fixed it — do not overwrite history.
+- **When you find a defect, fix it and note it here.** Checkpoint 2 is done, but that is
+  where cross-tenant authorization bugs live; the pattern to check for is a service reading
+  an ID from a request body and writing it straight to a foreign key.
+- **Do not remove a row.** Move it to a "superseded" or "reverted" state with a reason. The
+  history of what was built and undone is the point.
+- If a checkpoint is partially done, split the row and say exactly which half is missing.
+  "Partial" without specifics is worse than nothing.
+
+### Update triggers
+
+| Trigger | Action |
+|---|---|
+| A checkpoint PR merges | Flip status, record PR number, move a row into a merged table if one exists |
+| Review finds a defect in merged code | Add to the defects table with the fixing PR |
+| A checkpoint is reverted or replaced | Keep the row, change status, add reason |
+| Scope of a checkpoint changes | Update the description, not just the status |
