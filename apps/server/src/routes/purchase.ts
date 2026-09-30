@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   PurchaseFormSchema,
   PurchaseUpdateSchema,
+  paginationQuerySchema,
   purchaseListQuerySchema,
 } from "@dms/shared";
 import { asyncHandler, badRequest, notFound } from "../http";
@@ -10,6 +11,7 @@ import {
   deletePurchase,
   getPurchaseById,
   getPurchases,
+  getPurchasesBySupplier,
   updatePurchase,
 } from "../services/purchase";
 
@@ -22,6 +24,21 @@ purchaseRouter.get(
     const result = await getPurchases({
       organizationId: req.auth.organizationId,
       ...query,
+    });
+    res.json(result);
+  })
+);
+
+// Registered before `/:id` so the literal segment always wins.
+purchaseRouter.get(
+  "/supplier/:supplierId",
+  asyncHandler(async (req, res) => {
+    const { page, pageSize } = paginationQuerySchema.parse(req.query);
+    const result = await getPurchasesBySupplier({
+      supplierId: req.params.supplierId,
+      organizationId: req.auth.organizationId,
+      page,
+      pageSize,
     });
     res.json(result);
   })
