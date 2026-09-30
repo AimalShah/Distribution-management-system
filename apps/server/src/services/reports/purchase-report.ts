@@ -119,34 +119,41 @@ export async function getPurchaseBySupplier(
   organizationId: string,
   query: PurchaseReportQuery
 ) {
-  const purchases = await prisma.purchase.findMany({
+  // Aggregated in the database rather than by pulling every matching purchase into
+  // this process: the response has one line per supplier, but the old `findMany`
+  // had one row per purchase across the whole window, joined to `Supplier` on each.
+  const groups = await prisma.purchase.groupBy({
+    by: ["supplierId"],
     where: purchaseWindow(organizationId, query),
-    select: {
-      supplierId: true,
-      totalAmount: true,
-      supplier: { select: { companyName: true } },
-    },
+    _count: { _all: true },
+    _sum: { totalAmount: true },
+    orderBy: { _sum: { totalAmount: "desc" } },
   });
 
-  const totals = new Map<
-    string,
-    { companyName: string; orders: number; totalAmount: number }
-  >();
+  const suppliers = await prisma.supplier.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((group) => group.supplierId) },
+    },
+    select: { id: true, companyName: true },
+  });
+  const byId = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
 
-  for (const purchase of purchases) {
-    const bucket = totals.get(purchase.supplierId) ?? {
-      companyName: purchase.supplier.companyName,
-      orders: 0,
-      totalAmount: 0,
-    };
-    bucket.orders += 1;
-    bucket.totalAmount += purchase.totalAmount;
-    totals.set(purchase.supplierId, bucket);
-  }
+  // `Purchase.supplierId` is a required relation, so a group always resolves. The
+  // filter is here so a dangling row drops one line rather than throwing.
+  return groups.flatMap((group) => {
+    const supplier = byId.get(group.supplierId);
+    if (!supplier) return [];
 
-  return [...totals.entries()]
-    .map(([supplierId, bucket]) => ({ supplierId, ...bucket }))
-    .sort((a, b) => b.totalAmount - a.totalAmount);
+    return [
+      {
+        supplierId: group.supplierId,
+        companyName: supplier.companyName,
+        orders: group._count._all,
+        totalAmount: group._sum.totalAmount ?? 0,
+      },
+    ];
+  });
 }
 
 /**
@@ -163,59 +170,50 @@ export async function getPurchaseByProduct(
   organizationId: string,
   query: PurchaseReportQuery
 ) {
-  const items = await prisma.purchaseItem.findMany({
+  // Aggregated in the database, as the supplier report above is: the response has
+  // one line per product, the old `findMany` had one row per purchase line in the
+  // window.
+  //
+  // The average unit cost is the mean of `unitCost` across the lines, not
+  // spend-weighted -- the number the loop produced, preserved here.
+  const groups = await prisma.purchaseItem.groupBy({
+    by: ["productId"],
     where: { purchase: purchaseWindow(organizationId, query) },
-    select: {
-      productId: true,
-      quantity: true,
-      unitCost: true,
-      totalCost: true,
-      product: { select: { name: true, productCode: true, unit: true } },
-    },
+    _count: { _all: true },
+    _sum: { quantity: true, totalCost: true, unitCost: true },
+    orderBy: { _sum: { totalCost: "desc" } },
   });
 
-  const totals = new Map<
-    string,
-    {
-      name: string;
-      productCode: string;
-      unit: string;
-      quantity: number;
-      totalCost: number;
-      costSum: number;
-      costCount: number;
-    }
-  >();
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((group) => group.productId) },
+    },
+    select: { id: true, name: true, productCode: true, unit: true },
+  });
+  const byId = new Map(products.map((product) => [product.id, product]));
 
-  for (const item of items) {
-    const bucket = totals.get(item.productId) ?? {
-      name: item.product.name,
-      productCode: item.product.productCode,
-      unit: item.product.unit,
-      quantity: 0,
-      totalCost: 0,
-      costSum: 0,
-      costCount: 0,
-    };
-    bucket.quantity += item.quantity;
-    bucket.totalCost += item.totalCost;
-    bucket.costSum += item.unitCost;
-    bucket.costCount += 1;
-    totals.set(item.productId, bucket);
-  }
+  // `PurchaseItem.productId` is a required relation, so a group always resolves.
+  // The filter is here so a dangling row drops one line rather than throwing.
+  return groups.flatMap((group) => {
+    const product = byId.get(group.productId);
+    if (!product) return [];
 
-  return [...totals.entries()]
-    .map(([productId, bucket]) => ({
-      productId,
-      name: bucket.name,
-      productCode: bucket.productCode,
-      unit: bucket.unit,
-      quantity: bucket.quantity,
-      totalCost: bucket.totalCost,
-      averageUnitCost:
-        bucket.costCount > 0 ? bucket.costSum / bucket.costCount : 0,
-    }))
-    .sort((a, b) => b.totalCost - a.totalCost);
+    const lineCount = group._count._all;
+    const costSum = group._sum.unitCost ?? 0;
+
+    return [
+      {
+        productId: group.productId,
+        name: product.name,
+        productCode: product.productCode,
+        unit: product.unit,
+        quantity: group._sum.quantity ?? 0,
+        totalCost: group._sum.totalCost ?? 0,
+        averageUnitCost: lineCount > 0 ? costSum / lineCount : 0,
+      },
+    ];
+  });
 }
 
 export async function getFullPurchaseReport(

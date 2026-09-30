@@ -3,27 +3,90 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../app";
 import { ORGANIZATION_HEADER } from "../../middleware/auth-context";
 
-const { purchaseModel, purchaseItemModel, dbStub } = vi.hoisted(() => {
-  const purchase = {
-    findMany: vi.fn(),
-  };
-  const purchaseItem = {
-    findMany: vi.fn(),
-    groupBy: vi.fn(),
-  };
+const { purchaseModel, purchaseItemModel, supplierModel, productModel, dbStub } =
+  vi.hoisted(() => {
+    const purchase = {
+      findMany: vi.fn(),
+      // The by-supplier report counts and sums in the database rather than
+      // loading every purchase in the window and folding it in JavaScript.
+      groupBy: vi.fn(),
+    };
+    const purchaseItem = {
+      findMany: vi.fn(),
+      // Two reports share this model and group by different keys: the basic
+      // report by purchaseId, the by-product report by productId. The mock
+      // dispatches on the key so both can be seeded independently.
+      groupBy: vi.fn(),
+    };
+    // The grouped reports look the display fields up for the keys they grouped
+    // on, in a second scoped query.
+    const supplier = { findMany: vi.fn() };
+    const product = { findMany: vi.fn() };
 
-  return {
-    purchaseModel: purchase,
-    purchaseItemModel: purchaseItem,
-    dbStub: {
-      $transaction: vi.fn(),
-      purchase,
-      purchaseItem,
-    },
-  };
-});
+    return {
+      purchaseModel: purchase,
+      purchaseItemModel: purchaseItem,
+      supplierModel: supplier,
+      productModel: product,
+      dbStub: { $transaction: vi.fn(), purchase, purchaseItem, supplier, product },
+    };
+  });
 
 vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
+
+// Seed the grouped reports. `rows` are raw records for the reports that load
+// documents; `groups` are the aggregates the database would have returned.
+const seedSupplierGroups = (rows: Record<string, unknown>[]) => {
+  const bySupplier = new Map<string, { orders: number; total: number }>();
+  for (const row of rows) {
+    const id = row.supplierId as string;
+    const bucket = bySupplier.get(id) ?? { orders: 0, total: 0 };
+    bucket.orders += 1;
+    bucket.total += row.totalAmount as number;
+    bySupplier.set(id, bucket);
+  }
+  // The report orders by summed total in SQL, so the mock returns them in that
+  // order rather than making the service re-sort.
+  return [...bySupplier.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([supplierId, bucket]) => ({
+      supplierId,
+      _count: { _all: bucket.orders },
+      _sum: { totalAmount: bucket.total },
+    }));
+};
+
+const seedProductGroups = (rows: Record<string, unknown>[]) => {
+  const byProduct = new Map<
+    string,
+    { quantity: number; totalCost: number; costSum: number; lines: number }
+  >();
+  for (const row of rows) {
+    const id = row.productId as string;
+    const bucket = byProduct.get(id) ?? {
+      quantity: 0,
+      totalCost: 0,
+      costSum: 0,
+      lines: 0,
+    };
+    bucket.quantity += row.quantity as number;
+    bucket.totalCost += row.totalCost as number;
+    bucket.costSum += row.unitCost as number;
+    bucket.lines += 1;
+    byProduct.set(id, bucket);
+  }
+  return [...byProduct.entries()]
+    .sort((a, b) => b[1].totalCost - a[1].totalCost)
+    .map(([productId, bucket]) => ({
+      productId,
+      _count: { _all: bucket.lines },
+      _sum: {
+        quantity: bucket.quantity,
+        totalCost: bucket.totalCost,
+        unitCost: bucket.costSum,
+      },
+    }));
+};
 
 const app = createApp();
 
@@ -56,10 +119,22 @@ const lineFixture = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   purchaseModel.findMany.mockResolvedValue([purchaseFixture()]);
-  purchaseItemModel.findMany.mockResolvedValue([lineFixture()]);
-  purchaseItemModel.groupBy.mockResolvedValue([
-    { purchaseId: "pur_1", _sum: { quantity: 10 } },
+  supplierModel.findMany.mockResolvedValue([
+    { id: "sup_1", companyName: "Acme Supply" },
+    { id: "sup_2", companyName: "Acme Supply" },
   ]);
+  productModel.findMany.mockResolvedValue([
+    { id: "prod_1", name: "Widget", productCode: "W-001", unit: "pcs" },
+    { id: "prod_2", name: "Widget", productCode: "W-002", unit: "pcs" },
+  ]);
+  purchaseModel.groupBy.mockResolvedValue([]);
+  // Dispatch on the grouping key: the basic report wants per-purchase subtotals,
+  // the by-product report wants per-product aggregates. Neither seeds rows unless
+  // a test asks for them.
+  purchaseItemModel.groupBy.mockImplementation(async ({ by }) =>
+    by[0] === "productId" ? [] : [{ purchaseId: "pur_1", _sum: { quantity: 10 } }]
+  );
+  purchaseItemModel.findMany.mockResolvedValue([lineFixture()]);
 });
 
 describe("org scoping", () => {
@@ -78,12 +153,16 @@ describe("org scoping", () => {
 
   it("scopes purchase lines through the purchase relation", async () => {
     // PurchaseItem has no organizationId column, so the tenant has to be
-    // reached through `purchase` or the filter scopes to nothing.
+    // reached through `purchase` or the filter scopes to nothing. The by-product
+    // report groups its lines in the database, so the predicate under test is the
+    // `groupBy` one rather than a `findMany`.
     await asTenant(request(app).get("/api/reports/purchase/by-product"));
 
-    expect(purchaseItemModel.findMany.mock.calls[0][0].where).toMatchObject({
-      purchase: { organizationId: ORG },
-    });
+    const calls = purchaseItemModel.groupBy.mock.calls.filter(
+      (call) => call[0].by[0] === "productId"
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].where).toMatchObject({ purchase: { organizationId: ORG } });
   });
 
   it("scopes the line-quantity sum through the purchase relation", async () => {
@@ -302,17 +381,20 @@ describe("GET /api/reports/purchase/basic date window", () => {
 });
 
 describe("GET /api/reports/purchase/by-supplier", () => {
+  // These seed `groupBy` rather than raw purchases: the report counts and sums in
+  // the database, so what it reads is already aggregated. The assertions are
+  // unchanged -- same rows, same order, same numbers as when the folding happened
+  // in JavaScript.
+
   it("keeps two suppliers that share a company name apart", async () => {
     // The legacy keyed the accumulator on companyName, so same-named suppliers
     // merged into one row with their spend added together.
-    purchaseModel.findMany.mockResolvedValue([
-      purchaseFixture({ supplierId: "sup_1" }),
-      purchaseFixture({
-        id: "pur_2",
-        supplierId: "sup_2",
-        totalAmount: 100,
-      }),
-    ]);
+    purchaseModel.groupBy.mockResolvedValue(
+      seedSupplierGroups([
+        purchaseFixture({ supplierId: "sup_1" }),
+        purchaseFixture({ id: "pur_2", supplierId: "sup_2", totalAmount: 100 }),
+      ])
+    );
 
     const res = await asTenant(
       request(app).get("/api/reports/purchase/by-supplier")
@@ -325,10 +407,12 @@ describe("GET /api/reports/purchase/by-supplier", () => {
   });
 
   it("adds repeat orders for one supplier", async () => {
-    purchaseModel.findMany.mockResolvedValue([
-      purchaseFixture(),
-      purchaseFixture({ id: "pur_2", totalAmount: 100 }),
-    ]);
+    purchaseModel.groupBy.mockResolvedValue(
+      seedSupplierGroups([
+        purchaseFixture(),
+        purchaseFixture({ id: "pur_2", totalAmount: 100 }),
+      ])
+    );
 
     const res = await asTenant(
       request(app).get("/api/reports/purchase/by-supplier")
@@ -340,10 +424,15 @@ describe("GET /api/reports/purchase/by-supplier", () => {
   });
 
   it("sorts by spend, highest first", async () => {
-    purchaseModel.findMany.mockResolvedValue([
-      purchaseFixture({ supplierId: "sup_1", totalAmount: 10 }),
-      purchaseFixture({ supplierId: "sup_2", totalAmount: 900 }),
-    ]);
+    // The ordering is the database's `orderBy` now, not a `.sort()` after the
+    // fact, so the mock returns the groups already in that order and the response
+    // has to come back that way without the service re-sorting.
+    purchaseModel.groupBy.mockResolvedValue(
+      seedSupplierGroups([
+        purchaseFixture({ supplierId: "sup_1", totalAmount: 10 }),
+        purchaseFixture({ supplierId: "sup_2", totalAmount: 900 }),
+      ])
+    );
 
     const res = await asTenant(
       request(app).get("/api/reports/purchase/by-supplier")
@@ -356,7 +445,7 @@ describe("GET /api/reports/purchase/by-supplier", () => {
   });
 
   it("returns an empty list when nothing was purchased", async () => {
-    purchaseModel.findMany.mockResolvedValue([]);
+    purchaseModel.groupBy.mockResolvedValue([]);
 
     const res = await asTenant(
       request(app).get("/api/reports/purchase/by-supplier")
@@ -364,12 +453,64 @@ describe("GET /api/reports/purchase/by-supplier", () => {
 
     expect(res.body).toEqual([]);
   });
+
+  it("aggregates in the database instead of loading every purchase", async () => {
+    // The response has one line per supplier. The old shape was `findMany` over
+    // the whole window -- one row per purchase, joined to Supplier on each -- so
+    // the memory grew with the tenant's history while the payload did not.
+    purchaseModel.groupBy.mockResolvedValue(
+      seedSupplierGroups([purchaseFixture(), purchaseFixture({ id: "pur_2" })])
+    );
+
+    await asTenant(request(app).get("/api/reports/purchase/by-supplier"));
+
+    expect(purchaseModel.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ["supplierId"],
+        _count: { _all: true },
+        orderBy: { _sum: { totalAmount: "desc" } },
+      })
+    );
+    expect(purchaseModel.findMany).not.toHaveBeenCalled();
+  });
+
+  it("scopes the group and the name lookup to the tenant", async () => {
+    purchaseModel.groupBy.mockResolvedValue(
+      seedSupplierGroups([purchaseFixture()])
+    );
+
+    await asTenant(request(app).get("/api/reports/purchase/by-supplier"));
+
+    expect(purchaseModel.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG }),
+      })
+    );
+    // The second query must be scoped too, or a group key resolves to another
+    // tenant's company name.
+    expect(supplierModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG }),
+      })
+    );
+  });
 });
 
 describe("GET /api/reports/purchase/by-product", () => {
+  // Seeded on `groupBy` for the same reason as the supplier report: the sums are
+  // the database's now. The expected rows are unchanged.
+
+  const seedProductLines = (rows: Record<string, unknown>[]) => {
+    purchaseItemModel.groupBy.mockImplementation(async ({ by }) =>
+      by[0] === "productId"
+        ? seedProductGroups(rows)
+        : [{ purchaseId: "pur_1", _sum: { quantity: 10 } }]
+    );
+  };
+
   it("keeps two products that share a name apart", async () => {
     // Same name-keyed accumulator as the supplier report, same collision.
-    purchaseItemModel.findMany.mockResolvedValue([
+    seedProductLines([
       lineFixture({ productId: "prod_1" }),
       lineFixture({ productId: "prod_2", totalCost: 30 }),
     ]);
@@ -384,7 +525,7 @@ describe("GET /api/reports/purchase/by-product", () => {
   });
 
   it("adds quantities and cost across lines", async () => {
-    purchaseItemModel.findMany.mockResolvedValue([
+    seedProductLines([
       lineFixture({ quantity: 10, unitCost: 5, totalCost: 50 }),
       lineFixture({ quantity: 5, unitCost: 7, totalCost: 35 }),
     ]);
@@ -409,7 +550,7 @@ describe("GET /api/reports/purchase/by-product", () => {
   it("carries quantity so 1 at 100 and 100 at 1 are distinguishable", async () => {
     // A spend figure alone cannot tell those apart, and they want opposite
     // decisions.
-    purchaseItemModel.findMany.mockResolvedValue([
+    seedProductLines([
       lineFixture({ quantity: 1, unitCost: 100, totalCost: 100 }),
     ]);
 
@@ -420,8 +561,23 @@ describe("GET /api/reports/purchase/by-product", () => {
     expect(res.body[0]).toMatchObject({ quantity: 1, averageUnitCost: 100 });
   });
 
+  it("averages the line costs rather than weighting by spend", async () => {
+    // The mean of `unitCost` across the lines, not spend over quantity. Two lines
+    // at 5 and 7 average to 6, not to 85/15.
+    seedProductLines([
+      lineFixture({ quantity: 10, unitCost: 5, totalCost: 50 }),
+      lineFixture({ quantity: 5, unitCost: 7, totalCost: 35 }),
+    ]);
+
+    const res = await asTenant(
+      request(app).get("/api/reports/purchase/by-product")
+    );
+
+    expect(res.body[0].averageUnitCost).toBe(6);
+  });
+
   it("sorts by spend, highest first", async () => {
-    purchaseItemModel.findMany.mockResolvedValue([
+    seedProductLines([
       lineFixture({ productId: "prod_1", totalCost: 10 }),
       lineFixture({ productId: "prod_2", totalCost: 900 }),
     ]);
@@ -437,13 +593,28 @@ describe("GET /api/reports/purchase/by-product", () => {
   });
 
   it("returns an empty list when nothing was purchased", async () => {
-    purchaseItemModel.findMany.mockResolvedValue([]);
+    seedProductLines([]);
 
     const res = await asTenant(
       request(app).get("/api/reports/purchase/by-product")
     );
 
     expect(res.body).toEqual([]);
+  });
+
+  it("aggregates lines in the database rather than loading every one", async () => {
+    seedProductLines([lineFixture(), lineFixture({ productId: "prod_2" })]);
+
+    await asTenant(request(app).get("/api/reports/purchase/by-product"));
+
+    expect(purchaseItemModel.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ["productId"],
+        _count: { _all: true },
+        orderBy: { _sum: { totalCost: "desc" } },
+      })
+    );
+    expect(purchaseItemModel.findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -480,15 +651,30 @@ describe("GET /api/reports/purchase/full", () => {
       )
     );
 
+    // The basic report loads documents; the by-supplier and by-product reports
+    // aggregate in the database. The window has to reach all three, wherever the
+    // arithmetic happens.
     for (const call of purchaseModel.findMany.mock.calls) {
       expect(call[0].where.purchaseDate).toMatchObject({
         gte: new Date("2026-03-01"),
         lte: new Date("2026-03-31"),
       });
     }
-    expect(
-      purchaseItemModel.findMany.mock.calls[0][0].where.purchase.purchaseDate
-    ).toMatchObject({ gte: new Date("2026-03-01") });
+
+    expect(purchaseModel.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          purchaseDate: { gte: new Date("2026-03-01"), lte: new Date("2026-03-31") },
+        }),
+      })
+    );
+
+    const productGroups = purchaseItemModel.groupBy.mock.calls.filter(
+      (call) => call[0].by[0] === "productId"
+    );
+    expect(productGroups[0][0].where.purchase.purchaseDate).toMatchObject({
+      gte: new Date("2026-03-01"),
+    });
   });
 
   it("400s a bad window like the others", async () => {
