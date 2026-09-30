@@ -160,38 +160,57 @@ writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a
 ## Build and test
 
 ```bash
-# API tests — 618 pass
-cd apps/server && ./node_modules/.bin/vitest run
+# API tests — 628 pass
+pnpm --filter server run test
 
-# Typecheck
-cd apps/server && ./node_modules/.bin/tsc --noEmit
+# Typecheck (all workspaces)
+pnpm run typecheck
 
 # Prisma client (required before typecheck on a fresh clone)
-cd packages/db && ./node_modules/.bin/prisma generate
+pnpm --filter @dms/db exec prisma generate
+
+# Checkpoint parity — the gated set CI enforces
+pnpm run test:parity
+
+# Every parity suite, including the ones still `pending`
+pnpm run test:parity:all
 ```
 
-Avoid `pnpm turbo run test` — it triggers a full install that hangs.
+The parity suites under `checkpoints/` are outside the pnpm workspace globs, so they resolve
+`@dms/*` through the aliases in `vitest.config.ts` rather than `node_modules`.
 
-### CI is broken repo-wide (pre-existing, unrelated to checkpoint work)
+### CI is fixed repo-wide
 
-| Job | Problem |
+| Job | State |
 |---|---|
-| `bundle-size` | Runs `pnpm --filter @dms/web run size-limit`. `apps/web` has no `size-limit` script. |
-| `checkpoint-parity` | Runs `pnpm exec playwright install`. Playwright is not a dependency. |
-| `table-pagination-check` | Passes. |
+| `bundle-size` | Works. `apps/web` now has a `size-limit` script and `.size-limit.json` (100 kB brotli budget, currently 73.04 kB). |
+| `checkpoint-parity` | Works. Runs `pnpm run test:parity`; the dead `pnpm exec vitest` and `playwright install` steps are gone. |
+| `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
-Confirmed identical failures on PR #17 before any of the review work. **`checkpoint-parity`
-is the job that would gate UI work, so building checkpoint 4 against it means merging with
-that check silently non-functional.** Fix it before starting UI.
+**What the parity job actually enforces is now declared, not implied.**
+`checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
+with the reason it is not enforced, and `checkpoints/parity-gate.test.ts` fails if a
+checkpoint gains a parity suite without a decision, or if a `gated` entry matches no files
+on disk. Today only `00` is `gated` (16 tests). `pnpm run test:parity:all` runs the full
+28-suite set for progress tracking; the `pending` suites fail there by design.
 
-### Schema has no migrations
+The 22 `02x` failures that gate exposed are **not regressions**. Those 16 suites are
+unfinished stubs: `beforeAll` never seeds a tenant, they authenticate with
+`Authorization: Bearer <token>` against an API that has read `x-organization-id` since 02a,
+and several `it` blocks are bare comments that pass vacuously. They have never run, because
+the job died before executing anything. They need rewriting against the header-based tenant
+context, reconciled against the existing 628 server tests rather than duplicated.
 
-There is no `migrations/` directory. Two schema changes shipped to `main` are not applied to
-any live database:
+### Schema migrations exist now
 
-- `@@unique([organizationId, userId])` on `Member` — **will fail to create if duplicate
-  memberships exist. Dedupe before applying.**
-- `onDelete: Cascade` on sale / purchase / return lines
+`packages/db/prisma/migrations/20251001000000_baseline` is generated from the authoritative
+`schema.prisma` and applies cleanly to an empty database. Both changes previously flagged as
+unapplied are in it, verified against a live PostgreSQL 16 instance:
+
+- `@@unique([organizationId, userId])` on `Member` → `member_organizationId_userId_key`
+- `onDelete: Cascade` from `sales` / `purchases` / `returns` to their line tables
+
+Apply with `pnpm --filter @dms/db exec prisma migrate deploy`.
 
 ---
 

@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
-import { createApp } from "../src/app";
+import { createApp } from "../../apps/server/src/app";
 
 describe("Checkpoint 3 — Auth", () => {
   let app: ReturnType<typeof createApp>;
