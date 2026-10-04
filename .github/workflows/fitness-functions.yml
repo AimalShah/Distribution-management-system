@@ -35,3 +35,6 @@ jobs:
       # parity. Playwright was installed here for the same reason of
       # appearances -- no parity suite imports it.
       - run: pnpm run test:parity
+      # The server suite is the other half of this job: it mocks the database and
+      # covers every checkpoint's behaviour, and no other workflow runs it.
+      - run: pnpm --filter @dms/server test
