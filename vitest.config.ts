@@ -58,6 +58,6 @@ export default defineConfig({
     // import time and Prisma reads DATABASE_URL then. A `.env` fallback belongs
     // in a setup file rather than inside a test helper for that reason -- by the
     // time a helper runs, the client already exists.
-    setupFiles: ["checkpoints/support/load-env.ts"],
+    setupFiles: ["checkpoints/support/load-env.ts", "checkpoints/support/dom-setup.ts"],
   },
 });

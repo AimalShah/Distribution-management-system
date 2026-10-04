@@ -36,6 +36,6 @@ export default defineConfig({
     environment: "node",
     // Same reason as `vitest.config.ts`: the Prisma client is constructed at
     // import time, so DATABASE_URL has to be set before the module graph loads.
-    setupFiles: ["checkpoints/support/load-env.ts"],
+    setupFiles: ["checkpoints/support/load-env.ts", "checkpoints/support/dom-setup.ts"],
   },
 });

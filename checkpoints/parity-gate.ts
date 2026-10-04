@@ -24,7 +24,11 @@
 export type GateStatus = "gated" | "pending";
 
 export interface GateEntry {
-  /** Directory name directly under `checkpoints/`. */
+  /**
+   * Directory name directly under `checkpoints/`, or one sub-checkpoint inside
+   * it (`04-react-web-app/04a-dashboard`). The more specific entry wins, so a
+   * sub-checkpoint can be gated while the rest of its parent stays pending.
+   */
   readonly dir: string;
   readonly status: GateStatus;
   /** Required when `status` is `pending`: what has to land first. */
@@ -46,6 +50,10 @@ export const GATE: readonly GateEntry[] = [
   },
   {
     dir: "03-auth",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04a-dashboard",
     status: "gated",
   },
   {
@@ -73,8 +81,21 @@ export const PENDING_DIRS: readonly string[] = GATE.filter(
  * shapes are globbed.
  */
 export function parityTestGlobs(): string[] {
-  return GATED_DIRS.flatMap((dir) => [
-    `checkpoints/${dir}/parity.test.ts`,
-    `checkpoints/${dir}/*/parity.test.ts`,
-  ]);
+  return GATED_DIRS.flatMap((dir) =>
+    dir.includes("/")
+      ? [`checkpoints/${dir}/parity.test.ts`]
+      : [`checkpoints/${dir}/parity.test.ts`, `checkpoints/${dir}/*/parity.test.ts`]
+  );
+}
+
+/**
+ * The gate entry a parity test answers to: its sub-checkpoint's entry when one
+ * exists, otherwise its checkpoint's. `undefined` when neither has an entry.
+ */
+export function owningEntry(testPath: string): string | undefined {
+  const parts = testPath.split("/"); // checkpoints/<dir>[/<subdir>]/parity.test.ts
+  const dirs = GATE.map((e) => e.dir);
+  const sub = parts.length > 3 ? `${parts[1]}/${parts[2]}` : undefined;
+  if (sub && dirs.includes(sub)) return sub;
+  return dirs.includes(parts[1]) ? parts[1] : undefined;
 }

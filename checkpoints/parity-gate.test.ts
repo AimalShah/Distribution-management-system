@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-import { GATE, GATED_DIRS, PENDING_DIRS, parityTestGlobs } from "./parity-gate";
+import { GATE, GATED_DIRS, owningEntry, parityTestGlobs } from "./parity-gate";
 
 const root = path.resolve(__dirname, "..");
 const checkpointsDir = path.join(root, "checkpoints");
@@ -36,11 +36,6 @@ function findParityTests(dir: string = checkpointsDir): string[] {
   return found.sort();
 }
 
-/** The checkpoint directory a test belongs to, e.g. `checkpoints/02-express-api`. */
-function owningDir(testPath: string): string {
-  const parts = testPath.split("/"); // checkpoints/<dir>[/<subdir>]/parity.test.ts
-  return parts[1];
-}
 
 describe("checkpoint parity gate", () => {
   const parityTests = findParityTests();
@@ -59,9 +54,7 @@ describe("checkpoint parity gate", () => {
   it("gives every parity suite a gate decision", () => {
     const orphans = [
       ...new Set(
-        parityTests
-          .map(owningDir)
-          .filter((dir) => !GATED_DIRS.includes(dir) && !PENDING_DIRS.includes(dir))
+        parityTests.filter((t) => owningEntry(t) === undefined).map((t) => t.split("/")[1])
       ),
     ].sort();
 
@@ -85,7 +78,9 @@ describe("checkpoint parity gate", () => {
   });
 
   it("points every gate entry at a real checkpoint directory", () => {
-    const missing = GATE.map((e) => e.dir).filter((d) => !checkpointDirs.includes(d));
+    const missing = GATE.map((e) => e.dir).filter(
+      (d) => !checkpointDirs.includes(d.split("/")[0]) || !fs.existsSync(path.join(checkpointsDir, d))
+    );
 
     expect(missing, `Gate entries with no directory: ${missing.join(", ")}`).toEqual([]);
   });
@@ -96,9 +91,7 @@ describe("checkpoint parity gate", () => {
     // without testing anything, which is the failure this whole file exists to
     // prevent.
     for (const dir of GATED_DIRS) {
-      const matches = parityTests.filter(
-        (t) => owningDir(t) === dir
-      );
+      const matches = parityTests.filter((t) => owningEntry(t) === dir);
       expect(
         matches.length,
         `"${dir}" is gated but ${parityTestGlobs()

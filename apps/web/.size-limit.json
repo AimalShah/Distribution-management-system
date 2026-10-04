@@ -1,7 +1,20 @@
 [
   {
-    "name": "Web app (gzipped JS + CSS)",
-    "path": "dist/assets/*.{js,css}",
+    "name": "Initial load: entry JS + CSS (what paints the login screen)",
+    "path": "dist/assets/index-*.{js,css}",
+    "brotli": true,
     "limit": "175 kB"
+  },
+  {
+    "name": "Dashboard route chunk (recharts lives here, not in the entry)",
+    "path": "dist/assets/Dashboard-*.js",
+    "brotli": true,
+    "limit": "110 kB"
+  },
+  {
+    "name": "Everything, every route",
+    "path": "dist/assets/*.{js,css}",
+    "brotli": true,
+    "limit": "330 kB"
   }
 ]
