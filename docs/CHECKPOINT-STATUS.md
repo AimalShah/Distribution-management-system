@@ -31,7 +31,8 @@ not from what a `plan.md` claims.
 | 04a — Dashboard + web shell | **Implemented** (PR pending review) |
 | 04b — Product pages | **Implemented** (PR pending review) |
 | 04c — Purchase pages | **Implemented** (PR pending review) |
-| 04d–04j — React Web App | **Planned** |
+| 04d — Sale invoice pages | **Implemented** (PR pending review) |
+| 04e–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -116,6 +117,7 @@ Worth knowing before you add a route that expects them in the shared router.
 | `totalLineItems` on the purchase report counted *purchases with lines*, not lines (Prisma `groupBy` rows are keyed on `purchaseId`, so one group is one purchase) | `feat/02-api-parity` |
 | `totalLineItems` on the sales report had the same defect, keyed on `saleId` | `feat/02-api-parity` |
 | `removeMember` checked the member's *current* role instead of the role being changed, so it could strip ownership from a second owner | `feat/02-api-parity` |
+| Deleting a sale left the units it sold missing from inventory. Now returned with an `IN` log entry in the same transaction; refused (409) when a return references the invoice | `checkpoint/04d-sale-invoice` |
 | Deleting a purchase left all of its stock in `Inventory.quantityOnHand` with no log entry. Now reversed in the same transaction, refused (409) when the stock was already consumed or a return references the purchase | `checkpoint/04c-purchase` |
 
 ## 03 — Auth · Implemented (PR pending review)
@@ -143,7 +145,7 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · In progress (04a–04c done)
+## 04 — React Web App · In progress (04a–04d done)
 
 > The text below describes the state before 04a and is kept for history. 04a added the
 > app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
@@ -171,7 +173,7 @@ exist anywhere in `checkpoints/`**.
 | 04a | Dashboard | **Implemented** (PR pending review) — plus the shell every screen shares: routing, auth screens, sidebar, SWR. `GET /api/dashboard/stats` replaces browser-side sums; the legacy constant trends and `Math.random()` figures are gone |
 | 04b | Product Pages | **Implemented** (PR pending review) — list with server pagination/search, shared new/edit form, confirmed delete, inline category/brand creation |
 | 04c | Purchase Pages | **Implemented** (PR pending review) — list, new purchase with dynamic lines and live totals (shared `calculatePurchaseTotal`), header-only edit |
-| 04d | Sale Invoice Pages | Planned |
+| 04d | Sale Invoice Pages | **Implemented** (PR pending review) — list, new invoice with live totals and stock warnings, `/sales/:id/print` (escaped HTML, CSP) and `/sales/:id/pdf` (same HTML through puppeteer-core) |
 | 04e | Inventory Page | Planned |
 | 04f | Returns Pages | Planned |
 | 04g | Customer Page | Planned |
