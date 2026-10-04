@@ -12,6 +12,8 @@ interface DataTableProps<TData> {
   pageIndex: number;
   pageSize: number;
   onPaginationChange: (pageIndex: number, pageSize: number) => void;
+  /** Shown in place of the rows when `data` is empty. */
+  emptyMessage?: string;
 }
 
 export function DataTable<TData>({
@@ -21,7 +23,10 @@ export function DataTable<TData>({
   pageIndex,
   pageSize,
   onPaginationChange,
+  emptyMessage = "No results.",
 }: DataTableProps<TData>) {
+  // An empty result is still one page; "Page 1 of 0" reads as a bug.
+  const pages = Math.max(pageCount, 1);
   const table = useReactTable({
     data,
     columns,
@@ -53,6 +58,13 @@ export function DataTable<TData>({
             ))}
           </thead>
           <tbody>
+            {table.getRowModel().rows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="p-6 text-center text-sm text-muted-foreground">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id} className="border-b">
                 {row.getVisibleCells().map((cell) => (
@@ -73,10 +85,10 @@ export function DataTable<TData>({
         >
           Previous
         </button>
-        <span className="text-sm">Page {pageIndex + 1} of {pageCount}</span>
+        <span className="text-sm">Page {pageIndex + 1} of {pages}</span>
         <button
           className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-          disabled={pageIndex + 1 >= pageCount}
+          disabled={pageIndex + 1 >= pages}
           onClick={() => onPaginationChange(pageIndex + 1, pageSize)}
         >
           Next

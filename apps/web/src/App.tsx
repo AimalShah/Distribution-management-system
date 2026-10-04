@@ -12,6 +12,8 @@ const Login = lazy(() => import("./pages/auth/Login"));
 const Signup = lazy(() => import("./pages/auth/Signup"));
 const RegisterCompany = lazy(() => import("./pages/auth/RegisterCompany"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ProductList = lazy(() => import("./pages/products/ProductList"));
+const ProductForm = lazy(() => import("./pages/products/ProductForm"));
 
 export function App() {
   return (
@@ -29,6 +31,9 @@ export function App() {
         >
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/product" element={<ProductList />} />
+          <Route path="/product/new" element={<ProductForm />} />
+          <Route path="/product/:id/edit" element={<ProductForm />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
