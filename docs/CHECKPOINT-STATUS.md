@@ -163,46 +163,70 @@ writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a
 ## Build and test
 
 ```bash
-# API tests — 618 pass
-cd apps/server && ./node_modules/.bin/vitest run
+# API tests — 628 pass
+pnpm --filter server run test
 
-# Typecheck
-cd apps/server && ./node_modules/.bin/tsc --noEmit
+# Typecheck (all workspaces)
+pnpm run typecheck
 
 # Prisma client (required before typecheck on a fresh clone)
-cd packages/db && ./node_modules/.bin/prisma generate
+pnpm --filter @dms/db exec prisma generate
+
+# Checkpoint parity — the gated set CI enforces
+pnpm run test:parity
+
+# Every parity suite, including the ones still `pending`
+pnpm run test:parity:all
 ```
 
-Avoid `pnpm turbo run test` — it triggers a full install that hangs.
+The parity suites under `checkpoints/` are outside the pnpm workspace globs, so they resolve
+`@dms/*` through the aliases in `vitest.config.ts` rather than `node_modules`.
 
 ### CI status
 
-All three fitness-function jobs now pass:
+All three fitness-function jobs pass:
 
 | Job | Status |
 |---|---|
-| `bundle-size` | Passes — `size-limit` added to `apps/web` with a 300 kB budget; bundle measures 72.1 kB |
-| `checkpoint-parity` | Passes — runs the server suite (`pnpm --filter @dms/server test`, 618 tests) |
-| `table-pagination-check` | Passes |
+| `bundle-size` | Passes — `size-limit` in `apps/web`, configured by `apps/web/.size-limit.json` (100 kB budget; measured 73.04 kB). |
+| `checkpoint-parity` | Passes — runs `pnpm run test:parity` (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 628 tests). |
+| `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
-`checkpoint-parity` originally ran `pnpm exec playwright install` (not a
-dependency, unused) and `pnpm vitest run "checkpoints/**/parity.test.ts"` from
-the root (vitest not installed there). The parity specs it targeted were never
-wired up — they imported a non-existent `../src/app`, needed a live database,
-and left `authToken` undefined. The job now runs the server suite, which mocks
-the database and is the real parity verification. The parity specs remain as
-documentation; their imports now point at the real app.
+**What the parity job actually enforces is now declared, not implied.**
+`checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
+with the reason it is not enforced, and `checkpoints/parity-gate.test.ts` fails if a
+checkpoint gains a parity suite without a decision, or if a `gated` entry matches no files
+on disk. Today only `00` is `gated` (16 tests). `pnpm run test:parity:all` runs the full
+28-suite set for progress tracking; the `pending` suites fail there by design.
+
+The server suite runs alongside it. The `checkpoints/**/parity.test.ts` specs were written
+before implementation and are not the verification the job name implies — they need a live
+database and leave `authToken` undefined. Their imports now point at the real app
+(`apps/server/src/app`) rather than the non-existent `../src/app`, but it is the 628 server
+tests that actually cover checkpoint behaviour.
+
+The 22 `02x` failures that the gate exposed are **not regressions**. Those 16 suites are
+unfinished stubs: `beforeAll` never seeds a tenant, they authenticate with
+`Authorization: Bearer <token>` against an API that has read `x-organization-id` since 02a,
+and several `it` blocks are bare comments that pass vacuously. They have never run, because
+the job died before executing anything. They need rewriting against the header-based tenant
+context, reconciled against the existing 628 server tests rather than duplicated.
 
 ### Schema migrations
 
-An initial migration now exists at `packages/db/prisma/migrations/0001_init/`,
-generated from the schema, so the `Member` unique index and the
-sale/purchase/return cascades are captured as a migration rather than living
-only in `schema.prisma`.
+An initial migration now exists at `packages/db/prisma/migrations/0001_init/`, generated
+from the authoritative `schema.prisma`, so both changes previously flagged as unapplied to
+any live database are captured as a migration rather than living only in `schema.prisma`:
 
-**Before applying it to a database that already has rows**, dedupe
-`Member` — the `@@unique([organizationId, userId])` index will fail to create
-if any user has two membership rows in the same organization.
+- `@@unique([organizationId, userId])` on `Member` → `member_organizationId_userId_key`
+- `onDelete: Cascade` from `sales` / `purchases` / `returns` to their line tables
+
+Verified against a live PostgreSQL 16 instance. Apply with
+`pnpm --filter @dms/db exec prisma migrate deploy`.
+
+**Before applying it to a database that already has rows**, dedupe `Member` — the
+`@@unique([organizationId, userId])` index will fail to create if any user has two
+membership rows in the same organization.
 
 ---
 

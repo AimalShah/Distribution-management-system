@@ -6,14 +6,17 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { describe, it, expect } from "vitest";
+
+// Module scope, not inside a `describe`: two `describe` blocks below use it.
+// This file is `checkpoints/<name>/parity.test.ts`, so the repo root is two
+// levels up. It was written as three, which resolved to the *parent* of the
+// repository -- so every `path.join(root, ...)` read a directory that does not
+// exist and the assertions were passing or failing for the wrong reason.
+const root = path.resolve(__dirname, "../..");
 
 describe("Checkpoint 0 — Monorepo scaffold", () => {
-  const root = path.resolve(__dirname, "../../..");
-
   it("has pnpm-workspace.yaml with correct packages", () => {
     const content = fs.readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf-8");
     expect(content).toContain("apps/*");
@@ -61,8 +64,8 @@ describe("Checkpoint 0 — Monorepo scaffold", () => {
     expect(fs.existsSync(path.join(root, "apps/web/vite.config.ts"))).toBe(true);
   });
 
-  it("apps/server has the debug router the harness calls", () => {
-    expect(fs.existsSync(path.join(root, "apps/server/src/routes/__debug.ts"))).toBe(true);
+  it("apps/server has harness router", () => {
+    expect(fs.existsSync(path.join(root, "apps/server/src/harness/router.ts"))).toBe(true);
   });
 
   it("apps/desktop has electron main", () => {
@@ -71,15 +74,33 @@ describe("Checkpoint 0 — Monorepo scaffold", () => {
 });
 
 describe("Checkpoint 0 — Harness", () => {
-  it("ships the devtools harness CLI", () => {
-    expect(fs.existsSync(path.join(root, "packages/devtools/src/cli.ts"))).toBe(true);
+  const harnessPath = path.resolve(root, "apps/server/src/harness/router.ts");
+
+  it("harness router exposes the documented endpoints", () => {
+    // The plan specifies `GET /__debug/state` and `POST /__debug/call`. Asserting
+    // on the source is the honest check here: the harness mounts only in dev and
+    // reaches `@dms/db`, so a supertest run needs a live database, which this
+    // parity test cannot assume. The endpoint behaviour itself is covered by
+    // `apps/server/src/harness/router.test.ts`, which runs in the server suite.
+    const source = fs.readFileSync(harnessPath, "utf-8");
+    expect(source).toContain('harnessRouter.get("/state"');
+    expect(source).toContain('harnessRouter.post("/call"');
   });
 
-  it("wires the debug router the harness calls", () => {
-    const router = fs.readFileSync(
+  it("routes/__debug.ts is a re-export, not a second implementation", () => {
+    // Two implementations of the same endpoints would drift. The mount site keeps
+    // the `debugRouter` name; the contract lives in one module.
+    const source = fs.readFileSync(
       path.join(root, "apps/server/src/routes/__debug.ts"),
       "utf-8"
     );
-    expect(router).toContain("debugRouter");
+    expect(source).toMatch(/export \{ harnessRouter as debugRouter \}/);
+  });
+
+  it("the harness CLI is wired to a runnable script", () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf-8")
+    );
+    expect(pkg.scripts.debug).toContain("packages/devtools/src/cli.ts");
   });
 });

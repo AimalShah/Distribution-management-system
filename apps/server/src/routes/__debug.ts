@@ -1,24 +1,9 @@
-import { Router } from "express";
-import { getRecentQueries } from "@dms/db/debug-log";
-
-export const debugRouter: Router = Router();
-
-debugRouter.get("/state", (_req, res) => {
-  const queries = getRecentQueries();
-  res.json({
-    recentQueries: queries.slice(-50),
-    queryCountLastMinute: queries.filter(
-      (q) => Date.now() - new Date(q.at).getTime() < 60_000
-    ).length,
-  });
-});
-
-debugRouter.post("/call", async (req, res) => {
-  const { service, fn, args } = req.body;
-  try {
-    const mod = await import(`../services/${service}`);
-    res.json({ success: true, result: await mod[fn](...(Array.isArray(args) ? args : [args])) });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+/**
+ * The harness router lives in `src/harness/router.ts` -- that is the path
+ * `checkpoints/00-harness-monorepo-scaffold/parity.test.ts` asserts, and it is
+ * where the endpoint contract belongs.
+ *
+ * This module keeps the `debugRouter` name that `app.ts` mounts at `/__debug`
+ * (dev only) so the mount site and its path stay readable.
+ */
+export { harnessRouter as debugRouter } from "../harness/router";

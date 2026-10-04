@@ -8,6 +8,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:parity": "vitest run",
+    "test:parity:all": "vitest run --config vitest.parity-all.config.ts",
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @dms/db run generate",
     "db:migrate": "pnpm --filter @dms/db run migrate",
@@ -15,8 +17,11 @@
     "debug": "tsx packages/devtools/src/cli.ts"
   },
   "devDependencies": {
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.3.0",
     "turbo": "^2.0.0",
     "tsx": "^4.20.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.2"
   }
 }
