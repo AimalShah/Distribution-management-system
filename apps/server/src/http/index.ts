@@ -6,6 +6,7 @@ export {
   conflict,
   forbidden,
   notFound,
+  unauthorized,
   unprocessable,
 } from "./errors";
 export { translatePrismaError, translateZodError } from "./prisma-errors";

@@ -1,8 +1,19 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import { toNodeHandler } from "better-auth/node";
+import { createAuth, type Auth } from "./auth";
 import { allowedOrigins } from "./config/env";
 import { errorHandler, notFoundHandler } from "./http";
-import { authContext, bootstrapAuthContext } from "./middleware/auth-context";
+import {
+  authContext,
+  bootstrapAuthContext,
+  resolveAuthMode,
+  type AuthMode,
+} from "./middleware/auth-context";
+import {
+  sessionAuthContext,
+  sessionBootstrapAuthContext,
+} from "./middleware/session";
 import { apiRouter } from "./routes";
 import { organizationRouter } from "./routes/organization";
 import {
@@ -11,8 +22,21 @@ import {
 } from "./routes/member";
 import { debugRouter } from "./routes/__debug";
 
-export function createApp(): Express {
+export interface AppOptions {
+  /** Defaults to `resolveAuthMode()`: `session` unless `DMS_TRUSTED_PROXY_AUTH=true`. */
+  authMode?: AuthMode;
+  /** Defaults to `createAuth()`. */
+  auth?: Auth;
+}
+
+export function createApp(options: AppOptions = {}): Express {
   const app: Express = express();
+  const authMode = options.authMode ?? resolveAuthMode();
+  const auth = options.auth ?? createAuth();
+
+  const strict = authMode === "session" ? sessionAuthContext(auth) : authContext;
+  const bootstrap =
+    authMode === "session" ? sessionBootstrapAuthContext(auth) : bootstrapAuthContext;
 
   // An allowlist, not a wildcard: an origin that is not on it gets no CORS
   // headers, so the browser withholds the response from the calling page.
@@ -27,8 +51,18 @@ export function createApp(): Express {
         }
         callback(null, false);
       },
+      // The session cookie only reaches a cross-origin API if the response
+      // allows credentials. Safe alongside the allowlist above: credentials are
+      // never granted to an origin that is not on it.
+      credentials: true,
     })
   );
+
+  // better-auth reads the raw body itself, so it is mounted ahead of
+  // `express.json()` -- a parsed body would leave its handler waiting on a
+  // stream that has already been consumed.
+  app.all("/api/auth/*", toNodeHandler(auth));
+
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => {
@@ -52,7 +86,7 @@ export function createApp(): Express {
   // caller with a perfectly good organization header would be told to send one.
   app.use(
     "/api/organizations",
-    bootstrapAuthContext,
+    bootstrap,
     organizationMemberRouter,
     organizationRouter,
     notFoundHandler
@@ -62,9 +96,9 @@ export function createApp(): Express {
   // `/api` line below for the same reason -- `authContext` there would answer
   // 400 ORGANIZATION_REQUIRED for a by-id member route that needs no tenant
   // header of its own.
-  app.use("/api/members", bootstrapAuthContext, memberRouter, notFoundHandler);
+  app.use("/api/members", bootstrap, memberRouter, notFoundHandler);
 
-  app.use("/api", authContext, apiRouter);
+  app.use("/api", strict, apiRouter);
 
   if (process.env.NODE_ENV !== "production") {
     app.use("/__debug", debugRouter);

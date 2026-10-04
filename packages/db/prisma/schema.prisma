@@ -138,6 +138,9 @@ model Invitation {
   role           String?
   status         String
   expiresAt      DateTime
+  // Required by better-auth's organization plugin (checkpoint 3), which writes it
+  // on every invitation. The default only covers rows that predate the plugin.
+  createdAt      DateTime     @default(now())
   inviterId      String
   user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
 

@@ -46,9 +46,7 @@ export const GATE: readonly GateEntry[] = [
   },
   {
     dir: "03-auth",
-    status: "pending",
-    reason:
-      "Auth is the temporary header-trust shim in `middleware/auth-context.ts`; `better-auth` is not a dependency yet. The three HTTP tests fail against the shim by design.",
+    status: "gated",
   },
   {
     dir: "04-react-web-app",

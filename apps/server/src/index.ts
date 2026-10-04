@@ -1,7 +1,7 @@
 import { createApp } from "./app";
-import { assertAuthShimIsSafe, host, port } from "./config/env";
+import { assertAuthIsSafe, host, port } from "./config/env";
 
-assertAuthShimIsSafe();
+assertAuthIsSafe();
 
 const app = createApp();
 

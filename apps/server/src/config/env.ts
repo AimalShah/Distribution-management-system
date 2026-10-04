@@ -41,26 +41,27 @@ export const port = Number(process.env.PORT ?? 4000);
 export const host = process.env.DMS_HOST ?? "127.0.0.1";
 
 /**
- * The auth middleware in `middleware/auth-context.ts` reads the tenant from a
- * client supplied header, so a caller can pick any organization. That is only
- * acceptable while the server is unreachable from anything the caller does not
- * control, so a production process refuses to start rather than discovering the
- * problem after another tenant's invoices have been read.
+ * Production refuses to start with an auth configuration that would let a
+ * caller forge a session.
  *
- * `DMS_TRUSTED_PROXY_AUTH=true` is the escape hatch for deployments that
- * terminate authentication at a gateway and forward the headers themselves.
- * Checkpoint 3 replaces the shim and this check together.
+ * Session mode (the default) needs `BETTER_AUTH_SECRET`: it signs the session
+ * cookie, and without it better-auth falls back to a built-in default that
+ * anyone can read, so anyone could sign a cookie for a session token they
+ * observed.
+ *
+ * Trusted-proxy mode (`DMS_TRUSTED_PROXY_AUTH=true`) passes, because setting it
+ * is the operator stating that a gateway authenticates every request and sets
+ * the tenant headers itself -- see `AuthMode` in `middleware/auth-context.ts`.
  */
-export function assertAuthShimIsSafe(): void {
+export function assertAuthIsSafe(): void {
   if (!isProduction) return;
   if (process.env.DMS_TRUSTED_PROXY_AUTH === "true") return;
 
-  throw new Error(
-    "Refusing to start: middleware/auth-context.ts trusts a client supplied " +
-      "x-organization-id header, so any caller can choose their own tenant. " +
-      "This is the temporary stand-in for the session middleware in Checkpoint " +
-      "3 and must not run in production. Set DMS_TRUSTED_PROXY_AUTH=true only " +
-      "if a trusted gateway authenticates the request and forwards these " +
-      "headers itself."
-  );
+  if ((process.env.BETTER_AUTH_SECRET ?? "").length < 32) {
+    throw new Error(
+      "Refusing to start: BETTER_AUTH_SECRET must be set to at least 32 " +
+        "characters in production. It signs session cookies; without it " +
+        "better-auth uses a default secret that anyone can read."
+    );
+  }
 }

@@ -22,12 +22,29 @@ declare global {
 }
 
 /**
- * TEMPORARY stand-in for the session middleware built in Checkpoint 3. It
- * trusts a client supplied organization id, which is only acceptable because
- * nothing is exposed to untrusted clients yet. Checkpoint 3 replaces this file
- * with real session/role resolution and adds `userId` and the permission set;
- * every route already reads the tenant from `req.auth.organizationId`, so that
- * swap is confined to this middleware and `app.ts`.
+ * How `req.auth` is filled.
+ *
+ * - `session` (the default): from a better-auth session -- see
+ *   `middleware/session.ts`. Nothing the client sends is trusted.
+ * - `trusted-proxy`: from the `x-organization-id` / `x-user-id` /
+ *   `x-session-id` headers below, verbatim. Only for a deployment where a
+ *   gateway in front of this server authenticates the caller and sets those
+ *   headers itself, and only by explicit opt-in (`DMS_TRUSTED_PROXY_AUTH=true`).
+ *   The mocked server suite and the checkpoint 2 parity suites run in this mode,
+ *   because they assert tenant scoping and data rules rather than who the
+ *   caller is; checkpoint 3's suite covers the session path.
+ */
+export type AuthMode = "session" | "trusted-proxy";
+
+export const resolveAuthMode = (): AuthMode =>
+  process.env.DMS_TRUSTED_PROXY_AUTH === "true" ? "trusted-proxy" : "session";
+
+/**
+ * Trusted-proxy mode only (see `AuthMode`). It trusts a client supplied
+ * organization id, which is acceptable only when the "client" is a gateway
+ * that already authenticated the real caller. Every route reads the tenant from
+ * `req.auth.organizationId`, so the two modes differ only here and in
+ * `middleware/session.ts`.
  */
 export const authContext: RequestHandler = (req, _res, next) => {
   const organizationId =

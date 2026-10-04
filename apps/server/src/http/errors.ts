@@ -15,6 +15,13 @@ export class HttpError extends Error {
 export const badRequest = (message: string, code = "BAD_REQUEST", details?: unknown) =>
   new HttpError(400, message, code, details);
 
+/**
+ * No valid session. Distinct from 403: the caller has not said who they are, so
+ * there is nothing yet to refuse them.
+ */
+export const unauthorized = (message = "Authentication required.", code = "UNAUTHORIZED") =>
+  new HttpError(401, message, code);
+
 export const notFound = (message: string, code = "NOT_FOUND") =>
   new HttpError(404, message, code);
 

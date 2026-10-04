@@ -108,8 +108,17 @@ if (databaseUrl && !process.env.DATABASE_URL) {
   process.env.DATABASE_URL_UNPOOLED ||= databaseUrl;
 }
 
-/** One app for the process; `createApp()` is pure wiring. */
-export const app = createApp();
+/**
+ * One app for the process; `createApp()` is pure wiring.
+ *
+ * Trusted-proxy mode, explicitly: these suites assert tenant scoping, database
+ * constraints and report arithmetic, and the helpers below choose the caller by
+ * header so a test can name any tenant, user or session in one line. Who the
+ * caller *is* -- sign-in, sessions, the active organization, membership being
+ * re-checked per request -- is checkpoint 3's suite, which runs the default
+ * session mode against the same database.
+ */
+export const app = createApp({ authMode: "trusted-proxy" });
 
 /* -------------------------------------------------------------------------- */
 /* Fixtures                                                                    */
@@ -323,9 +332,9 @@ export async function teardownTenants(t: Tenant): Promise<void> {
  * The old suites sent `Authorization: Bearer ${authToken}` with `authToken` never
  * assigned, so every request went out as `Bearer undefined` and the API answered
  * 400 `ORGANIZATION_REQUIRED`. Nothing was wrong with the API -- the tests were
- * authenticating to a mechanism that stopped existing in 02a. Checkpoint 3
- * replaces the shim with real sessions, and these three helpers are then the one
- * place that has to change.
+ * authenticating to a mechanism that stopped existing in 02a. Since checkpoint 3
+ * these are the trusted-proxy headers (see `AuthMode` in
+ * `middleware/auth-context.ts`); the default mode ignores them.
  */
 export const asOrg = (organizationId: string) => ({ [ORGANIZATION_HEADER]: organizationId });
 
