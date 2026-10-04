@@ -14,6 +14,9 @@ const RegisterCompany = lazy(() => import("./pages/auth/RegisterCompany"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ProductList = lazy(() => import("./pages/products/ProductList"));
 const ProductForm = lazy(() => import("./pages/products/ProductForm"));
+const PurchaseList = lazy(() => import("./pages/purchases/PurchaseList"));
+const PurchaseForm = lazy(() => import("./pages/purchases/PurchaseForm"));
+const PurchaseEdit = lazy(() => import("./pages/purchases/PurchaseEdit"));
 
 export function App() {
   return (
@@ -34,6 +37,9 @@ export function App() {
           <Route path="/product" element={<ProductList />} />
           <Route path="/product/new" element={<ProductForm />} />
           <Route path="/product/:id/edit" element={<ProductForm />} />
+          <Route path="/purchase" element={<PurchaseList />} />
+          <Route path="/purchase/new" element={<PurchaseForm />} />
+          <Route path="/purchase/:id/edit" element={<PurchaseEdit />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

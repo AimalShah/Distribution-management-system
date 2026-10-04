@@ -97,7 +97,16 @@ purchaseRouter.put(
 purchaseRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deletePurchase(req.params.id, req.auth.organizationId);
+    // The reversal writes `InventoryLog` rows, which need someone to attribute
+    // them to -- the same requirement as creating the purchase.
+    if (!req.auth.userId) {
+      throw badRequest(
+        "Missing user context. Send the x-user-id header so the inventory log " +
+          "can be attributed.",
+        "USER_REQUIRED"
+      );
+    }
+    await deletePurchase(req.params.id, req.auth.organizationId, req.auth.userId);
     res.status(204).send();
   })
 );

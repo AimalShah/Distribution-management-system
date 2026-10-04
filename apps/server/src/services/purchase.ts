@@ -1,11 +1,8 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
-import type {
-  PurchaseFormInput,
-  PurchaseItemInput,
-  PurchaseUpdateInput,
-} from "@dms/shared";
-import { badRequest } from "../http/errors";
+import { calculatePurchaseTotal } from "@dms/shared";
+import type { PurchaseFormInput, PurchaseUpdateInput } from "@dms/shared";
+import { badRequest, conflict, notFound } from "../http/errors";
 
 const listInclude = {
   supplier: true,
@@ -27,17 +24,8 @@ const detailInclude = {
  * existing documents while removing a client supplied total the API would
  * otherwise have to trust.
  */
-const lineTotal = (item: PurchaseItemInput) => {
-  const gross = item.quantity * item.unitCost;
-  const itemDiscount = item.itemDiscount ?? 0;
-  const tax = ((item.taxPercent ?? 0) / 100) * (gross - itemDiscount);
-  return gross - itemDiscount + tax;
-};
-
-export const calculatePurchaseTotal = (data: PurchaseFormInput) =>
-  data.items.reduce((sum, item) => sum + lineTotal(item), 0) -
-  (data.discount ?? 0) +
-  (data.taxAmount ?? 0);
+// Shared with the purchase form's live total; see `@dms/shared` totals.ts.
+export { calculatePurchaseTotal };
 
 export type PurchaseListArgs = {
   organizationId: string;
@@ -274,6 +262,65 @@ export async function updatePurchase(
 // Deleting a purchase does not reverse the stock it moved in; the legacy action
 // behaved the same way. A cancel or reverse flow is still needed, otherwise the
 // quantity stays inflated after a purchase is removed.
-export async function deletePurchase(id: string, organizationId: string) {
-  await prisma.purchase.delete({ where: { id, organizationId } });
+/**
+ * Delete a purchase and take its stock back out, in one transaction.
+ *
+ * The legacy delete removed the receipt and left every unit it had added in
+ * `Inventory.quantityOnHand`, so deleting a mistaken purchase inflated stock
+ * permanently with no log entry to explain it. Each line is now reversed with
+ * an `OUT` movement naming the purchase.
+ *
+ * Refused (409), rather than driven negative, when the stock is no longer
+ * there to take back -- it has been sold, returned or adjusted since -- and
+ * when a return already references the purchase: those documents describe
+ * units this one supplied, and deleting it would orphan them.
+ */
+export async function deletePurchase(id: string, organizationId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const purchase = await tx.purchase.findFirst({
+      where: { id, organizationId },
+      include: { purchaseItems: true, _count: { select: { returns: true } } },
+    });
+    if (!purchase) throw notFound("Purchase not found", "PURCHASE_NOT_FOUND");
+
+    if (purchase._count.returns > 0) {
+      throw conflict(
+        "This purchase has returns recorded against it and cannot be deleted.",
+        "PURCHASE_HAS_RETURNS"
+      );
+    }
+
+    for (const item of purchase.purchaseItems) {
+      // Conditional decrement: the `gte` guard and the write are one statement,
+      // so a concurrent sale cannot slip between a check and the update.
+      const { count } = await tx.inventory.updateMany({
+        where: { productId: item.productId, organizationId, quantityOnHand: { gte: item.quantity } },
+        data: { quantityOnHand: { decrement: item.quantity } },
+      });
+      if (count === 0) {
+        throw conflict(
+          "Stock from this purchase has already been sold or adjusted, so it cannot be reversed. Record a return or an adjustment instead.",
+          "STOCK_ALREADY_CONSUMED",
+          { productId: item.productId }
+        );
+      }
+
+      const inventory = await tx.inventory.findUniqueOrThrow({ where: { productId: item.productId } });
+      await tx.inventoryLog.create({
+        data: {
+          inventoryId: inventory.id,
+          productId: item.productId,
+          userId,
+          movementType: "OUT",
+          quantity: item.quantity,
+          previousQty: inventory.quantityOnHand + item.quantity,
+          newQty: inventory.quantityOnHand,
+          reason: `Purchase ${purchase.purchaseCode} deleted`,
+          reference: purchase.purchaseCode,
+        },
+      });
+    }
+
+    await tx.purchase.delete({ where: { id: purchase.id } });
+  });
 }

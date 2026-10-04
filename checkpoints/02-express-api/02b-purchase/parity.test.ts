@@ -339,11 +339,10 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
     expect(res.body.purchaseItems).toHaveLength(1);
   });
 
-  it("deletes the purchase and its lines, but does not reverse the stock", async () => {
-    // Documented, not accidental: `deletePurchase` removes the receipt and
-    // nothing else, matching the legacy action. The quantity stays inflated, so a
-    // cancel/reverse flow is still owed. Pinned so the day someone adds the
-    // reversal, this test is the one that has to change.
+  it("deletes the purchase and its lines, and reverses the stock it added", async () => {
+    // This pinned the opposite until checkpoint 4c exposed delete in the UI:
+    // the legacy delete removed the receipt and left the quantity inflated.
+    // The reversal is now part of the delete, with an OUT log entry.
     const fresh = await prisma.product.create({
       data: {
         productCode: unique("SKU"),
@@ -365,14 +364,52 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
 
     const res = await request(app)
       .delete(`/api/purchases/${id}`)
-      .set(asOrg(t.organizationId));
+      .set(asUser(t.organizationId, t.userId));
     expect(res.status).toBe(204);
 
     expect(await prisma.purchase.findUnique({ where: { id } })).toBeNull();
     expect(await prisma.purchaseItem.count({ where: { purchaseId: id } })).toBe(0);
 
     const inventory = await prisma.inventory.findUniqueOrThrow({ where: { productId: fresh.id } });
-    expect(inventory.quantityOnHand).toBe(9);
+    expect(inventory.quantityOnHand).toBe(0);
+    const reversal = await prisma.inventoryLog.findFirstOrThrow({
+      where: { productId: fresh.id, movementType: "OUT" },
+    });
+    expect(reversal).toMatchObject({ quantity: 9, previousQty: 9, newQty: 0, userId: t.userId });
+  });
+
+  it("refuses to delete a purchase whose stock has already been sold", async () => {
+    const fresh = await prisma.product.create({
+      data: {
+        productCode: unique("SKU"),
+        organizationId: t.organizationId,
+        name: "Partly sold",
+        categoryId: t.categoryId,
+        brandId: t.brandId,
+        unit: "pcs",
+        unitCost: 1,
+        unitPrice: 1,
+      },
+    });
+    const created = await request(app)
+      .post("/api/purchases")
+      .set(asUser(t.organizationId, t.userId))
+      .send(form({ items: [{ productId: fresh.id, quantity: 5, unitCost: 1 }] }));
+    // Four of the five units leave through some other movement.
+    await prisma.inventory.update({
+      where: { productId: fresh.id },
+      data: { quantityOnHand: 1 },
+    });
+
+    const res = await request(app)
+      .delete(`/api/purchases/${created.body.id}`)
+      .set(asUser(t.organizationId, t.userId));
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("STOCK_ALREADY_CONSUMED");
+    expect(await prisma.purchase.count({ where: { id: created.body.id } })).toBe(1);
+    // The transaction rolled back: nothing was taken out.
+    expect((await prisma.inventory.findUniqueOrThrow({ where: { productId: fresh.id } })).quantityOnHand).toBe(1);
   });
 
   it("routes /supplier/:supplierId ahead of /:id", async () => {

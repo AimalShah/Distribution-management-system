@@ -15,7 +15,7 @@ const { models, transaction } = vi.hoisted(() => {
     },
     product: { findMany: vi.fn() },
     supplier: { findFirst: vi.fn() },
-    inventory: { upsert: vi.fn() },
+    inventory: { upsert: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
     inventoryLog: { create: vi.fn() },
   };
 
@@ -660,29 +660,79 @@ describe("PUT /api/purchases/:id", () => {
 });
 
 describe("DELETE /api/purchases/:id", () => {
-  it("deletes scoped to the organization and returns 204", async () => {
+  const withReturns = (returns: number) =>
+    purchaseFixture({ _count: { purchaseItems: 1, returns } });
+
+  beforeEach(() => {
+    models.purchase.findFirst.mockResolvedValue(withReturns(0));
+    models.inventory.updateMany.mockResolvedValue({ count: 1 });
+    models.inventory.findUniqueOrThrow.mockResolvedValue({ id: "inv_1", quantityOnHand: 15 });
+  });
+
+  it("looks the purchase up scoped to the organization and returns 204", async () => {
     const res = await request(app).delete("/api/purchases/pur_1").set(auth());
 
     expect(res.status).toBe(204);
     expect(res.body).toEqual({});
-    expect(models.purchase.delete).toHaveBeenCalledWith({
-      where: { id: "pur_1", organizationId: ORG },
-    });
+    expect(models.purchase.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "pur_1", organizationId: ORG } })
+    );
+    expect(models.purchase.delete).toHaveBeenCalledWith({ where: { id: "pur_1" } });
   });
 
   it("404s for a purchase owned by another tenant", async () => {
-    models.purchase.delete.mockRejectedValue(prismaError("P2025"));
+    models.purchase.findFirst.mockResolvedValue(null);
 
     const res = await request(app).delete("/api/purchases/foreign").set(auth());
 
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe("NOT_FOUND");
+    expect(res.body.code).toBe("PURCHASE_NOT_FOUND");
+    expect(models.purchase.delete).not.toHaveBeenCalled();
   });
 
-  it("leaves stock untouched, matching the legacy delete", async () => {
+  it("takes each line's stock back out with a guarded decrement and logs it", async () => {
     await request(app).delete("/api/purchases/pur_1").set(auth());
 
-    expect(models.inventory.upsert).not.toHaveBeenCalled();
-    expect(models.inventoryLog.create).not.toHaveBeenCalled();
+    expect(models.inventory.updateMany).toHaveBeenCalledWith({
+      where: { productId: "prod_1", organizationId: ORG, quantityOnHand: { gte: 10 } },
+      data: { quantityOnHand: { decrement: 10 } },
+    });
+    expect(models.inventoryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        movementType: "OUT",
+        quantity: 10,
+        previousQty: 25,
+        newQty: 15,
+        userId: USER,
+        reference: "PO-001",
+      }),
+    });
+  });
+
+  it("refuses when the stock has already been consumed", async () => {
+    models.inventory.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app).delete("/api/purchases/pur_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("STOCK_ALREADY_CONSUMED");
+    expect(models.purchase.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses when a return references the purchase", async () => {
+    models.purchase.findFirst.mockResolvedValue(withReturns(1));
+
+    const res = await request(app).delete("/api/purchases/pur_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PURCHASE_HAS_RETURNS");
+    expect(models.inventory.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("requires a user to attribute the stock movement to", async () => {
+    const res = await request(app).delete("/api/purchases/pur_1").set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USER_REQUIRED");
   });
 });
