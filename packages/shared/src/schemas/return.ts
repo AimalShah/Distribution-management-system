@@ -86,7 +86,18 @@ export const ReturnCreateSchema = returnBaseSchema.superRefine((data, ctx) => {
       });
     }
   }
-});
+},
+  {
+    // Run even when another field failed, so a form shows "select the sale"
+    // alongside "select a product" instead of only after the lines are fixed.
+    // It reads nothing but `returnType` and the two ids, so a valid type is
+    // all it needs.
+    when: ({ value }) =>
+      typeof value === "object" &&
+      value !== null &&
+      (ReturnTypes as readonly unknown[]).includes((value as { returnType?: unknown }).returnType),
+  }
+);
 
 /**
  * Header columns only, and deliberately narrower than the create schema.
