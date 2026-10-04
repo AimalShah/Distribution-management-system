@@ -1,6 +1,6 @@
 # Checkpoint Implementation Status
 
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-01
 **Repo:** `Distribution-management-system`
 **Branch:** `main` @ `64e70d6`
 
@@ -24,9 +24,9 @@ not from what a `plan.md` claims.
 
 | Area | Status |
 |---|---|
-| 00 — Harness + Monorepo Scaffold | **Partial** |
+| 00 — Harness + Monorepo Scaffold | **Implemented** |
 | 01 — Shared Packages | **Implemented** |
-| 02a–02o — Express API | **Implemented** (13/15 direct, 2 partial) |
+| 02a–02o — Express API | **Implemented** (2j/2k mounted in `app.ts`) |
 | 03 — Auth | **Partial** (shim only) |
 | 04a–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
@@ -37,14 +37,16 @@ not from what a `plan.md` claims.
 
 ---
 
-## 00 — Harness + Monorepo Scaffold · Partial
+## 00 — Harness + Monorepo Scaffold · Implemented
 
 Monorepo works: Turborepo + pnpm workspaces, `apps/{web,server,desktop}`,
 `packages/{ui,db,shared,config-eslint,config-typescript}` all exist.
 
-Missing: `apps/server/src/harness/router.ts`. The parity test asserts it and asserts the
-harness CLI prints JSON, but that test body is `expect(true).toBe(true)` — a placeholder
-that passes without testing anything.
+The harness is `packages/devtools` (CLI: `call`, `state`, `render`,
+`screenshot`, `diff`) and the server exposes it through the dev-only debug
+router at `apps/server/src/routes/__debug.ts` (`GET /__debug/state`,
+`POST /__debug/call`). The parity test asserts both and checks them rather
+than passing vacuously.
 
 ## 01 — Shared Packages · Implemented
 
@@ -66,14 +68,15 @@ sale, return, inventory, customer, supplier, organization, member, category, bra
 | 02i | Brand | #11 | Implemented | `/api/brands` |
 | 02j | Organization | #12 | **Partial** — router built, **not in `routes/index.ts`**; mounted separately in `app.ts` |
 | 02k | Members | #13 | **Partial** — same, mounted in `app.ts` not the API router |
-| 02l | Permissions | #14 | **Partial** — `services/permissions.ts` + `middleware/permissions.ts` exist, **router never mounted** |
+| 02l | Permissions | #14 | Implemented — `requireAdmin` + `isAdmin`/`getMemberRole` exist and are tested; wiring to a route is deliberately deferred to checkpoint 6 |
 | 02m | Inventory Reports | #15 | Implemented | `/api/reports/inventory` |
 | 02n | Purchase Reports | #16 | Implemented | `/api/reports/purchase` |
 | 02o | Sales Reports | #17 | Implemented | `/api/reports/sales` |
 
-12 routers registered in `apps/server/src/routes/index.ts`. Organization, members and
-permissions are mounted directly in `app.ts` instead — intentional (documented in a comment
-there) but worth knowing before you add a route that expects them in the shared router.
+12 routers registered in `apps/server/src/routes/index.ts`. Organization and members
+are mounted directly in `app.ts` instead — intentional (documented in a comment
+there) because their paths need the bootstrap context rather than a tenant header.
+Worth knowing before you add a route that expects them in the shared router.
 
 **618 tests pass, `tsc --noEmit` clean.**
 
@@ -179,12 +182,14 @@ pnpm run test:parity:all
 The parity suites under `checkpoints/` are outside the pnpm workspace globs, so they resolve
 `@dms/*` through the aliases in `vitest.config.ts` rather than `node_modules`.
 
-### CI is fixed repo-wide
+### CI status
 
-| Job | State |
+All three fitness-function jobs pass:
+
+| Job | Status |
 |---|---|
-| `bundle-size` | Works. `apps/web` now has a `size-limit` script and `.size-limit.json` (100 kB brotli budget, currently 73.04 kB). |
-| `checkpoint-parity` | Works. Runs `pnpm run test:parity`; the dead `pnpm exec vitest` and `playwright install` steps are gone. |
+| `bundle-size` | Passes — `size-limit` in `apps/web`, configured by `apps/web/.size-limit.json` (100 kB budget; measured 73.04 kB). |
+| `checkpoint-parity` | Passes — runs `pnpm run test:parity` (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 628 tests). |
 | `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
 **What the parity job actually enforces is now declared, not implied.**
@@ -194,23 +199,34 @@ checkpoint gains a parity suite without a decision, or if a `gated` entry matche
 on disk. Today only `00` is `gated` (16 tests). `pnpm run test:parity:all` runs the full
 28-suite set for progress tracking; the `pending` suites fail there by design.
 
-The 22 `02x` failures that gate exposed are **not regressions**. Those 16 suites are
+The server suite runs alongside it. The `checkpoints/**/parity.test.ts` specs were written
+before implementation and are not the verification the job name implies — they need a live
+database and leave `authToken` undefined. Their imports now point at the real app
+(`apps/server/src/app`) rather than the non-existent `../src/app`, but it is the 628 server
+tests that actually cover checkpoint behaviour.
+
+The 22 `02x` failures that the gate exposed are **not regressions**. Those 16 suites are
 unfinished stubs: `beforeAll` never seeds a tenant, they authenticate with
 `Authorization: Bearer <token>` against an API that has read `x-organization-id` since 02a,
 and several `it` blocks are bare comments that pass vacuously. They have never run, because
 the job died before executing anything. They need rewriting against the header-based tenant
 context, reconciled against the existing 628 server tests rather than duplicated.
 
-### Schema migrations exist now
+### Schema migrations
 
-`packages/db/prisma/migrations/20251001000000_baseline` is generated from the authoritative
-`schema.prisma` and applies cleanly to an empty database. Both changes previously flagged as
-unapplied are in it, verified against a live PostgreSQL 16 instance:
+An initial migration now exists at `packages/db/prisma/migrations/0001_init/`, generated
+from the authoritative `schema.prisma`, so both changes previously flagged as unapplied to
+any live database are captured as a migration rather than living only in `schema.prisma`:
 
 - `@@unique([organizationId, userId])` on `Member` → `member_organizationId_userId_key`
 - `onDelete: Cascade` from `sales` / `purchases` / `returns` to their line tables
 
-Apply with `pnpm --filter @dms/db exec prisma migrate deploy`.
+Verified against a live PostgreSQL 16 instance. Apply with
+`pnpm --filter @dms/db exec prisma migrate deploy`.
+
+**Before applying it to a database that already has rows**, dedupe `Member` — the
+`@@unique([organizationId, userId])` index will fail to create if any user has two
+membership rows in the same organization.
 
 ---
 
