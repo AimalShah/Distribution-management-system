@@ -28,7 +28,8 @@ not from what a `plan.md` claims.
 | 01 — Shared Packages | **Implemented** |
 | 02a–02o — Express API | **Implemented** — all 15 parity suites `gated` (279 tests); 2j/2k mounted in `app.ts` |
 | 03 — Auth | **Implemented** (PR pending review) — better-auth sessions; header mode kept only as opt-in trusted-proxy |
-| 04a–04j — React Web App | **Planned** |
+| 04a — Dashboard + web shell | **Implemented** (PR pending review) |
+| 04b–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -139,7 +140,14 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · Planned (0%)
+## 04 — React Web App · In progress (04a done)
+
+> The text below describes the state before 04a and is kept for history. 04a added the
+> app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
+> screens) and the dashboard. The parity gate now accepts sub-checkpoint entries, so
+> `04-react-web-app/04a-dashboard` is `gated` while the rest of 04 stays `pending`.
+> DOM suites opt into jsdom with a docblock and render through
+> `apps/web/src/test/render.tsx`, which answers SWR keys by API path.
 
 `apps/web` is 4 files. The whole app:
 
@@ -157,7 +165,7 @@ exist anywhere in `checkpoints/`**.
 
 | ID | Checkpoint | Status |
 |---|---|---|
-| 04a | Dashboard | Planned |
+| 04a | Dashboard | **Implemented** (PR pending review) — plus the shell every screen shares: routing, auth screens, sidebar, SWR. `GET /api/dashboard/stats` replaces browser-side sums; the legacy constant trends and `Math.random()` figures are gone |
 | 04b | Product Pages | Planned |
 | 04c | Purchase Pages | Planned |
 | 04d | Sale Invoice Pages | Planned |
@@ -224,7 +232,7 @@ All three fitness-function jobs pass:
 
 | Job | Status |
 |---|---|
-| `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Budget is **175 kB** brotli, see the note below for how that number was chosen. |
+| `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Since 04a it measures the built files (`@size-limit/file`), not a re-bundle: **entry 161.8 / 175 kB**, dashboard chunk 92.9 / 110 kB, everything 293 / 330 kB. |
 | `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 630 tests). |
 | `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
