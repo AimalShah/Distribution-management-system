@@ -6,6 +6,8 @@ export interface Supplier {
   email: string | null;
   phone: string | null;
   address: string | null;
+  city: string | null;
+  isActive: boolean;
 }
 
 /** The legacy new-purchase page's options, values unchanged. */
