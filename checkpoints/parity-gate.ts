@@ -42,9 +42,7 @@ export const GATE: readonly GateEntry[] = [
   },
   {
     dir: "02-express-api",
-    status: "pending",
-    reason:
-      "The 16 suites are unfinished stubs: `beforeAll` never seeds a tenant (they still authenticate with a Bearer token the API stopped reading in 02a) and several `it` blocks are bare comments that pass vacuously. They also hit a real database, unlike the 618 server tests that mock `@dms/db`. They need rewriting against the header-based tenant context, at which point they should be reconciled against the server suite rather than duplicated.",
+    status: "gated",
   },
   {
     dir: "03-auth",

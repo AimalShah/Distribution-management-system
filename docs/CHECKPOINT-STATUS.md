@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-01
 **Repo:** `Distribution-management-system`
-**Branch:** `main` @ `64e70d6`
+**Branch:** `main` @ `64e70d6`, plus `feat/02-api-parity` (stacked on PR #21, in review)
 
 Status of every checkpoint in `checkpoints/`, derived from what is actually on `main` —
 not from what a `plan.md` claims.
@@ -26,7 +26,7 @@ not from what a `plan.md` claims.
 |---|---|
 | 00 — Harness + Monorepo Scaffold | **Implemented** |
 | 01 — Shared Packages | **Implemented** |
-| 02a–02o — Express API | **Implemented** (2j/2k mounted in `app.ts`) |
+| 02a–02o — Express API | **Implemented** — all 15 parity suites `gated` (279 tests); 2j/2k mounted in `app.ts` |
 | 03 — Auth | **Partial** (shim only) |
 | 04a–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
@@ -94,7 +94,7 @@ are mounted directly in `app.ts` instead — intentional (documented in a commen
 there) because their paths need the bootstrap context rather than a tenant header.
 Worth knowing before you add a route that expects them in the shared router.
 
-**618 tests pass, `tsc --noEmit` clean.**
+**630 tests pass, `tsc --noEmit` clean.**
 
 ### Defects found and fixed in review (PR #18 + per-checkpoint fixes)
 
@@ -110,6 +110,9 @@ Worth knowing before you add a route that expects them in the shared router.
 | 4 report endpoints loaded every row into JS | #16, #17 |
 | Active-session lookup ignored `expiresAt` | #12 |
 | `setActiveOrganization` returned 204 on a zero-row write | #12 |
+| `totalLineItems` on the purchase report counted *purchases with lines*, not lines (Prisma `groupBy` rows are keyed on `purchaseId`, so one group is one purchase) | `feat/02-api-parity` |
+| `totalLineItems` on the sales report had the same defect, keyed on `saleId` | `feat/02-api-parity` |
+| `removeMember` checked the member's *current* role instead of the role being changed, so it could strip ownership from a second owner | `feat/02-api-parity` |
 
 ## 03 — Auth · Partial
 
@@ -179,7 +182,7 @@ writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a
 ## Build and test
 
 ```bash
-# API tests — 628 pass
+# API tests — 630 pass
 pnpm --filter server run test
 
 # Typecheck (all workspaces)
@@ -205,33 +208,39 @@ All three fitness-function jobs pass:
 | Job | Status |
 |---|---|
 | `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Budget is **175 kB** brotli, see the note below for how that number was chosen. |
-| `checkpoint-parity` | Passes — runs `pnpm run test:parity` (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 628 tests). |
+| `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 630 tests). |
 | `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
 **What the parity job actually enforces is now declared, not implied.**
 `checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
 with the reason it is not enforced, and `checkpoints/parity-gate.test.ts` fails if a
 checkpoint gains a parity suite without a decision, or if a `gated` entry matches no files
-on disk. `00` and `01` are now `gated` (24 tests). `pnpm run test:parity:all` runs the full
-set for progress tracking; the `pending` suites fail there by design.
+on disk. `00`, `01` and `02` are now `gated`. `pnpm run test:parity` (the gated set CI
+enforces) is **19 files / 279 tests, all passing**; `pnpm run test:parity:all` runs every
+suite, and the only remaining failures there are the `03-auth` HTTP tests, which are meant to
+fail against the header-trust shim until checkpoint 3 lands.
 
-The server suite runs alongside it. The `checkpoints/**/parity.test.ts` specs were written
-before implementation and are not the verification the job name implies — they need a live
-database and leave `authToken` undefined. Their imports now point at the real app
-(`apps/server/src/app`) rather than the non-existent `../src/app`, but it is the 628 server
-tests that actually cover checkpoint behaviour.
+The server suite runs alongside it. It mocks the database, so it cannot see the constraints
+the parity suites assert, but it covers far more request paths than the 19 gated parity
+files, it is where the 630 tests live, and no other workflow runs it.
 
-The 23 remaining failures in `test:parity:all` are **not regressions**. Those suites are
-unfinished stubs: `beforeAll` never seeds a tenant, they authenticate with
-`Authorization: Bearer <token>` against an API that has read `x-organization-id` since 02a,
-and several `it` blocks are bare comments that pass vacuously. They have never run, because
-the job died before executing anything. They need rewriting against the header-based tenant
-context, reconciled against the existing 628 server tests rather than duplicated.
+### The 02 parity suites are real now
 
-Counting them precisely, because it is easy to overstate: the full run is 29 files / 172
-tests, 23 failing across 14 files — **20 in the 16 `02x` suites**, 3 in `03-auth`, and 0
-elsewhere. An earlier draft of this file said "22 `02x` failures"; the real number is 20, and
-the run total is 23.
+The 15 `02x` suites used to be unfalsifiable: `beforeAll` never seeded a tenant, they
+authenticated with `Authorization: Bearer <token>` against an API that has read
+`x-organization-id` since 02a, and several `it` blocks were bare comments that passed
+vacuously. They had never run, because the CI job died before executing anything.
+
+They have since been rewritten against the header-based tenant context and a live PostgreSQL
+database, seeded per-test and torn down per-suite, so each one asserts against rows that
+actually exist. That is what found the two `totalLineItems` defects and the `removeMember`
+role defect in the table above: none of them were reachable from the mocked server suite,
+which is the argument for keeping both rather than picking one.
+
+`test:parity:all` is now **19 files / 279 tests in the gated set, plus `03-auth` failing by
+design.** The `02x` count went from 16 directories described in earlier drafts of this file to
+the 15 that exist on disk; earlier drafts also miscounted the failures twice before landing
+here.
 
 ### The bundle budget is measured, not guessed
 

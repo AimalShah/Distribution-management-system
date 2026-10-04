@@ -131,8 +131,14 @@ beforeEach(() => {
   // Dispatch on the grouping key: the basic report wants per-purchase subtotals,
   // the by-product report wants per-product aggregates. Neither seeds rows unless
   // a test asks for them.
+  //
+  // `_count` is part of the answer the basic report reads, not decoration: it is
+  // how the number of lines is counted, since the groups are keyed on purchaseId
+  // and there is one group per purchase with a line rather than one per line.
   purchaseItemModel.groupBy.mockImplementation(async ({ by }) =>
-    by[0] === "productId" ? [] : [{ purchaseId: "pur_1", _sum: { quantity: 10 } }]
+    by[0] === "productId"
+      ? []
+      : [{ purchaseId: "pur_1", _count: { _all: 1 }, _sum: { quantity: 10 } }]
   );
   purchaseItemModel.findMany.mockResolvedValue([lineFixture()]);
 });
@@ -202,8 +208,8 @@ describe("GET /api/reports/purchase/basic", () => {
       }),
     ]);
     purchaseItemModel.groupBy.mockResolvedValue([
-      { purchaseId: "pur_1", _sum: { quantity: 10 } },
-      { purchaseId: "pur_2", _sum: { quantity: 4 } },
+      { purchaseId: "pur_1", _count: { _all: 1 }, _sum: { quantity: 10 } },
+      { purchaseId: "pur_2", _count: { _all: 1 }, _sum: { quantity: 4 } },
     ]);
 
     const res = await asTenant(request(app).get("/api/reports/purchase/basic"));
@@ -223,7 +229,7 @@ describe("GET /api/reports/purchase/basic", () => {
     // 0)` as "totalItems" beside a quantity. A reader takes that for units
     // bought, and one line for 500 units counted as one.
     purchaseItemModel.groupBy.mockResolvedValue([
-      { purchaseId: "pur_1", _sum: { quantity: 500 } },
+      { purchaseId: "pur_1", _count: { _all: 1 }, _sum: { quantity: 500 } },
     ]);
 
     const res = await asTenant(request(app).get("/api/reports/purchase/basic"));
@@ -231,6 +237,27 @@ describe("GET /api/reports/purchase/basic", () => {
     expect(res.body.totalLineItems).toBe(1);
     expect(res.body.totalQuantity).toBe(500);
     expect(res.body).not.toHaveProperty("totalItems");
+  });
+
+  it("counts the lines in a purchase, not the purchases that have lines", async () => {
+    // The groups are keyed on `purchaseId`, so one group is one order however many
+    // lines it has. Reading the group count answered `totalOrders` again under a
+    // name that promises lines, which is the confusion the rename was meant to
+    // end: three lines on one order is three lines.
+    purchaseItemModel.groupBy.mockResolvedValue([
+      { purchaseId: "pur_1", _count: { _all: 3 }, _sum: { quantity: 12 } },
+      { purchaseId: "pur_2", _count: { _all: 1 }, _sum: { quantity: 1 } },
+    ]);
+    purchaseModel.findMany.mockResolvedValue([
+      purchaseFixture(),
+      purchaseFixture({ id: "pur_2", purchaseCode: "PO-002", totalAmount: 10 }),
+    ]);
+
+    const res = await asTenant(request(app).get("/api/reports/purchase/basic"));
+
+    expect(res.body.totalLineItems).toBe(4);
+    expect(res.body.totalOrders).toBe(2);
+    expect(res.body.totalQuantity).toBe(13);
   });
 
   it("counts a distinct supplier by id, not by name", async () => {
@@ -504,7 +531,7 @@ describe("GET /api/reports/purchase/by-product", () => {
     purchaseItemModel.groupBy.mockImplementation(async ({ by }) =>
       by[0] === "productId"
         ? seedProductGroups(rows)
-        : [{ purchaseId: "pur_1", _sum: { quantity: 10 } }]
+        : [{ purchaseId: "pur_1", _count: { _all: 1 }, _sum: { quantity: 10 } }]
     );
   };
 
