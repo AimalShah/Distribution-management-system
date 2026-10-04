@@ -66,9 +66,8 @@ jobs:
       # does not need the service -- but it does need to run before anything
       # imports `@dms/db`, which the parity suites do.
       - run: pnpm run db:generate
-      # The parity suites assert against real tables, so the baseline migration
-      # has to be applied before they run. This is the same migration the status
-      # doc says applies cleanly to an empty database.
+      # The parity suites assert against real tables, so the migration has to be
+      # applied before they run. It applies cleanly to an empty database.
       - run: pnpm --filter @dms/db exec prisma migrate deploy
       # Runs the suites listed in checkpoints/parity-gate.ts -- now 00, 01 and the
       # fifteen 02x suites -- plus the gate's own consistency test and the
@@ -78,3 +77,6 @@ jobs:
       # parity. Playwright was installed here for the same reason of
       # appearances -- no parity suite imports it.
       - run: pnpm run test:parity
+      # The server suite is the other half of this job: it mocks the database and
+      # covers every checkpoint's behaviour, and no other workflow runs it.
+      - run: pnpm --filter @dms/server test
