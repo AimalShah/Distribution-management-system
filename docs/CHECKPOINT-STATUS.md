@@ -29,7 +29,8 @@ not from what a `plan.md` claims.
 | 02a–02o — Express API | **Implemented** — all 15 parity suites `gated` (279 tests); 2j/2k mounted in `app.ts` |
 | 03 — Auth | **Implemented** (PR pending review) — better-auth sessions; header mode kept only as opt-in trusted-proxy |
 | 04a — Dashboard + web shell | **Implemented** (PR pending review) |
-| 04b–04j — React Web App | **Planned** |
+| 04b — Product pages | **Implemented** (PR pending review) |
+| 04c–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -140,7 +141,7 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · In progress (04a done)
+## 04 — React Web App · In progress (04a, 04b done)
 
 > The text below describes the state before 04a and is kept for history. 04a added the
 > app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
@@ -166,7 +167,7 @@ exist anywhere in `checkpoints/`**.
 | ID | Checkpoint | Status |
 |---|---|---|
 | 04a | Dashboard | **Implemented** (PR pending review) — plus the shell every screen shares: routing, auth screens, sidebar, SWR. `GET /api/dashboard/stats` replaces browser-side sums; the legacy constant trends and `Math.random()` figures are gone |
-| 04b | Product Pages | Planned |
+| 04b | Product Pages | **Implemented** (PR pending review) — list with server pagination/search, shared new/edit form, confirmed delete, inline category/brand creation |
 | 04c | Purchase Pages | Planned |
 | 04d | Sale Invoice Pages | Planned |
 | 04e | Inventory Page | Planned |
