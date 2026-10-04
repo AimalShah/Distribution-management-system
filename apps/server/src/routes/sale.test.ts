@@ -15,7 +15,8 @@ const { models, transaction } = vi.hoisted(() => {
     },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
-    inventory: { findFirst: vi.fn(), updateMany: vi.fn() },
+    inventory: { findFirst: vi.fn(), updateMany: vi.fn(), upsert: vi.fn() },
+    organization: { findUnique: vi.fn() },
     inventoryLog: { create: vi.fn() },
   };
 
@@ -665,28 +666,115 @@ describe("PUT /api/sales/:id", () => {
 });
 
 describe("DELETE /api/sales/:id", () => {
-  it("deletes scoped to the organization and returns 204", async () => {
+  const withReturns = (returns: number) => saleFixture({ _count: { items: 1, returns } });
+
+  beforeEach(() => {
+    models.sale.findFirst.mockResolvedValue(withReturns(0));
+    models.inventory.upsert.mockResolvedValue({ id: "inv_1", quantityOnHand: 7 });
+  });
+
+  it("looks the sale up scoped to the organization and returns 204", async () => {
     const res = await request(app).delete("/api/sales/sal_1").set(auth());
 
     expect(res.status).toBe(204);
-    expect(models.sale.delete).toHaveBeenCalledWith({
-      where: { id: "sal_1", organizationId: ORG },
-    });
+    expect(models.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "sal_1", organizationId: ORG } })
+    );
+    expect(models.sale.delete).toHaveBeenCalledWith({ where: { id: "sal_1" } });
   });
 
   it("404s for a sale owned by another tenant", async () => {
-    models.sale.delete.mockRejectedValue(prismaError("P2025"));
+    models.sale.findFirst.mockResolvedValue(null);
 
     const res = await request(app).delete("/api/sales/foreign").set(auth());
 
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe("NOT_FOUND");
+    expect(res.body.code).toBe("SALE_NOT_FOUND");
+    expect(models.sale.delete).not.toHaveBeenCalled();
   });
 
-  it("does not return the consumed stock, matching the legacy delete", async () => {
+  it("returns each line's stock with an IN log entry", async () => {
     await request(app).delete("/api/sales/sal_1").set(auth());
 
-    expect(models.inventory.updateMany).not.toHaveBeenCalled();
-    expect(models.inventoryLog.create).not.toHaveBeenCalled();
+    expect(models.inventory.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { productId: "prod_1" },
+        update: { quantityOnHand: { increment: 2 } },
+      })
+    );
+    expect(models.inventoryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        movementType: "IN",
+        quantity: 2,
+        previousQty: 5,
+        newQty: 7,
+        userId: USER,
+        reference: "SAL-001",
+      }),
+    });
+  });
+
+  it("refuses when a return references the sale", async () => {
+    models.sale.findFirst.mockResolvedValue(withReturns(1));
+
+    const res = await request(app).delete("/api/sales/sal_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_HAS_RETURNS");
+    expect(models.inventory.upsert).not.toHaveBeenCalled();
+  });
+
+  it("requires a user to attribute the stock movement to", async () => {
+    const res = await request(app).delete("/api/sales/sal_1").set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USER_REQUIRED");
+  });
+});
+
+describe("GET /api/sales/:id/print", () => {
+  const printable = saleFixture({
+    customer: { id: "cus_1", name: "<script>alert(1)</script>", email: null, phone: null, address: null },
+    items: [saleItem({ product: { id: "prod_1", name: "Widget & Co", productCode: "W-1", unit: "pcs" } })],
+  });
+
+  beforeEach(() => {
+    models.sale.findFirst.mockResolvedValue(printable);
+    models.organization.findUnique.mockResolvedValue({ name: "Acme Distribution" });
+  });
+
+  it("renders the invoice as a standalone HTML page", async () => {
+    const res = await request(app).get("/api/sales/sal_1/print").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/html");
+    expect(res.text).toContain("Acme Distribution");
+    expect(res.text).toContain("SAL-001");
+    expect(res.text).toContain("$50.00");
+  });
+
+  it("escapes user-entered values", async () => {
+    const res = await request(app).get("/api/sales/sal_1/print").set(auth());
+
+    expect(res.text).not.toContain("<script>alert(1)</script>");
+    expect(res.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(res.text).toContain("Widget &amp; Co");
+  });
+
+  it("forbids scripts and remote loads in the page it serves", async () => {
+    const res = await request(app).get("/api/sales/sal_1/print").set(auth());
+
+    expect(res.headers["content-security-policy"]).toContain("default-src 'none'");
+  });
+
+  it("404s for another tenant's sale", async () => {
+    models.sale.findFirst.mockResolvedValue(null);
+
+    const res = await request(app).get("/api/sales/foreign/print").set(auth());
+
+    expect(res.status).toBe(404);
+    expect(models.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG }) })
+    );
   });
 });

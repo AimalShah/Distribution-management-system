@@ -17,6 +17,8 @@ const ProductForm = lazy(() => import("./pages/products/ProductForm"));
 const PurchaseList = lazy(() => import("./pages/purchases/PurchaseList"));
 const PurchaseForm = lazy(() => import("./pages/purchases/PurchaseForm"));
 const PurchaseEdit = lazy(() => import("./pages/purchases/PurchaseEdit"));
+const SaleInvoiceList = lazy(() => import("./pages/sales/SaleInvoiceList"));
+const SaleInvoiceForm = lazy(() => import("./pages/sales/SaleInvoiceForm"));
 
 export function App() {
   return (
@@ -40,6 +42,8 @@ export function App() {
           <Route path="/purchase" element={<PurchaseList />} />
           <Route path="/purchase/new" element={<PurchaseForm />} />
           <Route path="/purchase/:id/edit" element={<PurchaseEdit />} />
+          <Route path="/sale-invoice" element={<SaleInvoiceList />} />
+          <Route path="/sale-invoice/new" element={<SaleInvoiceForm />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

@@ -409,7 +409,9 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     ).toBe(7);
   });
 
-  it("deletes the invoice and its lines, but does not return the stock", async () => {
+  it("deletes the invoice and its lines, and returns the stock it took", async () => {
+    // Until checkpoint 4d this asserted the stock stayed out (1 of 10). A
+    // deleted invoice now puts its units back with an IN log entry.
     const product = await stockedProduct(10);
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 9, unitPrice: 10 }] })
@@ -418,14 +420,35 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
     const res = await request(app)
       .delete(`/api/sales/${id}`)
-      .set(asOrg(t.organizationId));
+      .set(asUser(t.organizationId, t.userId));
     expect(res.status).toBe(204);
 
     expect(await prisma.sale.findUnique({ where: { id } })).toBeNull();
     expect(await prisma.saleItem.count({ where: { saleId: id } })).toBe(0);
     expect(
       (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
-    ).toBe(1);
+    ).toBe(10);
+    const restored = await prisma.inventoryLog.findFirstOrThrow({
+      where: { productId: product.id, movementType: "IN", reference: created.body.saleCode },
+    });
+    expect(restored).toMatchObject({ quantity: 9, previousQty: 1, newQty: 10 });
+  });
+
+  it("renders a printable invoice scoped to the tenant", async () => {
+    const product = await stockedProduct(5);
+    const created = await post(form({ items: [{ productId: product.id, quantity: 2, unitPrice: 12.5 }] }));
+
+    const mine = await request(app)
+      .get(`/api/sales/${created.body.id}/print`)
+      .set(asOrg(t.organizationId));
+    const theirs = await request(app)
+      .get(`/api/sales/${created.body.id}/print`)
+      .set(asOrg(t.otherOrganizationId));
+
+    expect(mine.status).toBe(200);
+    expect(mine.text).toContain(created.body.saleCode);
+    expect(mine.text).toContain("$25.00");
+    expect(theirs.status).toBe(404);
   });
 
   it("routes /customer/:customerId ahead of /:id and scopes the result", async () => {

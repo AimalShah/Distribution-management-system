@@ -1,7 +1,8 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
+import { calculateSaleTotal } from "@dms/shared";
 import type { SaleInvoiceInput, SaleUpdateInput } from "@dms/shared";
-import { badRequest, conflict } from "../http/errors";
+import { badRequest, conflict, notFound } from "../http/errors";
 
 const listInclude = {
   customer: true,
@@ -20,12 +21,10 @@ const detailInclude = {
  * `src/components/sale-invoice/SaleInvoiceForm.tsx` computed the document total
  * in the browser as `sum(quantity * unitPrice) + taxAmount - discount`. Line
  * `taxPercent` is stored on the line but was never part of that sum, so it is
- * not part of this one either.
+ * not part of this one either. Shared with the invoice form's live total; see
+ * `@dms/shared` totals.ts.
  */
-export const calculateSaleTotal = (data: SaleInvoiceInput) =>
-  data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) +
-  (data.taxAmount ?? 0) -
-  (data.discount ?? 0);
+export { calculateSaleTotal };
 
 export type SaleListArgs = {
   organizationId: string;
@@ -345,6 +344,53 @@ export async function updateSale(
 // Deleting a sale does not return the stock it consumed, and moving a sale to
 // "Cancelled" does not either. The legacy delete behaved the same way. Both need
 // a reversal flow, which this checkpoint does not invent.
-export async function deleteSale(id: string, organizationId: string) {
-  await prisma.sale.delete({ where: { id, organizationId } });
+/**
+ * Delete an invoice and put its stock back, in one transaction.
+ *
+ * The legacy delete removed the invoice and left the units it sold missing
+ * from `Inventory.quantityOnHand`, so a voided invoice permanently understated
+ * stock. Each line is now returned with an `IN` movement naming the invoice.
+ *
+ * Refused (409) when a return already references the invoice: those units
+ * came back through the return, and deleting the invoice as well would put
+ * them back twice.
+ */
+export async function deleteSale(id: string, organizationId: string, userId: string) {
+  await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, organizationId },
+      include: { items: true, _count: { select: { returns: true } } },
+    });
+    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+
+    if (sale._count.returns > 0) {
+      throw conflict(
+        "This invoice has returns recorded against it and cannot be deleted.",
+        "SALE_HAS_RETURNS"
+      );
+    }
+
+    for (const item of sale.items) {
+      const inventory = await tx.inventory.upsert({
+        where: { productId: item.productId },
+        update: { quantityOnHand: { increment: item.quantity } },
+        create: { productId: item.productId, organizationId, quantityOnHand: item.quantity },
+      });
+      await tx.inventoryLog.create({
+        data: {
+          inventoryId: inventory.id,
+          productId: item.productId,
+          userId,
+          movementType: "IN",
+          quantity: item.quantity,
+          previousQty: inventory.quantityOnHand - item.quantity,
+          newQty: inventory.quantityOnHand,
+          reason: `Sale ${sale.saleCode} deleted`,
+          reference: sale.saleCode,
+        },
+      });
+    }
+
+    await tx.sale.delete({ where: { id: sale.id } });
+  });
 }

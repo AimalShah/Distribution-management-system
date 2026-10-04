@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@dms/ui";
 
@@ -13,9 +13,18 @@ export function SearchInput({
   delay?: number;
 }) {
   const [value, setValue] = useState("");
+  // Only a changed search is reported. Reporting the initial "" after the
+  // debounce reset the list to page 1, so a user who paged within the first
+  // 300ms was sent back to the start.
+  const emitted = useRef("");
 
   useEffect(() => {
-    const timer = setTimeout(() => onSearch(value.trim()), delay);
+    const next = value.trim();
+    if (next === emitted.current) return;
+    const timer = setTimeout(() => {
+      emitted.current = next;
+      onSearch(next);
+    }, delay);
     return () => clearTimeout(timer);
     // `onSearch` is a fresh closure every render; the value is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps

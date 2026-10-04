@@ -32,3 +32,24 @@ export const calculatePurchaseTotal = (data: {
   data.items.reduce((sum, item) => sum + purchaseLineTotal(item), 0) -
   (data.discount ?? 0) +
   (data.taxAmount ?? 0);
+
+export interface SaleLine {
+  quantity: number;
+  unitPrice: number;
+}
+
+/**
+ * `sum(quantity * unitPrice) + taxAmount - discount`, as the legacy form did.
+ * A line's `taxPercent` is stored but has never been part of the sale total;
+ * checkpoint 8 (GST) is where line tax enters the arithmetic.
+ */
+export const saleLineTotal = (item: SaleLine): number => item.quantity * item.unitPrice;
+
+export const calculateSaleTotal = (data: {
+  items: SaleLine[];
+  discount?: number;
+  taxAmount?: number;
+}): number =>
+  data.items.reduce((sum, item) => sum + saleLineTotal(item), 0) +
+  (data.taxAmount ?? 0) -
+  (data.discount ?? 0);

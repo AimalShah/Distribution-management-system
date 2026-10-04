@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge, Button } from "@dms/ui";
+import { Button } from "@dms/ui";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { ResourceTable } from "../../components/common/ResourceTable";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
@@ -13,13 +13,8 @@ import { useRevalidate } from "../../hooks/use-revalidate";
 import { api } from "../../lib/api";
 import { errorMessage } from "../../lib/fetcher";
 import { formatCurrency, formatDate } from "../../lib/format";
+import { StatusBadge } from "../../components/common/StatusBadge";
 import type { PurchaseListRow } from "../../types/purchase";
-
-export function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "Completed" ? "default" : status === "Cancelled" ? "destructive" : "secondary";
-  return <Badge variant={variant}>{status}</Badge>;
-}
 
 export default function PurchaseList() {
   const purchases = usePaginated<PurchaseListRow>("/purchases");
