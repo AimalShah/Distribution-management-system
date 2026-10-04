@@ -5,6 +5,9 @@ export interface Customer {
   email: string | null;
   phone: string | null;
   address: string | null;
+  city: string | null;
+  creditLimit: number | null;
+  isActive: boolean;
 }
 
 /** `GET /api/sales` row. Lines are counted, not embedded, on the list. */

@@ -22,6 +22,7 @@ const SaleInvoiceForm = lazy(() => import("./pages/sales/SaleInvoiceForm"));
 const Inventory = lazy(() => import("./pages/inventory/Inventory"));
 const ReturnList = lazy(() => import("./pages/returns/ReturnList"));
 const ReturnForm = lazy(() => import("./pages/returns/ReturnForm"));
+const CustomerList = lazy(() => import("./pages/customers/CustomerList"));
 
 export function App() {
   return (
@@ -50,6 +51,7 @@ export function App() {
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/returns" element={<ReturnList />} />
           <Route path="/returns/new" element={<ReturnForm />} />
+          <Route path="/customer" element={<CustomerList />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
