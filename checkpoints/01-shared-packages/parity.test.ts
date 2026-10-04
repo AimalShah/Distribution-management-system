@@ -47,4 +47,65 @@ describe("Checkpoint 1 — Shared packages", () => {
       expect(fs.existsSync(path.join(componentsDir, `${comp}.tsx`)), `${comp}.tsx should exist`).toBe(true);
     }
   });
+
+  it("packages/ui re-exports every component from its barrel", () => {
+    // A component that exists but is not exported is unreachable to consumers,
+    // and nothing else fails: the typecheck skips it and the build never sees it.
+    const componentsDir = path.join(root, "packages/ui/src/components");
+    const barrel = fs.readFileSync(path.join(root, "packages/ui/src/index.ts"), "utf-8");
+    for (const file of fs.readdirSync(componentsDir)) {
+      if (!file.endsWith(".tsx")) continue;
+      const name = file.replace(/\.tsx$/, "");
+      expect(barrel, `${name} should be re-exported from packages/ui/src/index.ts`).toContain(
+        `./components/${name}`
+      );
+    }
+  });
+
+  it("packages/ui uses relative imports, not path aliases", () => {
+    // @dms/ui ships raw TypeScript (`main: ./src/index.ts`), so the consuming
+    // app's tsc compiles these files with the *app's* tsconfig. An `@/` import
+    // resolves inside this package but not from the app, and the failure lands
+    // on every component at once with no error here. `packages/shared` already
+    // works this way; this keeps the shadcn CLI output from drifting back.
+    const srcDir = path.join(root, "packages/ui/src");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (/\.tsx?$/.test(entry.name) && /from\s+["']@\//.test(fs.readFileSync(full, "utf-8"))) {
+          offenders.push(path.relative(root, full));
+        }
+      }
+    };
+    walk(srcDir);
+    expect(offenders, `these files import via "@/" and break consumers: ${offenders.join(", ")}`).toEqual([]);
+  });
+
+  it("apps/web stylesheet resolves the packages/ui theme and Tailwind source", () => {
+    // Both paths are relative to the stylesheet, not the repo root: this file is
+    // `apps/web/src/index.css`, so two levels up is `apps`, not the root. Vite
+    // reports a bad `@import` but Tailwind ignores an unresolvable `@source`
+    // without a word, which is how the components compiled and rendered unstyled.
+    const cssPath = path.join(root, "apps/web/src/index.css");
+    const css = fs.readFileSync(cssPath, "utf-8");
+    const base = path.dirname(cssPath);
+    const toDir = (spec: string) => path.resolve(base, spec.split("*")[0].replace(/\/$/, ""));
+
+    const imported = css.match(/@import\s+["']([^"']*packages\/ui[^"']*)["']/);
+    expect(imported, "index.css should @import the packages/ui theme").not.toBeNull();
+    expect(
+      fs.existsSync(toDir(imported![1])),
+      `theme @import resolves to ${toDir(imported![1])}, which does not exist`
+    ).toBe(true);
+
+    const sourced = css.match(/@source\s+["']([^"']*packages\/ui[^"']*)["']/);
+    expect(sourced, "index.css should @source the packages/ui sources").not.toBeNull();
+    expect(
+      fs.existsSync(toDir(sourced![1])),
+      `@source resolves to ${toDir(sourced![1])}, which does not exist`
+    ).toBe(true);
+  });
 });
