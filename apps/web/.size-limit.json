@@ -12,9 +12,9 @@
     "limit": "110 kB"
   },
   {
-    "name": "Everything, every route",
+    "name": "Everything, every route (a ceiling against duplicated chunks, not a per-user download; 332 kB at 04e, 5 screens to go)",
     "path": "dist/assets/*.{js,css}",
     "brotli": true,
-    "limit": "330 kB"
+    "limit": "400 kB"
   }
 ]
