@@ -33,7 +33,8 @@ not from what a `plan.md` claims.
 | 04c — Purchase pages | **Implemented** (PR pending review) |
 | 04d — Sale invoice pages | **Implemented** (PR pending review) |
 | 04e — Inventory page | **Implemented** (PR pending review) |
-| 04f–04j — React Web App | **Planned** |
+| 04f — Returns pages | **Implemented** (PR pending review) |
+| 04g–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -146,7 +147,7 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · In progress (04a–04e done)
+## 04 — React Web App · In progress (04a–04f done)
 
 > The text below describes the state before 04a and is kept for history. 04a added the
 > app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
@@ -176,7 +177,7 @@ exist anywhere in `checkpoints/`**.
 | 04c | Purchase Pages | **Implemented** (PR pending review) — list, new purchase with dynamic lines and live totals (shared `calculatePurchaseTotal`), header-only edit |
 | 04d | Sale Invoice Pages | **Implemented** (PR pending review) — list, new invoice with live totals and stock warnings, `/sales/:id/print` (escaped HTML, CSP) and `/sales/:id/pdf` (same HTML through puppeteer-core) |
 | 04e | Inventory Page | **Implemented** (PR pending review) — stock and movement-log tabs, adjust dialog, add-inventory form rebuilt against `InventoryCreateSchema` |
-| 04f | Returns Pages | Planned |
+| 04f | Returns Pages | **Implemented** (PR pending review) — list, new return with type-dependent sale/purchase reference and lines drawn from that document |
 | 04g | Customer Page | Planned |
 | 04h | Supplier Page | Planned |
 | 04i | Reports Page | Planned |
