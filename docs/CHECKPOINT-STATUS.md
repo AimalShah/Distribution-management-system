@@ -35,7 +35,8 @@ not from what a `plan.md` claims.
 | 04e — Inventory page | **Implemented** (PR pending review) |
 | 04f — Returns pages | **Implemented** (PR pending review) |
 | 04g — Customer page | **Implemented** (PR pending review) |
-| 04h–04j — React Web App | **Planned** |
+| 04h — Supplier page | **Implemented** (PR pending review) |
+| 04i–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -148,7 +149,7 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · In progress (04a–04g done)
+## 04 — React Web App · In progress (04a–04h done)
 
 > The text below describes the state before 04a and is kept for history. 04a added the
 > app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
@@ -180,7 +181,7 @@ exist anywhere in `checkpoints/`**.
 | 04e | Inventory Page | **Implemented** (PR pending review) — stock and movement-log tabs, adjust dialog, add-inventory form rebuilt against `InventoryCreateSchema` |
 | 04f | Returns Pages | **Implemented** (PR pending review) — list, new return with type-dependent sale/purchase reference and lines drawn from that document |
 | 04g | Customer Page | **Implemented** (PR pending review) — server-side pagination and search, shared add/edit dialog, confirmed delete |
-| 04h | Supplier Page | Planned |
+| 04h | Supplier Page | **Implemented** (PR pending review) — server-side pagination and search, shared add/edit dialog, confirmed delete |
 | 04i | Reports Page | Planned |
 | 04j | Settings Pages | Planned |
 
