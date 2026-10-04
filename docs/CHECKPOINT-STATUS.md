@@ -32,7 +32,8 @@ not from what a `plan.md` claims.
 | 04b — Product pages | **Implemented** (PR pending review) |
 | 04c — Purchase pages | **Implemented** (PR pending review) |
 | 04d — Sale invoice pages | **Implemented** (PR pending review) |
-| 04e–04j — React Web App | **Planned** |
+| 04e — Inventory page | **Implemented** (PR pending review) |
+| 04f–04j — React Web App | **Planned** |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Planned** |
 | 07–12 — Domain features | **Spec only** |
@@ -145,7 +146,7 @@ Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which t
 plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
 `useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
-## 04 — React Web App · In progress (04a–04d done)
+## 04 — React Web App · In progress (04a–04e done)
 
 > The text below describes the state before 04a and is kept for history. 04a added the
 > app shell (lazy routes, `RequireAuth`, sidebar layout, login/sign-up/register-company
@@ -174,7 +175,7 @@ exist anywhere in `checkpoints/`**.
 | 04b | Product Pages | **Implemented** (PR pending review) — list with server pagination/search, shared new/edit form, confirmed delete, inline category/brand creation |
 | 04c | Purchase Pages | **Implemented** (PR pending review) — list, new purchase with dynamic lines and live totals (shared `calculatePurchaseTotal`), header-only edit |
 | 04d | Sale Invoice Pages | **Implemented** (PR pending review) — list, new invoice with live totals and stock warnings, `/sales/:id/print` (escaped HTML, CSP) and `/sales/:id/pdf` (same HTML through puppeteer-core) |
-| 04e | Inventory Page | Planned |
+| 04e | Inventory Page | **Implemented** (PR pending review) — stock and movement-log tabs, adjust dialog, add-inventory form rebuilt against `InventoryCreateSchema` |
 | 04f | Returns Pages | Planned |
 | 04g | Customer Page | Planned |
 | 04h | Supplier Page | Planned |
@@ -237,7 +238,7 @@ All three fitness-function jobs pass:
 
 | Job | Status |
 |---|---|
-| `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Since 04a it measures the built files (`@size-limit/file`), not a re-bundle: **entry 161.8 / 175 kB**, dashboard chunk 92.9 / 110 kB, everything 293 / 330 kB. |
+| `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Since 04a it measures the built files (`@size-limit/file`), not a re-bundle: **entry 161.8 / 175 kB**, dashboard chunk 92.9 / 110 kB. The all-routes ceiling is 400 kB since 04e (332 kB then): it sums every lazy chunk and exists to catch duplicated chunks, not to model a download. |
 | `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 630 tests). |
 | `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
 
