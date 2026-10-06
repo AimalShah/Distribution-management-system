@@ -1,8 +1,8 @@
 # Checkpoint Implementation Status
 
-**Last updated:** 2026-10-01
+**Last updated:** 2026-10-06
 **Repo:** `Distribution-management-system`
-**Branch:** `main` @ `64e70d6`, plus `feat/02-api-parity` (stacked on PR #21, in review)
+**Branch:** `main` @ `2dcbc69`
 
 Status of every checkpoint in `checkpoints/`, derived from what is actually on `main` —
 not from what a `plan.md` claims.
@@ -26,14 +26,20 @@ not from what a `plan.md` claims.
 |---|---|
 | 00 — Harness + Monorepo Scaffold | **Implemented** |
 | 01 — Shared Packages | **Implemented** |
-| 02a–02o — Express API | **Implemented** — all 15 parity suites `gated` (279 tests); 2j/2k mounted in `app.ts` |
+| 02a–02o — Express API | **Implemented** — all 15 parity suites `gated`; routes mounted |
 | 03 — Auth | **Partial** (shim only) |
-| 04a–04j — React Web App | **Planned** |
+| 04a–04j — React Web App | **Implemented** — 21 pages, all ten sub-suites `gated` |
 | 05 — Electron Shell | **Partial** |
-| 06 — RBAC Rebuild | **Planned** |
+| 06 — RBAC Rebuild | **Spec only** |
 | 07–12 — Domain features | **Spec only** |
+| 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 
-**The API layer is done. There is no UI.**
+**The API layer is done and the web UI is built**: `apps/web` has 21 pages wired to the
+real API (dashboard, products, purchases, sales, returns, inventory, customers,
+suppliers, reports, users, billing, permissions, profile), all gated individually as
+04a–04j. The whole surface still runs on the header-trust auth shim (03), and
+`apps/web/src/data/mockData.ts` still feeds the dashboard notifications widget and the
+app-shell header alongside the real `GET /dashboard/stats`.
 
 ---
 
@@ -94,7 +100,7 @@ are mounted directly in `app.ts` instead — intentional (documented in a commen
 there) because their paths need the bootstrap context rather than a tenant header.
 Worth knowing before you add a route that expects them in the shared router.
 
-**630 tests pass, `tsc --noEmit` clean.**
+**650 tests pass, `tsc --noEmit` clean.**
 
 ### Defects found and fixed in review (PR #18 + per-checkpoint fixes)
 
@@ -122,34 +128,25 @@ start in production with the shim enabled. Real auth is checkpoint 3 and is **no
 Every authorization check built so far depends on this shim being replaced with something
 that makes `req.auth.userId` trustworthy.
 
-## 04 — React Web App · Planned (0%)
+## 04 — React Web App · Implemented (04a–04j gated individually)
 
-`apps/web` is 4 files. The whole app:
-
-```tsx
-<Route path="/" element={<div>Inventioo DMS</div>} />
-```
-
-- `packages/ui` — one component: `DataTable` (TanStack, manual pagination)
-- `apps/desktop` — Electron shell, 1400×900, loads web dev server or built bundle
-- `apps/web/src/lib/api.ts` — axios + Bearer interceptor
-
-No pages, no forms, no auth flow, no navigation. Every route merged in checkpoint 2 has
-zero screens calling it. Each sub-checkpoint below is a written plan only — **no `.tsx` files
-exist anywhere in `checkpoints/`**.
+`apps/web` is a React 19 + Vite + react-router-dom 7 + SWR + TanStack Table app with 21
+pages under `apps/web/src/pages/`, all calling the real API through `lib/api.ts`. The
+top-level `04-react-web-app` gate entry stays `pending` only because the ten sub-suites
+are gated one at a time (see the comment in `checkpoints/parity-gate.ts`).
 
 | ID | Checkpoint | Status |
 |---|---|---|
-| 04a | Dashboard | Planned |
-| 04b | Product Pages | Planned |
-| 04c | Purchase Pages | Planned |
-| 04d | Sale Invoice Pages | Planned |
-| 04e | Inventory Page | Planned |
-| 04f | Returns Pages | Planned |
-| 04g | Customer Page | Planned |
-| 04h | Supplier Page | Planned |
-| 04i | Reports Page | Planned |
-| 04j | Settings Pages | Planned |
+| 04a | Dashboard | Implemented — `gated` |
+| 04b | Product Pages | Implemented — `gated` |
+| 04c | Purchase Pages | Implemented — `gated` |
+| 04d | Sale Invoice Pages | Implemented — `gated` |
+| 04e | Inventory Page | Implemented — `gated` |
+| 04f | Returns Pages | Implemented — `gated` |
+| 04g | Customer Page | Implemented — `gated` |
+| 04h | Supplier Page | Implemented — `gated` |
+| 04i | Reports Page | Implemented — `gated` |
+| 04j | Settings Pages | Implemented — `gated` (Billing and Permissions pages are still placeholders inside) |
 
 ## 05 — Electron Shell · Partial
 
@@ -177,12 +174,23 @@ vocabulary. `Member.role` is a plain `String` with three competing spellings in 
 writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a row saying
 `ADMIN` is not elevated.
 
+## 13 — Invenza UI Theme & Dashboard · Implemented
+
+Landed in `88d6001`. The whole chrome is Invenza-styled: `AppSidebar`, `Topbar`,
+`invenza.css` design tokens, dashboard widgets fed by the real `GET /dashboard/stats`,
+PDF invoice rendering (`services/sale-pdf.ts`, `utils/generateInvoicePdf.ts`), and a
+PKR currency setting. Its parity suite is `gated`.
+
+One fitness function regressed with it: three Invenza components render a raw
+`<table>`, which `table-pagination-check` forbids — see the defects note in the CI
+table below.
+
 ---
 
 ## Build and test
 
 ```bash
-# API tests — 630 pass
+# API tests — 650 pass
 pnpm --filter server run test
 
 # Typecheck (all workspaces)
@@ -208,21 +216,21 @@ All three fitness-function jobs pass:
 | Job | Status |
 |---|---|
 | `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Budget is **175 kB** brotli, see the note below for how that number was chosen. |
-| `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 630 tests). |
-| `table-pagination-check` | Passes, but still vacuously: `apps/web/src` has no `<table>` yet. It becomes meaningful with checkpoint 4. |
+| `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 650 tests). |
+| `table-pagination-check` | **Currently fails on `main`**: three Invenza components from checkpoint 13 (`LowStockTable`, `InvoiceDetailModal`, `RecentSalesTable`) render a raw `<table>` instead of the shared `DataTable`/`Table`. The job only runs on `pull_request`, which is why a green `main` hid it. |
 
 **What the parity job actually enforces is now declared, not implied.**
 `checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
 with the reason it is not enforced, and `checkpoints/parity-gate.test.ts` fails if a
 checkpoint gains a parity suite without a decision, or if a `gated` entry matches no files
 on disk. `00`, `01` and `02` are now `gated`. `pnpm run test:parity` (the gated set CI
-enforces) is **19 files / 279 tests, all passing**; `pnpm run test:parity:all` runs every
+enforces) is **30 files / 349 tests, all passing**; `pnpm run test:parity:all` runs every
 suite, and the only remaining failures there are the `03-auth` HTTP tests, which are meant to
 fail against the header-trust shim until checkpoint 3 lands.
 
 The server suite runs alongside it. It mocks the database, so it cannot see the constraints
 the parity suites assert, but it covers far more request paths than the 19 gated parity
-files, it is where the 630 tests live, and no other workflow runs it.
+files, it is where the 650 tests live, and no other workflow runs it.
 
 ### The 02 parity suites are real now
 
@@ -237,7 +245,7 @@ actually exist. That is what found the two `totalLineItems` defects and the `rem
 role defect in the table above: none of them were reachable from the mocked server suite,
 which is the argument for keeping both rather than picking one.
 
-`test:parity:all` is now **19 files / 279 tests in the gated set, plus `03-auth` failing by
+`test:parity:all` is now **30 files / 349 tests in the gated set, plus `03-auth` failing by
 design.** The `02x` count went from 16 directories described in earlier drafts of this file to
 the 15 that exist on disk; earlier drafts also miscounted the failures twice before landing
 here.
