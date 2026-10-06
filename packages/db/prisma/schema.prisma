@@ -109,6 +109,7 @@ model Organization {
   Inventory   Inventory[]
   Payments    Payment[]
   roles       Role[]
+  batches     StockBatch[]
 
   @@map("organization")
 }
@@ -246,6 +247,7 @@ model Product {
   inventory     Inventory?     @relation("ProductInventory")
   logs          InventoryLog[] @relation("ProductLogs")
   returnItems   ReturnItem[]
+  batches       StockBatch[]
   organization  Organization   @relation(fields: [organizationId], references: [id])
 
   @@map("products")
@@ -286,8 +288,9 @@ model PurchaseItem {
   discount    Float?
 
   // Relations
-  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  product  Product  @relation(fields: [productId], references: [id])
+  purchase Purchase     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product      @relation(fields: [productId], references: [id])
+  batches  StockBatch[]
 
   @@map("purchase_items")
 }
@@ -342,10 +345,12 @@ model SaleItem {
   totalPrice Float
   taxPercent Float?
   discount   Float?
+  batchId    String?
 
   // Relations
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  sale    Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product     @relation(fields: [productId], references: [id])
+  batch   StockBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@map("sale_items")
 }
@@ -539,4 +544,28 @@ enum ReturnType {
   PURCHASE
   EXPIRED
   DAMAGED
+}
+
+model StockBatch {
+  id                String    @id @default(cuid())
+  productId         String
+  organizationId    String
+  batchNumber       String
+  expiryDate        DateTime?
+  quantityRemaining Int       @default(0)
+  quantityReceived  Int       @default(0)
+  unitCost          Float     @default(0)
+  purchaseItemId    String?
+  receivedAt        DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseItem PurchaseItem? @relation(fields: [purchaseItemId], references: [id], onDelete: SetNull)
+  saleItems    SaleItem[]
+
+  @@unique([productId, batchNumber, organizationId])
+  @@index([organizationId, expiryDate])
+  @@map("stock_batches")
 }

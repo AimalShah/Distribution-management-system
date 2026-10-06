@@ -11,6 +11,7 @@ import { CustomerChart } from "../components/invenza/CustomerChart";
 import { PurchaseOverview } from "../components/invenza/PurchaseOverview";
 import { RecentSalesTable } from "../components/invenza/RecentSalesTable";
 import { LowStockTable } from "../components/invenza/LowStockTable";
+import { ExpiringSoonCard } from "../components/dashboard/ExpiringSoonCard";
 
 import { RecentActivities } from "../components/dashboard/RecentActivities";
 import { LowStockAlert } from "../components/dashboard/LowStockAlert";
@@ -189,12 +190,19 @@ export default function Dashboard() {
           onViewAllSales={() => navigate("/sales")}
         />
 
-        {/* Row 6: Low Stock Products Table */}
-        <LowStockTable
-          products={lowStockData}
-          onReorder={(prod) => outletCtx.onOpenReorder?.(prod)}
-          onViewAllProducts={() => navigate("/products")}
-        />
+        {/* Row 6: Low Stock Products Table & Expiring Soon Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
+          <div className="lg:col-span-2">
+            <LowStockTable
+              products={lowStockData}
+              onReorder={(prod) => outletCtx.onOpenReorder?.(prod)}
+              onViewAllProducts={() => navigate("/products")}
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <ExpiringSoonCard />
+          </div>
+        </div>
       </div>
 
       {/* Ported widget AST check satisfaction for Checkpoint 4a */}

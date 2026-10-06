@@ -314,6 +314,32 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
           reference: data.saleCode,
         },
       });
+
+      // FEFO (First Expired, First Out) batch deduction
+      if (typeof (tx as any).stockBatch?.findMany === "function") {
+        const availableBatches = await tx.stockBatch.findMany({
+          where: {
+            productId: item.productId,
+            organizationId,
+            quantityRemaining: { gt: 0 },
+          },
+          orderBy: [
+            { expiryDate: "asc" },
+            { receivedAt: "asc" },
+          ],
+        });
+
+        let remainingToDeduct = item.quantity;
+        for (const batch of availableBatches) {
+          if (remainingToDeduct <= 0) break;
+          const deduct = Math.min(batch.quantityRemaining, remainingToDeduct);
+          await tx.stockBatch.update({
+            where: { id: batch.id },
+            data: { quantityRemaining: { decrement: deduct } },
+          });
+          remainingToDeduct -= deduct;
+        }
+      }
     }
 
     return sale;

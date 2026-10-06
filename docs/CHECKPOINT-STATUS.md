@@ -31,7 +31,8 @@ not from what a `plan.md` claims.
 | 04a–04j — React Web App | **Implemented** — 23 pages, all ten sub-suites `gated` |
 | 05 — Electron Shell | **Implemented** — packaging, security contracts & build output `gated` |
 | 06 — RBAC Rebuild | **Implemented** — Prisma roles/permissions, Express API `/api/roles`, web matrix UI, `gated` |
-| 07–12 — Domain features | **Spec only** |
+| 07 — Batch/Lot Inventory + Expiry KPI | **Implemented** — `StockBatch` model, FEFO deductions, expiry reports, web lot views & KPI card, `gated` |
+| 08–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 | 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
 | 15 — Payments & Invoice Lifecycle | **Partial** — code + server tests on `main`; parity suite is a plan only |
@@ -184,13 +185,20 @@ updating, and deleting custom roles, with system role protection against deletio
 provides a complete permission matrix comparison view and custom role editor dialog with action checklists.
 Gated in `parity-gate.ts` and covered by `checkpoints/06-rbac-rebuild/parity.test.ts`.
 
-## 07–12 — Domain features · Spec only
+## 07 — Batch/Lot Inventory + Expiry KPI · Implemented
+
+`StockBatch` model in Prisma tracks lot/batch numbers, quantity received/remaining, unit cost, manufacture/expiry dates,
+supplier lot numbers, and organization relations. Purchases create/upsert stock batches, sales deduct quantities using FEFO
+(First Expired, First Out), inventory reports provide batch-level expiry analysis, and `dashboardStats` surfaces expiring batches.
+Web interface includes an `ExpiringSoonCard` on the dashboard, a dedicated `Batches` list view, and a tab on the inventory page.
+Gated in `parity-gate.ts` and covered by `checkpoints/07-batch-lot-inventory-expiry-kpi/parity.test.ts` and acceptance tests.
+
+## 08–12 — Domain features · Spec only
 
 Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
 
 | ID | Checkpoint | Empty stubs |
 |---|---|---|
-| 07 | Batch/Lot Inventory + Expiry KPI | 7 |
 | 08 | GST Fields + Sale Tax Invoice | 6 |
 | 09 | Brand-Scoping on Sale/Purchase | 5 |
 | 10 | Bulk Import, Wired for Real | 7 |

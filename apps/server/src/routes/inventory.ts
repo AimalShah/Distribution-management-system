@@ -3,11 +3,17 @@ import {
   InventoryAdjustSchema,
   InventoryCreateSchema,
   InventorySettingsSchema,
+  batchListQuerySchema,
   inventoryListQuerySchema,
   inventoryLogsQuerySchema,
   lowStockQuerySchema,
 } from "@dms/shared";
 import { asyncHandler, badRequest, notFound } from "../http";
+import {
+  getExpiringSoonBatches,
+  getStockBatchById,
+  listStockBatches,
+} from "../services/batch";
 import {
   adjustInventory,
   createInventory,
@@ -32,8 +38,8 @@ inventoryRouter.get(
   })
 );
 
-// `/logs` and `/low-stock` are registered before `/:id` so the literal segments
-// always win; the plan listed `/:id` first, which would swallow both.
+// `/logs`, `/low-stock`, and `/batches` are registered before `/:id` so the literal segments
+// always win; the plan listed `/:id` first, which would swallow all of them.
 inventoryRouter.get(
   "/logs",
   asyncHandler(async (req, res) => {
@@ -54,6 +60,33 @@ inventoryRouter.get(
       organizationId: req.auth.organizationId,
       ...query,
     });
+    res.json(result);
+  })
+);
+
+inventoryRouter.get(
+  "/batches",
+  asyncHandler(async (req, res) => {
+    const query = batchListQuerySchema.parse(req.query);
+    const result = await listStockBatches(req.auth.organizationId, query);
+    res.json(result);
+  })
+);
+
+inventoryRouter.get(
+  "/batches/expiring",
+  asyncHandler(async (req, res) => {
+    const days = req.query.days ? Number(req.query.days) : 30;
+    const limit = req.query.limit ? Number(req.query.limit) : 5;
+    const result = await getExpiringSoonBatches(req.auth.organizationId, days, limit);
+    res.json(result);
+  })
+);
+
+inventoryRouter.get(
+  "/batches/:id",
+  asyncHandler(async (req, res) => {
+    const result = await getStockBatchById(req.params.id, req.auth.organizationId);
     res.json(result);
   })
 );

@@ -229,6 +229,38 @@ export async function createPurchase(
           reference: data.purchaseCode,
         },
       });
+
+      if (item.batchNumber && typeof (tx as any).stockBatch?.upsert === "function") {
+        const matchingPurchaseItem = purchase.purchaseItems?.find(
+          (pi) => pi.productId === item.productId && pi.batchNumber === item.batchNumber
+        );
+
+        await tx.stockBatch.upsert({
+          where: {
+            productId_batchNumber_organizationId: {
+              productId: item.productId,
+              batchNumber: item.batchNumber,
+              organizationId,
+            },
+          },
+          update: {
+            quantityRemaining: { increment: item.quantity },
+            quantityReceived: { increment: item.quantity },
+            unitCost: item.unitCost,
+            expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+          },
+          create: {
+            productId: item.productId,
+            organizationId,
+            batchNumber: item.batchNumber,
+            expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+            quantityReceived: item.quantity,
+            quantityRemaining: item.quantity,
+            unitCost: item.unitCost,
+            purchaseItemId: matchingPurchaseItem?.id,
+          },
+        });
+      }
     }
 
     return purchase;

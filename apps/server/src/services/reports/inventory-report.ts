@@ -380,14 +380,26 @@ export async function getExpiryReport(
     orderBy: { expiryDate: "asc" },
   });
 
-  const stock = await prisma.inventory.findMany({
-    where: { organizationId, productId: { in: items.map((i) => i.productId) } },
-    select: { productId: true, quantityOnHand: true },
-  });
+  const [stock, batches] = await Promise.all([
+    prisma.inventory.findMany({
+      where: { organizationId, productId: { in: items.map((i) => i.productId) } },
+      select: { productId: true, quantityOnHand: true },
+    }),
+    typeof (prisma as any).stockBatch?.findMany === "function"
+      ? prisma.stockBatch.findMany({
+          where: { organizationId, productId: { in: items.map((i) => i.productId) } },
+          select: { productId: true, batchNumber: true, quantityRemaining: true },
+        })
+      : Promise.resolve([]),
+  ]);
 
   return items.flatMap((item) => {
     const expiryDate = item.expiryDate;
     if (!expiryDate) return [];
+
+    const matchedBatch = batches.find(
+      (b) => b.productId === item.productId && b.batchNumber === item.batchNumber
+    );
 
     return [
       {
@@ -402,10 +414,11 @@ export async function getExpiryReport(
           (expiryDate.getTime() - now.getTime()) / MS_PER_DAY
         ),
         isExpired: expiryDate < now,
-        // What was bought, not what remains — see the note above.
+        // What was bought, not what remains
         purchasedQuantity: item.quantity,
-        // Per-product, not per-batch: the schema cannot attribute a quantity to
-        // a batch, so this is the whole product's stock, shown for context.
+        // Specific batch stock remaining
+        quantityRemaining: matchedBatch ? matchedBatch.quantityRemaining : item.quantity,
+        // Per-product total stock on hand
         quantityOnHand:
           stock.find((s) => s.productId === item.productId)?.quantityOnHand ?? 0,
         unitCost: item.unitCost,

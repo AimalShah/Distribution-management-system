@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   ArrowUpDown,
   Boxes,
+  Clock,
   History,
   Plus,
   RefreshCw,
@@ -28,6 +30,7 @@ import { api } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { AdjustStockDialog, type InventoryItemSummary } from "../components/inventory/AdjustStockDialog";
 import { AddInventoryDialog } from "../components/inventory/AddInventoryDialog";
+import { Batches } from "./inventory/Batches";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { ListTablePanel } from "../components/list/ListTablePanel";
@@ -76,7 +79,16 @@ export interface InventoryLogRow {
 const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<string>("inventory");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "inventory";
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && (tabParam === "inventory" || tabParam === "logs" || tabParam === "batches")) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   // Inventory Table State
   const [inventoryPage, setInventoryPage] = useState(1);
@@ -384,6 +396,10 @@ export default function InventoryPage() {
             <Boxes className="size-4" />
             Inventory
           </TabsTrigger>
+          <TabsTrigger value="batches" className="gap-2 rounded-lg text-xs font-medium">
+            <Clock className="size-4" />
+            Stock Batches & Lots
+          </TabsTrigger>
           <TabsTrigger value="logs" className="gap-2 rounded-lg text-xs font-medium">
             <History className="size-4" />
             Movement Logs
@@ -476,6 +492,11 @@ export default function InventoryPage() {
               )}
             </div>
           </div>
+        </TabsContent>
+
+        {/* Tab 3: Stock Batches & Lots */}
+        <TabsContent value="batches" className="space-y-4">
+          <Batches />
         </TabsContent>
       </Tabs>
 

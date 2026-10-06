@@ -73,9 +73,26 @@ export const inventoryLogsQuerySchema = paginationQuerySchema.extend({
 
 export const lowStockQuerySchema = paginationQuerySchema;
 
+export const batchListQuerySchema = paginationQuerySchema.extend({
+  productId: z.string().trim().optional(),
+  search: z.string().trim().optional(),
+  expiringWithinDays: z.coerce.number().int().min(1).optional(),
+});
+
+export const stockBatchCreateSchema = z.object({
+  productId: z.string().trim().min(1, "Product is required"),
+  batchNumber: z.string().trim().min(1, "Batch number is required"),
+  expiryDate: z.coerce.date().optional(),
+  quantity: z.number().int().min(0, "Quantity must be zero or more"),
+  unitCost: z.number().min(0, "Unit cost must be zero or more").optional(),
+});
+
 export type InventoryCreateInput = z.output<typeof InventoryCreateSchema>;
 export type InventoryAdjustInput = z.output<typeof InventoryAdjustSchema>;
 export type InventorySettingsInput = z.output<typeof InventorySettingsSchema>;
 export type InventoryListQuery = z.output<typeof inventoryListQuerySchema>;
 export type InventoryLogsQuery = z.output<typeof inventoryLogsQuerySchema>;
 export type LowStockQuery = z.output<typeof lowStockQuerySchema>;
+export type BatchListQuery = z.output<typeof batchListQuerySchema>;
+export type StockBatchCreateInput = z.output<typeof stockBatchCreateSchema>;
+
