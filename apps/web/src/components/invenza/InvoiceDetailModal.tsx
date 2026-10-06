@@ -1,4 +1,12 @@
 import React from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@dms/ui";
 import { SaleItem } from '../../types/invenza';
 import { ModalShell, ModalFooter } from './ModalShell';
 
@@ -120,30 +128,30 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text)' }}>
           Purchased Items
         </div>
-        <table className="data-table" style={{ fontSize: '12px' }}>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>SKU</th>
-              <th className="text-right">Qty</th>
-              <th className="text-right">Unit Price</th>
-              <th className="text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="data-table" style={{ fontSize: '12px' }}>
+          <TableHeader className="[&_tr]:border-0">
+            <TableRow>
+              <TableHead className="h-auto">Item</TableHead>
+              <TableHead className="h-auto">SKU</TableHead>
+              <TableHead className="h-auto text-right">Qty</TableHead>
+              <TableHead className="h-auto text-right">Unit Price</TableHead>
+              <TableHead className="h-auto text-right">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {items.map((item, idx) => (
-              <tr key={idx}>
-                <td className="font-medium text-[var(--text)]">{item.name}</td>
-                <td className="font-mono text-[var(--muted)]">{item.sku}</td>
-                <td className="text-right">{item.qty}</td>
-                <td className="text-right">Rs {item.unitPrice.toFixed(2)}</td>
-                <td className="text-right font-semibold text-[var(--text)]">
+              <TableRow key={idx}>
+                <TableCell className="font-medium text-[var(--text)]">{item.name}</TableCell>
+                <TableCell className="font-mono text-[var(--muted)]">{item.sku}</TableCell>
+                <TableCell className="text-right">{item.qty}</TableCell>
+                <TableCell className="text-right">Rs {item.unitPrice.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold text-[var(--text)]">
                   Rs {item.total.toFixed(2)}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
         {/* Totals Summary */}
         <div className="flex justify-end mt-4">

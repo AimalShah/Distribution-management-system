@@ -2,6 +2,7 @@ export * from "./product";
 export * from "./purchase";
 export * from "./sale";
 export * from "./return";
+export * from "./payment";
 export * from "./customer";
 export * from "./supplier";
 export * from "./category";

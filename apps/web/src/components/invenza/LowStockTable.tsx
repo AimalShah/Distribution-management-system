@@ -1,4 +1,12 @@
 import React from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@dms/ui";
 import { LowStockProduct } from '../../types/invenza';
 
 interface LowStockTableProps {
@@ -66,21 +74,20 @@ export const LowStockTable: React.FC<LowStockTableProps> = ({
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="data-table">
-          <caption className="sr-only">Products with low stock levels</caption>
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Current Stock</th>
-              <th>Min Stock</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="data-table">
+          <TableHeader className="[&_tr]:border-0">
+            <TableRow>
+              <TableHead className="h-auto">Product</TableHead>
+              <TableHead className="h-auto">Current Stock</TableHead>
+              <TableHead className="h-auto">Min Stock</TableHead>
+              <TableHead className="h-auto">Status</TableHead>
+              <TableHead className="h-auto">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {products.map((product) => (
-              <tr key={product.id}>
-                <td>
+              <TableRow key={product.id}>
+                <TableCell>
                   <div className="flex items-center gap-3">
                     <div>
                       <span className="text-sm font-semibold text-[var(--text)] block">
@@ -91,13 +98,13 @@ export const LowStockTable: React.FC<LowStockTableProps> = ({
                       </span>
                     </div>
                   </div>
-                </td>
-                <td className={`text-sm font-bold ${getStockColorClass(product.status)}`}>
+                </TableCell>
+                <TableCell className={`text-sm font-bold ${getStockColorClass(product.status)}`}>
                   {product.currentStock}
-                </td>
-                <td className="text-sm text-[var(--muted)]">{product.minStock}</td>
-                <td>{getStatusBadge(product.status)}</td>
-                <td>
+                </TableCell>
+                <TableCell className="text-sm text-[var(--muted)]">{product.minStock}</TableCell>
+                <TableCell>{getStatusBadge(product.status)}</TableCell>
+                <TableCell>
                   <button
                     type="button"
                     onClick={() => onReorder(product)}
@@ -106,11 +113,11 @@ export const LowStockTable: React.FC<LowStockTableProps> = ({
                   >
                     Reorder
                   </button>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </section>
   );

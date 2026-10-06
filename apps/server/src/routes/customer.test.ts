@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { ORGANIZATION_HEADER } from "../middleware/auth-context";
 
-const { customerModel, saleModel } = vi.hoisted(() => ({
+const { customerModel, saleModel, paymentModel, returnModel } = vi.hoisted(() => ({
   customerModel: {
     findMany: vi.fn(),
     count: vi.fn(),
@@ -14,12 +14,30 @@ const { customerModel, saleModel } = vi.hoisted(() => ({
   },
   saleModel: {
     count: vi.fn(),
+    findMany: vi.fn(),
+  },
+  paymentModel: {
+    count: vi.fn(),
+    findMany: vi.fn(),
+  },
+  returnModel: {
+    findMany: vi.fn(),
   },
 }));
 
 vi.mock("@dms/db", () => ({
-  default: { customer: customerModel, sale: saleModel },
-  prisma: { customer: customerModel, sale: saleModel },
+  default: {
+    customer: customerModel,
+    sale: saleModel,
+    payment: paymentModel,
+    return: returnModel,
+  },
+  prisma: {
+    customer: customerModel,
+    sale: saleModel,
+    payment: paymentModel,
+    return: returnModel,
+  },
 }));
 
 const app = createApp();
@@ -70,6 +88,10 @@ beforeEach(() => {
   customerModel.update.mockResolvedValue(customerFixture());
   customerModel.delete.mockResolvedValue(customerFixture());
   saleModel.count.mockResolvedValue(0);
+  paymentModel.count.mockResolvedValue(0);
+  saleModel.findMany.mockResolvedValue([]);
+  paymentModel.findMany.mockResolvedValue([]);
+  returnModel.findMany.mockResolvedValue([]);
 });
 
 describe("organization context", () => {
@@ -236,7 +258,7 @@ describe("GET /api/customers", () => {
 
     const { include } = customerModel.findMany.mock.calls[0][0];
 
-    expect(include).toEqual({ _count: { select: { sale: true } } });
+    expect(include).toEqual({ _count: { select: { sale: { where: { deletedAt: null } } } } });
   });
 });
 
@@ -267,7 +289,7 @@ describe("GET /api/customers/:id", () => {
 
     const { include } = customerModel.findFirst.mock.calls[0][0];
 
-    expect(include).toEqual({ _count: { select: { sale: true } } });
+    expect(include).toEqual({ _count: { select: { sale: { where: { deletedAt: null } } } } });
   });
 
   it("404s when the customer belongs to another organization", async () => {
@@ -622,6 +644,29 @@ describe("DELETE /api/customers/:id", () => {
     expect(customerModel.delete).not.toHaveBeenCalled();
   });
 
+  it("checks for payments inside the caller's organization", async () => {
+    await request(app)
+      .delete("/api/customers/cust_1")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(paymentModel.count).toHaveBeenCalledWith({
+      where: { customerId: "cust_1", organizationId: ORG },
+    });
+  });
+
+  it("refuses to delete a customer with payments on record", async () => {
+    paymentModel.count.mockResolvedValue(2);
+
+    const res = await request(app)
+      .delete("/api/customers/cust_1")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("CUSTOMER_HAS_PAYMENTS");
+    expect(res.body.details).toEqual({ paymentCount: 2 });
+    expect(customerModel.delete).not.toHaveBeenCalled();
+  });
+
   it("does not report a foreign key violation for a customer with sales", async () => {
     saleModel.count.mockResolvedValue(1);
 
@@ -652,5 +697,119 @@ describe("DELETE /api/customers/:id", () => {
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("GET /api/customers/:id/ledger", () => {
+  it("404s for a customer from another organization", async () => {
+    customerModel.findFirst.mockResolvedValue(null);
+
+    const res = await request(app).get("/api/customers/cust_9/ledger").set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("CUSTOMER_NOT_FOUND");
+    expect(saleModel.findMany).not.toHaveBeenCalled();
+  });
+
+  it("scopes invoices, credits and payments to this customer in this tenant", async () => {
+    const res = await request(app)
+      .get("/api/customers/cust_1/ledger")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      openingBalance: 0,
+      entries: [],
+      totals: { invoices: 0, credits: 0, payments: 0, closingBalance: 0 },
+    });
+    expect(saleModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: ORG,
+          customerId: "cust_1",
+          deletedAt: null,
+          status: { not: "Cancelled" },
+        },
+      })
+    );
+    expect(returnModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG,
+          returnType: "SALE",
+          deletedAt: null,
+        }),
+      })
+    );
+    expect(paymentModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: ORG, customerId: "cust_1", deletedAt: null },
+      })
+    );
+  });
+
+  it("applies the statement window, with everything before it as opening balance", async () => {
+    await request(app)
+      .get("/api/customers/cust_1/ledger?from=2026-01-01&to=2026-01-31")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    // Each document type is read twice: once for the opening balance (strictly
+    // before `from`) and once for the window itself.
+    const openingSales = saleModel.findMany.mock.calls[0][0].where;
+    expect(openingSales.saleDate).toEqual({ lt: new Date("2026-01-01") });
+
+    const windowSales = saleModel.findMany.mock.calls[1][0].where;
+    expect(windowSales.saleDate).toEqual({
+      gte: new Date("2026-01-01"),
+      // `to` is inclusive of the whole day it names.
+      lt: new Date("2026-02-01"),
+    });
+
+    const windowPayments = paymentModel.findMany.mock.calls[1][0].where;
+    expect(windowPayments.paidAt).toEqual({
+      gte: new Date("2026-01-01"),
+      lt: new Date("2026-02-01"),
+    });
+  });
+
+  it("computes a running balance from invoices, credits and payments", async () => {
+    customerModel.findFirst.mockResolvedValue({
+      id: "cust_1",
+      customerCode: "CUST-001",
+      name: "Acme Retail",
+      phone: "555-0100",
+    });
+    saleModel.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { saleCode: "SAL-001", saleDate: new Date("2026-01-05T00:00:00.000Z"), totalAmount: 100 },
+      { saleCode: "SAL-002", saleDate: new Date("2026-01-10T00:00:00.000Z"), totalAmount: 50 },
+    ]);
+    returnModel.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        returnCode: "RET-001",
+        returnDate: new Date("2026-01-06T00:00:00.000Z"),
+        items: [{ quantity: 1, unitPrice: 20, taxAmount: 0, discount: 0 }],
+      },
+    ]);
+    paymentModel.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { paymentCode: "PMT-001", paidAt: new Date("2026-01-07T00:00:00.000Z"), amount: 60, method: "Cash" },
+    ]);
+
+    const res = await request(app)
+      .get("/api/customers/cust_1/ledger?from=2026-01-01&to=2026-01-31")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toEqual([
+      expect.objectContaining({ type: "invoice", reference: "SAL-001", debit: 100, balance: 100 }),
+      expect.objectContaining({ type: "credit", reference: "RET-001", credit: 20, balance: 80 }),
+      expect.objectContaining({ type: "payment", reference: "PMT-001", credit: 60, balance: 20 }),
+      expect.objectContaining({ type: "invoice", reference: "SAL-002", debit: 50, balance: 70 }),
+    ]);
+    expect(res.body.totals).toEqual({
+      invoices: 150,
+      credits: 20,
+      payments: 60,
+      closingBalance: 70,
+    });
   });
 });

@@ -177,7 +177,7 @@ describe("organization context", () => {
     await request(app).get("/api/returns").set(auth());
 
     expect(models.return.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 });
@@ -216,6 +216,7 @@ describe("GET /api/returns", () => {
       expect.objectContaining({
         where: {
           organizationId: ORG,
+          deletedAt: null,
           returnType: "DAMAGED",
           returnCode: { contains: "ret-1", mode: "insensitive" },
         },
@@ -224,7 +225,7 @@ describe("GET /api/returns", () => {
 
     await request(app).get("/api/returns?search=").set(auth());
     expect(models.return.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 
@@ -570,7 +571,9 @@ describe("POST /api/returns that takes stock off hand", () => {
       expect.objectContaining({ where: { id: "pur_1", organizationId: ORG } })
     );
     expect(models.return.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { purchaseId: "pur_1", organizationId: ORG } })
+      expect.objectContaining({
+        where: { purchaseId: "pur_1", organizationId: ORG, deletedAt: null },
+      })
     );
   });
 

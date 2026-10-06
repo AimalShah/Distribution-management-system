@@ -573,7 +573,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     expect(entries.map((e) => e.userId)).toEqual([t.userId, colleagueId]);
   });
 
-  it("cascades the lines away with the return", async () => {
+  it("stamps the return and keeps its lines, taking it out of circulation", async () => {
     const { product } = await stockedProduct(10);
     const created = await post({
       returnCode: unique("RTN"),
@@ -583,12 +583,30 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
 
     expect(await prisma.returnItem.count({ where: { returnId: created.body.id } })).toBe(1);
 
-    await request(app)
+    const res = await request(app)
       .delete(`/api/returns/${created.body.id}`)
       .set(asUser(t.organizationId, t.userId));
 
-    expect(await prisma.return.count({ where: { id: created.body.id } })).toBe(0);
-    expect(await prisma.returnItem.count({ where: { returnId: created.body.id } })).toBe(0);
+    expect(res.status).toBe(200);
+
+    // The legacy delete removed both rows. The correction keeps them — the
+    // stamp is what takes the return out of circulation — and the stock the
+    // write-off took has already gone back (asserted above).
+    const row = await prisma.return.findUnique({ where: { id: created.body.id } });
+    expect(row).not.toBeNull();
+    expect(row?.deletedAt).not.toBeNull();
+    expect(await prisma.returnItem.count({ where: { returnId: created.body.id } })).toBe(1);
+
+    // Gone from the list the client sees...
+    const list = await request(app).get("/api/returns").set(asUser(t.organizationId, t.userId));
+    expect(list.body.data.some((r: { id: string }) => r.id === created.body.id)).toBe(false);
+
+    // ...and back in circulation on restore, which puts the stock back out.
+    const restored = await request(app)
+      .post(`/api/returns/${created.body.id}/restore`)
+      .set(asUser(t.organizationId, t.userId));
+    expect(restored.status).toBe(200);
+    expect(restored.body.deletedAt).toBeNull();
   });
 
   it("treats returnCode as globally unique, across tenants", async () => {

@@ -123,6 +123,12 @@ export const returnListQuerySchema = paginationQuerySchema.extend({
   // An empty search box trims to "" and the service reads that as "no filter".
   search: z.string().trim().optional(),
   returnType: z.enum(ReturnTypes).optional(),
+  // `deleted=true` is the Deleted tab. Absent means active returns only, so no
+  // existing caller starts seeing soft-deleted rows by default.
+  deleted: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 
 // Named `ReturnTypeValue` rather than `ReturnType`, which is a TypeScript

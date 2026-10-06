@@ -280,9 +280,12 @@ describe("Checkpoint 4b — Product Pages", () => {
     const listSrc = read("apps/web/src/pages/ProductList.tsx");
     const sidebarSrc = read("apps/web/src/components/layout/AppSidebar.tsx");
 
-    // Delete handler calls api.delete and mutate()
-    expect(listSrc).toMatch(/api\.delete\(\s*`\/products\/\$\{id\}`/);
-    expect(listSrc).toContain("window.confirm");
+    // Delete handler calls api.delete and mutate(). The native confirm is
+    // gone as of Checkpoint 17: the confirmation is the shared dialog, which
+    // can show a busy state while the delete is in flight.
+    expect(listSrc).toMatch(/api\.delete\(\s*`\/products\/\$\{confirmTarget\.id\}`/);
+    expect(listSrc).toContain("ConfirmDialog");
+    expect(listSrc).not.toContain("window.confirm");
     expect(listSrc).toContain("mutate()");
 
     // Sidebar links to /products

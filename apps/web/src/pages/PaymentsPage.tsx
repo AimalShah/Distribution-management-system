@@ -1,0 +1,517 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import useSWR from "swr";
+import { Plus, RefreshCw, Trash2, Wallet } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@dms/ui";
+import { api } from "../lib/api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { formatDate, formatMoney } from "../lib/format";
+import { generateCode } from "../lib/code";
+import { ListPageHeader } from "../components/list/ListPageHeader";
+import { StatTileRow } from "../components/list/StatTileRow";
+import type { PaymentMethodValue } from "@dms/shared";
+
+const fetcher = (url: string) => api.get(url).then((r) => r.data);
+
+const METHODS: readonly PaymentMethodValue[] = [
+  "Cash",
+  "Bank Transfer",
+  "Mobile Wallet",
+  "Cheque",
+  "Other",
+];
+
+interface PaymentRow {
+  id: string;
+  paymentCode: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  paidAt: string;
+  saleId: string | null;
+  deletedAt: string | null;
+  customer: { id: string; customerCode: string; name: string };
+  sale: { id: string; saleCode: string; totalAmount: number; amountPaid: number } | null;
+  user: { name: string; email: string } | null;
+}
+
+interface CustomerOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+interface SaleOption {
+  id: string;
+  saleCode: string;
+  saleDate: string;
+  totalAmount: number;
+  amountPaid: number;
+}
+
+const emptyDraft = () => ({
+  customerId: "",
+  saleId: "", // "" means on account (no invoice).
+  amount: "",
+  method: "Cash" as PaymentMethodValue,
+  reference: "",
+  note: "",
+  paidAt: "",
+});
+
+/**
+ * The payments page: money in, and the correction path for it.
+ *
+ * A payment either settles a named invoice (`saleId`) or lands on the customer's
+ * account unallocated; the list shows both. Deleting a payment is a correction —
+ * the row is stamped, `Sale.amountPaid` moves back with it, and the invoice
+ * returns to unpaid — so it goes through the shared ConfirmDialog rather than a
+ * native confirm, and the server re-checks the balance arithmetic either way.
+ */
+export default function PaymentsPage() {
+  const [deletedView, setDeletedView] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draft, setDraft] = useState(emptyDraft);
+  const [saving, setSaving] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<PaymentRow | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const { data, isLoading, mutate } = useSWR(
+    `/payments?pageSize=100${deletedView ? "&deleted=true" : ""}`,
+    fetcher
+  );
+
+  const { data: customerData } = useSWR(
+    dialogOpen ? "/customers?pageSize=100" : null,
+    fetcher
+  );
+
+  const { data: saleData } = useSWR(
+    dialogOpen && draft.customerId ? `/sales/customer/${draft.customerId}?pageSize=100` : null,
+    fetcher
+  );
+
+  const rows = (data?.data ?? []) as PaymentRow[];
+  const customers = ((customerData?.data ?? []) as CustomerOption[]).filter((c) => c.isActive);
+  const sales = ((saleData?.data ?? []) as SaleOption[]).filter((s) => s.amountPaid < s.totalAmount);
+
+  const collected = rows.reduce((sum, row) => sum + row.amount, 0);
+  const onAccount = rows.filter((row) => row.saleId === null).reduce((s, r) => s + r.amount, 0);
+
+  const selectedSale = useMemo(
+    () => sales.find((s) => s.id === draft.saleId) ?? null,
+    [sales, draft.saleId]
+  );
+
+  const amountNumber = Number(draft.amount);
+  const amountValid = Number.isFinite(amountNumber) && amountNumber > 0;
+  const maxPayment = selectedSale ? selectedSale.totalAmount - selectedSale.amountPaid : null;
+  const overPayment = maxPayment !== null && amountValid && amountNumber > maxPayment;
+  const canSubmit =
+    draft.customerId !== "" && amountValid && !overPayment && !saving;
+
+  const handleCreate = async () => {
+    setSaving(true);
+    try {
+      await api.post("/payments", {
+        paymentCode: generateCode("PMT"),
+        customerId: draft.customerId,
+        ...(draft.saleId ? { saleId: draft.saleId } : {}),
+        amount: amountNumber,
+        method: draft.method,
+        ...(draft.reference ? { reference: draft.reference } : {}),
+        ...(draft.note ? { note: draft.note } : {}),
+        ...(draft.paidAt ? { paidAt: draft.paidAt } : {}),
+      });
+      toast.success("Payment recorded");
+      setDialogOpen(false);
+      setDraft(emptyDraft());
+      await mutate();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          "Failed to record payment"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setConfirmBusy(true);
+    try {
+      await api.delete(`/payments/${confirmTarget.id}`);
+      toast.success("Payment reversed — the invoice balance was moved back");
+      setConfirmTarget(null);
+      await mutate();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.error || err?.response?.data?.message || "Failed to delete payment"
+      );
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 animate-slideInUp">
+      <ListPageHeader
+        breadcrumb={
+          <>
+            <Link to="/" className="hover:text-primary transition-colors">
+              Dashboard
+            </Link>
+            <span>/</span>
+            <span className="text-foreground font-semibold">Payments</span>
+          </>
+        }
+        title="Payments"
+        subtitle="Money received against invoices and on account"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeletedView((v) => !v)}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+            >
+              {deletedView ? "Active payments" : "Corrected payments"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void mutate()}
+              disabled={isLoading}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+            >
+              <RefreshCw className="size-3.5 mr-2" />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setDialogOpen(true)}
+              className="btn-primary h-9 rounded-md shadow-sm cursor-pointer"
+            >
+              <Plus className="size-4 mr-2" />
+              Record payment
+            </Button>
+          </>
+        }
+      />
+
+      <StatTileRow
+        tiles={[
+          {
+            label: deletedView ? "Corrected payments" : "Payments",
+            value: isLoading ? "—" : (data?.total ?? 0),
+            sublabel: "Rows on this view",
+            icon: <Wallet className="size-6" />,
+          },
+          {
+            label: "Collected",
+            value: isLoading ? "—" : formatMoney(collected),
+            sublabel: "Shown rows",
+            icon: <Wallet className="size-6" />,
+            tone: "success",
+          },
+          {
+            label: "On account",
+            value: isLoading ? "—" : formatMoney(onAccount),
+            sublabel: "Not tied to an invoice",
+            icon: <Wallet className="size-6" />,
+            tone: "warning",
+          },
+        ]}
+      />
+
+      <div className="card p-0 overflow-hidden">
+        <div className="p-4 sm:p-5">
+          {isLoading ? (
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 rounded-lg bg-muted/40 flex items-center justify-center mb-4">
+                <Wallet className="size-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground">
+                {deletedView ? "No corrected payments" : "No payments yet"}
+              </h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                {deletedView
+                  ? "Corrections show here once a payment has been reversed."
+                  : "Record a payment against an invoice or on the customer's account."}
+              </p>
+            </div>
+          ) : (
+            <Table className="data-table">
+              <TableHeader className="[&_tr]:border-0">
+                <TableRow>
+                  <TableHead className="h-auto">Date</TableHead>
+                  <TableHead className="h-auto">Code</TableHead>
+                  <TableHead className="h-auto">Customer</TableHead>
+                  <TableHead className="h-auto">Applied to</TableHead>
+                  <TableHead className="h-auto">Method</TableHead>
+                  <TableHead className="h-auto text-right">Amount</TableHead>
+                  <TableHead className="h-auto">Recorded by</TableHead>
+                  <TableHead className="h-auto text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.id} className={row.deletedAt ? "opacity-60" : ""}>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDate(row.paidAt)}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-primary">
+                      {row.paymentCode}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to={`/customers/${row.customer.id}/ledger`}
+                        className="text-xs font-medium hover:text-primary hover:underline"
+                      >
+                        {row.customer.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {row.sale ? (
+                        <span className="font-mono text-primary">{row.sale.saleCode}</span>
+                      ) : (
+                        <Badge variant="secondary" className="badge badge-gray">
+                          On account
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="badge badge-info">
+                        {row.method}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-xs font-medium">
+                      {formatMoney(row.amount)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.user?.name ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.deletedAt ? (
+                        <span className="text-xs text-muted-foreground">Reversed</span>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+                          onClick={() => setConfirmTarget(row)}
+                        >
+                          <span className="sr-only">Reverse payment</span>
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </div>
+
+      {/* Record payment */}
+      {dialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !saving && setDialogOpen(false)}
+          />
+          <div className="relative bg-background border rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Record payment</h2>
+              <p className="text-xs text-muted-foreground">
+                Money received against a specific invoice, or on account for later.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="payment-customer">Customer</Label>
+              <Select
+                value={draft.customerId}
+                onValueChange={(v) => setDraft((d) => ({ ...d, customerId: v, saleId: "" }))}
+              >
+                <SelectTrigger id="payment-customer" className="h-9 text-xs rounded-lg">
+                  <SelectValue placeholder="Select a customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="payment-invoice">Invoice</Label>
+              <Select
+                value={draft.saleId}
+                onValueChange={(v) => setDraft((d) => ({ ...d, saleId: v }))}
+                disabled={!draft.customerId}
+              >
+                <SelectTrigger id="payment-invoice" className="h-9 text-xs rounded-lg">
+                  <SelectValue
+                    placeholder={
+                      draft.customerId
+                        ? sales.length === 0
+                          ? "No open invoices — will go on account"
+                          : "On account (no invoice)"
+                        : "Select a customer first"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">On account (no invoice)</SelectItem>
+                  {sales.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.saleCode} — due {formatMoney(s.totalAmount - s.amountPaid)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="payment-amount">Amount</Label>
+                <Input
+                  id="payment-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.amount}
+                  onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
+                  className="h-9 text-xs rounded-lg"
+                  placeholder="0"
+                />
+                {overPayment && maxPayment !== null && (
+                  <p className="text-xs text-destructive">
+                    Balance due is {formatMoney(maxPayment)}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payment-method">Method</Label>
+                <Select
+                  value={draft.method}
+                  onValueChange={(v) => setDraft((d) => ({ ...d, method: v as PaymentMethodValue }))}
+                >
+                  <SelectTrigger id="payment-method" className="h-9 text-xs rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METHODS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="payment-reference">Reference</Label>
+                <Input
+                  id="payment-reference"
+                  value={draft.reference}
+                  onChange={(e) => setDraft((d) => ({ ...d, reference: e.target.value }))}
+                  className="h-9 text-xs rounded-lg"
+                  placeholder="Cheque no. / transaction id"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payment-date">Paid on</Label>
+                <Input
+                  id="payment-date"
+                  type="date"
+                  value={draft.paidAt}
+                  onChange={(e) => setDraft((d) => ({ ...d, paidAt: e.target.value }))}
+                  className="h-9 text-xs rounded-lg"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="payment-note">Note</Label>
+              <Input
+                id="payment-note"
+                value={draft.note}
+                onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+                className="h-9 text-xs rounded-lg"
+                placeholder="Optional"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+                disabled={saving}
+                className="btn-secondary h-9 rounded-md cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handleCreate()}
+                disabled={!canSubmit}
+                className="btn-primary h-9 rounded-md shadow-sm cursor-pointer"
+              >
+                {saving ? "Recording…" : "Record payment"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={`Reverse payment "${confirmTarget?.paymentCode ?? ""}"?`}
+        description={
+          confirmTarget?.sale
+            ? `The invoice ${confirmTarget.sale.saleCode} becomes unpaid again by ${formatMoney(confirmTarget.amount)} and this row moves to the corrected view.`
+            : `This ${formatMoney(confirmTarget?.amount ?? 0)} comes off the customer's account and the row moves to the corrected view.`
+        }
+        confirmLabel="Reverse payment"
+        destructive
+        busy={confirmBusy}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmTarget(null)}
+      />
+    </div>
+  );
+}

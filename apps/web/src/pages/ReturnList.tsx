@@ -27,6 +27,7 @@ import {
 } from "@dms/ui";
 import { api } from "../lib/api";
 import { formatDate } from "../lib/format";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { ListTablePanel } from "../components/list/ListTablePanel";
@@ -53,6 +54,11 @@ export default function ReturnList() {
   const pageSize = 20;
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  // "active" is every return still in circulation; "deleted" is the correction
+  // view the stamp behind.
+  const [view, setView] = useState<"active" | "deleted">("active");
+  const [confirmTarget, setConfirmTarget] = useState<ReturnRow | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({
@@ -65,8 +71,11 @@ export default function ReturnList() {
     if (typeFilter !== "all") {
       params.set("returnType", typeFilter);
     }
+    if (view === "deleted") {
+      params.set("deleted", "true");
+    }
     return params.toString();
-  }, [page, pageSize, search, typeFilter]);
+  }, [page, pageSize, search, typeFilter, view]);
 
   const { data, isLoading, mutate } = useSWR(
     `/returns?${queryString}`,
@@ -79,16 +88,33 @@ export default function ReturnList() {
 
   const totalReturns = data?.total ?? 0;
 
-  const handleDelete = async (id: string, code: string) => {
-    if (!window.confirm(`Are you sure you want to delete return "${code}"? This will reverse the stock movement.`)) {
-      return;
-    }
+  // Both handlers run behind the shared ConfirmDialog: each one moves stock,
+  // and neither should be dismissable mid-flight.
+  const handleDelete = async (row: ReturnRow) => {
+    setConfirmBusy(true);
     try {
-      await api.delete(`/returns/${id}`);
+      await api.delete(`/returns/${row.id}`);
       toast.success("Return deleted and stock reversed successfully");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete return");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleRestore = async (row: ReturnRow) => {
+    setConfirmBusy(true);
+    try {
+      await api.post(`/returns/${row.id}/restore`);
+      toast.success(`Return "${row.returnCode}" restored and stock re-applied`);
+      setConfirmTarget(null);
+      await mutate();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to restore return");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -184,12 +210,24 @@ export default function ReturnList() {
         header: "Actions",
         cell: ({ row }) => {
           const ret = row.original;
-          return (
+          return view === "deleted" ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-emerald-600 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg"
+              onClick={() => setConfirmTarget(ret)}
+              disabled={confirmBusy}
+            >
+              <span className="sr-only">Restore</span>
+              <RotateCw className="size-3.5" />
+            </Button>
+          ) : (
             <Button
               variant="ghost"
               size="icon"
               className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-              onClick={() => handleDelete(ret.id, ret.returnCode)}
+              onClick={() => setConfirmTarget(ret)}
+              disabled={confirmBusy}
             >
               <span className="sr-only">Delete</span>
               <Trash2 className="size-3.5" />
@@ -198,7 +236,7 @@ export default function ReturnList() {
         },
       },
     ],
-    []
+    [view, confirmBusy]
   );
 
   const visibleColumns = useMemo(
@@ -288,7 +326,29 @@ export default function ReturnList() {
           placeholder: "Search returns by code...",
         }}
         filters={
-          <Select
+          <>
+            <div className="inline-flex rounded-lg bg-muted p-0.5" role="tablist" aria-label="Return view">
+              {(["active", "deleted"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab}
+                  onClick={() => {
+                    setView(tab);
+                    setPage(1);
+                  }}
+                  className={`px-3 h-8 rounded-md text-xs font-medium capitalize transition-colors cursor-pointer ${
+                    view === tab
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <Select
             value={typeFilter}
             onValueChange={(val) => {
               setTypeFilter(val);
@@ -306,6 +366,7 @@ export default function ReturnList() {
               <SelectItem value="EXPIRED">Expired</SelectItem>
             </SelectContent>
           </Select>
+          </>
         }
         skeleton={
           <div className="space-y-3 py-4">
@@ -331,13 +392,17 @@ export default function ReturnList() {
             <div className="w-14 h-14 rounded-lg bg-muted/40 flex items-center justify-center mb-4">
               <RotateCw className="size-7 text-muted-foreground" />
             </div>
-            <h3 className="text-base font-semibold text-foreground">No returns found</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              {view === "deleted" ? "No deleted returns" : "No returns found"}
+            </h3>
             <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
               {search || typeFilter !== "all"
                 ? "Try adjusting your search query or filter options."
-                : "No returns or write-offs have been processed yet."}
+                : view === "deleted"
+                  ? "Deleted returns stay here until they are restored."
+                  : "No returns or write-offs have been processed yet."}
             </p>
-            {!search && typeFilter === "all" && (
+            {view === "active" && !search && typeFilter === "all" && (
               <Link to="/returns/new">
                 <Button size="sm" className="h-9 rounded-md">
                   <Plus className="size-4 mr-2" />
@@ -347,6 +412,32 @@ export default function ReturnList() {
             )}
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={
+          view === "deleted"
+            ? `Restore return "${confirmTarget?.returnCode ?? ""}"?`
+            : `Delete return "${confirmTarget?.returnCode ?? ""}"?`
+        }
+        description={
+          view === "deleted"
+            ? "The stock movement will be re-applied and the return returns to the active list."
+            : "The stock movement will be reversed and the return moves to the Deleted tab. You can restore it later."
+        }
+        confirmLabel={view === "deleted" ? "Restore return" : "Delete return"}
+        destructive={view === "active"}
+        busy={confirmBusy}
+        onConfirm={() => {
+          if (!confirmTarget) return;
+          if (view === "deleted") {
+            void handleRestore(confirmTarget);
+          } else {
+            void handleDelete(confirmTarget);
+          }
+        }}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

@@ -187,7 +187,10 @@ describe("Checkpoint 4j — Settings Pages", () => {
 
     // Delete handler and API call
     expect(usersSrc).toContain("handleDelete");
-    expect(usersSrc).toMatch(/api\.delete\(\s*`\/users\/\$\{id\}`/);
+    // Checkpoint 17: the delete runs behind the shared ConfirmDialog.
+    expect(usersSrc).toMatch(/api\.delete\(\s*`\/users\/\$\{confirmTarget\.id\}`/);
+    expect(usersSrc).toContain("ConfirmDialog");
+    expect(usersSrc).not.toContain("window.confirm");
     expect(usersSrc).toContain("toast.success");
 
     // Legacy unbacked field names check across apps/web/src

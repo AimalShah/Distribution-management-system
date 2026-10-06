@@ -10,6 +10,7 @@ import {
   deleteReturn,
   getReturnByIdOrCode,
   getReturns,
+  restoreReturn,
   updateReturn,
 } from "../services/return";
 
@@ -85,5 +86,29 @@ returnRouter.delete(
       req.auth.userId
     );
     res.json(deleted);
+  })
+);
+
+// Registered after `delete` but matched by method, so the literal `restore`
+// segment has no ambiguity with `/:id`.
+returnRouter.post(
+  "/:id/restore",
+  asyncHandler(async (req, res) => {
+    // A restore re-applies the stock movement the delete reversed, so it writes
+    // ledger rows and needs attribution for exactly the same reason.
+    if (!req.auth.userId) {
+      throw badRequest(
+        "Missing user context. Send the x-user-id header so the stock restoration " +
+          "can be attributed.",
+        "USER_REQUIRED"
+      );
+    }
+
+    const restored = await restoreReturn(
+      req.params.id,
+      req.auth.organizationId,
+      req.auth.userId
+    );
+    res.json(restored);
   })
 );

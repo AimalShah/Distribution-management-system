@@ -7,6 +7,9 @@ const saleWindow = (
   { startDate, endDate }: SalesReportQuery
 ): Prisma.SaleWhereInput => ({
   organizationId,
+  // A soft-deleted invoice gave its stock back and is out of circulation, so
+  // it never counts toward a report's revenue or quantity.
+  deletedAt: null,
   ...(startDate || endDate
     ? {
         saleDate: {

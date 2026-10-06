@@ -295,6 +295,9 @@ export async function teardownTenants(t: Tenant): Promise<void> {
   const orgs = [t.organizationId, t.otherOrganizationId];
   const inOrgs = { in: orgs };
 
+  // Money leaves before the documents it settles: `payments.customerId` is
+  // RESTRICT, so a customer row cannot go while a payment still points at it.
+  await prisma.payment.deleteMany({ where: { organizationId: inOrgs } });
   await prisma.returnItem.deleteMany({ where: { return: { organizationId: inOrgs } } });
   await prisma.return.deleteMany({ where: { organizationId: inOrgs } });
   await prisma.saleItem.deleteMany({ where: { sale: { organizationId: inOrgs } } });

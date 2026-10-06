@@ -34,7 +34,8 @@ export async function getDashboardStats(organizationId: string) {
     prisma.customer.count({ where: { organizationId } }),
     prisma.supplier.count({ where: { organizationId } }),
     prisma.sale.aggregate({
-      where: { organizationId },
+      // Soft-deleted invoices gave their stock back; they are not revenue.
+      where: { organizationId, deletedAt: null },
       _sum: { totalAmount: true },
     }),
     prisma.purchase.aggregate({
@@ -48,7 +49,7 @@ export async function getDashboardStats(organizationId: string) {
       },
     }),
     prisma.sale.findMany({
-      where: { organizationId },
+      where: { organizationId, deletedAt: null },
       select: {
         id: true,
         // `Sale` has `saleCode`, not the `invoiceNumber` the legacy UI read.

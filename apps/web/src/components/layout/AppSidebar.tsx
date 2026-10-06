@@ -11,6 +11,7 @@ import {
   ShoppingCart,
   Truck,
   Users,
+  Wallet,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
@@ -40,6 +41,7 @@ export const sections: { label: string; items: NavItem[] }[] = [
   { label: "Invoices", items: [{ title: "Sale invoices", icon: ReceiptText, to: "/sales" }] },
   { label: "Reports", items: [{ title: "Reports", icon: FileText, to: "/reports" }] },
   { label: "Returns", items: [{ title: "Returns", icon: RotateCw, to: "/returns" }] },
+  { label: "Payments", items: [{ title: "Payments", icon: Wallet, to: "/payments" }] },
   {
     label: "Settings",
     items: [

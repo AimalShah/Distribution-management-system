@@ -32,6 +32,7 @@ import {
   Skeleton,
 } from "@dms/ui";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
@@ -89,16 +90,21 @@ export default function PurchaseList() {
     0
   );
 
-  const handleDelete = async (id: string, code: string) => {
-    if (!window.confirm(`Are you sure you want to delete purchase order "${code}"?`)) {
-      return;
-    }
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; label: string } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setConfirmBusy(true);
     try {
-      await api.delete(`/purchases/${id}`);
+      await api.delete(`/purchases/${confirmTarget.id}`);
       toast.success("Purchase order deleted successfully");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete purchase order");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -198,7 +204,7 @@ export default function PurchaseList() {
                   Edit Order
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => handleDelete(purchase.id, purchase.purchaseCode)}
+                  onClick={() => setConfirmTarget({ id: purchase.id, label: purchase.purchaseCode })}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <Trash2 className="size-4 mr-2" />
@@ -357,6 +363,16 @@ export default function PurchaseList() {
             )}
           </div>
         }
+      />
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={`Delete purchase order "${confirmTarget?.label ?? ""}"?`}
+        description="The purchase order will be removed. Stock it received stays on hand."
+        confirmLabel="Delete order"
+        destructive
+        busy={confirmBusy}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

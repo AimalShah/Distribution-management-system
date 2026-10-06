@@ -1,4 +1,12 @@
 import React, { useState } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@dms/ui";
 import { SaleItem } from '../../types/invenza';
 
 interface RecentSalesTableProps {
@@ -85,38 +93,37 @@ export const RecentSalesTable: React.FC<RecentSalesTableProps> = ({
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="data-table">
-          <caption className="sr-only">Recent sales transactions</caption>
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th onClick={() => handleSort('date')} className="cursor-pointer select-none">
+        <Table className="data-table">
+          <TableHeader className="[&_tr]:border-0">
+            <TableRow>
+              <TableHead className="h-auto">Customer</TableHead>
+              <TableHead className="h-auto cursor-pointer select-none" onClick={() => handleSort('date')}>
                 Date {sortField === 'date' && (sortAsc ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('amount')} className="cursor-pointer select-none">
+              </TableHead>
+              <TableHead className="h-auto cursor-pointer select-none" onClick={() => handleSort('amount')}>
                 Amount {sortField === 'amount' && (sortAsc ? '↑' : '↓')}
-              </th>
-              <th>Payment Method</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+              <TableHead className="h-auto">Payment Method</TableHead>
+              <TableHead className="h-auto">Status</TableHead>
+              <TableHead className="h-auto">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sortedSales.map((sale) => (
-              <tr key={sale.id}>
-                <td>
+              <TableRow key={sale.id}>
+                <TableCell>
                   <div className="flex items-center gap-2">
                     <div>
                       <span className="font-semibold text-xs text-[var(--text)] block">{sale.customerName}</span>
                       <span className="font-mono text-xs text-primary-strong font-medium">{sale.saleCode}</span>
                     </div>
                   </div>
-                </td>
-                <td className="text-xs text-[var(--muted)]">{sale.date}</td>
-                <td className="font-bold text-xs">Rs {sale.amount.toFixed(2)}</td>
-                <td className="text-xs">{sale.paymentMethod}</td>
-                <td>{getStatusBadge(sale.status)}</td>
-                <td>
+                </TableCell>
+                <TableCell className="text-xs text-[var(--muted)]">{sale.date}</TableCell>
+                <TableCell className="font-bold text-xs">Rs {sale.amount.toFixed(2)}</TableCell>
+                <TableCell className="text-xs">{sale.paymentMethod}</TableCell>
+                <TableCell>{getStatusBadge(sale.status)}</TableCell>
+                <TableCell>
                   <button
                     type="button"
                     onClick={() => onViewInvoice(sale)}
@@ -125,11 +132,11 @@ export const RecentSalesTable: React.FC<RecentSalesTableProps> = ({
                   >
                     View
                   </button>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </section>
   );

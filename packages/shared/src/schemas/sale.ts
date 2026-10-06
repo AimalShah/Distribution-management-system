@@ -43,6 +43,11 @@ export const saleListQuerySchema = paginationQuerySchema.extend({
   // An empty search box trims to "" and the service reads that as "no filter".
   search: z.string().trim().optional(),
   status: z.enum(SaleStatus).optional(),
+  // `deleted=true` is the Deleted tab. Absent means active invoices only.
+  deleted: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 
 export type SaleInvoiceItemInput = z.output<typeof SaleInvoiceItemSchema>;

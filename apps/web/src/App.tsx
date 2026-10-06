@@ -16,6 +16,8 @@ import InventoryPage from "./pages/InventoryPage";
 import ReturnList from "./pages/ReturnList";
 import ReturnNew from "./pages/ReturnNew";
 import CustomerList from "./pages/CustomerList";
+import CustomerLedgerPage from "./pages/CustomerLedgerPage";
+import PaymentsPage from "./pages/PaymentsPage";
 import SupplierList from "./pages/SupplierList";
 import ReportsPage from "./pages/ReportsPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -39,6 +41,10 @@ export function App() {
 
           {/* Customer routes */}
           <Route path="/customers" element={<CustomerList />} />
+          <Route path="/customers/:id/ledger" element={<CustomerLedgerPage />} />
+
+          {/* Payment routes */}
+          <Route path="/payments" element={<PaymentsPage />} />
 
           {/* Supplier routes */}
           <Route path="/suppliers" element={<SupplierList />} />

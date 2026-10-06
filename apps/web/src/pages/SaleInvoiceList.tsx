@@ -3,15 +3,18 @@ import { Link, useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Ban,
   Download,
   Edit,
   FileText,
   Filter,
+  MessageCircle,
   MoreHorizontal,
   Plus,
   Printer,
   Receipt,
   RefreshCw,
+  RotateCw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -36,6 +39,8 @@ import {
 } from "@dms/ui";
 import { api } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
+import { waLink } from "../lib/whatsapp";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { ListTablePanel } from "../components/list/ListTablePanel";
@@ -48,9 +53,10 @@ export interface SaleInvoiceItemRow {
   taxAmount?: number | null;
   discount?: number | null;
   status: string;
+  amountPaid?: number;
   saleDate: string;
   createdAt: string;
-  customer?: { id: string; name: string };
+  customer?: { id: string; name: string; phone?: string | null };
   _count?: { items: number };
   items?: any[];
 }
@@ -63,6 +69,13 @@ export default function SaleInvoiceList() {
   const pageSize = 20;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // The Deleted tab: stamped invoices, out of circulation but still on record.
+  const [view, setView] = useState<"active" | "deleted">("active");
+  const [confirmTarget, setConfirmTarget] = useState<{
+    row: SaleInvoiceItemRow;
+    action: "delete" | "restore" | "cancel" | "uncancel";
+  } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({
@@ -75,8 +88,11 @@ export default function SaleInvoiceList() {
     if (statusFilter !== "all") {
       params.set("status", statusFilter);
     }
+    if (view === "deleted") {
+      params.set("deleted", "true");
+    }
     return params.toString();
-  }, [page, pageSize, search, statusFilter]);
+  }, [page, pageSize, search, statusFilter, view]);
 
   const { data, isLoading, mutate } = useSWR(
     `/sales?${queryString}`,
@@ -93,16 +109,97 @@ export default function SaleInvoiceList() {
     0
   );
 
-  const handleDelete = async (id: string, code: string) => {
-    if (!window.confirm(`Are you sure you want to delete invoice "${code}"?`)) {
-      return;
-    }
+  // Every action below — the two that move stock (delete, restore) and the two
+  // that only flip the status (cancel, un-cancel) — runs behind the shared
+  // ConfirmDialog with a busy state that no second click can get past.
+  const handleDelete = async (row: SaleInvoiceItemRow) => {
+    setConfirmBusy(true);
     try {
-      await api.delete(`/sales/${id}`);
-      toast.success("Sale invoice deleted successfully");
+      await api.delete(`/sales/${row.id}`);
+      toast.success("Invoice deleted, stock returned, and moved to the Deleted tab");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete sale invoice");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleRestore = async (row: SaleInvoiceItemRow) => {
+    setConfirmBusy(true);
+    try {
+      await api.post(`/sales/${row.id}/restore`);
+      toast.success(`Invoice "${row.saleCode}" restored and stock re-applied`);
+      setConfirmTarget(null);
+      await mutate();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to restore sale invoice");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleCancel = async (sale: SaleInvoiceItemRow) => {
+    setConfirmBusy(true);
+    try {
+      await api.post(`/sales/${sale.id}/cancel`);
+      toast.success(`Invoice "${sale.saleCode}" cancelled`);
+      setConfirmTarget(null);
+      await mutate();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to cancel invoice");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleUncancel = async (sale: SaleInvoiceItemRow) => {
+    setConfirmBusy(true);
+    try {
+      await api.post(`/sales/${sale.id}/uncancel`);
+      toast.success(`Invoice "${sale.saleCode}" restored to its previous status`);
+      setConfirmTarget(null);
+      await mutate();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to un-cancel invoice");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  /**
+   * Share the invoice as a WhatsApp message through a `wa.me` deep link: no
+   * API token, and the sender reviews the text before it goes anywhere. With
+   * no number on file the text is copied instead, so the button is never a
+   * dead end.
+   */
+  const handleShare = async (sale: SaleInvoiceItemRow) => {
+    try {
+      const detail = await api.get(`/sales/${sale.id}`).then((r) => r.data);
+      const total = detail.totalAmount ?? sale.totalAmount;
+      const paid = detail.amountPaid ?? sale.amountPaid ?? 0;
+      const text = [
+        `Invoice ${detail.saleCode ?? sale.saleCode}`,
+        `Customer: ${detail.customer?.name || "Walk-in Customer"}`,
+        `Date: ${formatDate(detail.saleDate ?? sale.saleDate)}`,
+        `Total: ${formatMoney(total)}`,
+        `Paid: ${formatMoney(paid)}`,
+        `Balance: ${formatMoney(Math.max(total - paid, 0))}`,
+        `Status: ${detail.status ?? sale.status}`,
+        "",
+        "Thank you for your business.",
+      ].join("\n");
+
+      const link = waLink(detail.customer?.phone, text);
+      if (link) {
+        window.open(link, "_blank", "noopener");
+      } else {
+        await navigator.clipboard.writeText(text);
+        toast.info("No WhatsApp number on file — the invoice summary was copied instead");
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to prepare the invoice message");
     }
   };
 
@@ -112,6 +209,26 @@ export default function SaleInvoiceList() {
 
   const handleDownloadPdf = (id: string) => {
     window.open(`/api/sales/${id}/pdf`, "_blank");
+  };
+
+  /**
+   * Derived, never stored: `amountPaid` against the invoice total is the only
+   * honest answer to "is this settled?", so a payment that lands shows up
+   * here without anyone editing a status field.
+   */
+  const getPaymentBadge = (sale: SaleInvoiceItemRow) => {
+    if (sale.status === "Cancelled") {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+    const paid = sale.amountPaid ?? 0;
+    const total = sale.totalAmount || 0;
+    if (paid <= 0) {
+      return <Badge variant="secondary" className="badge badge-gray">Unpaid</Badge>;
+    }
+    if (paid >= total) {
+      return <Badge className="badge badge-success">Paid</Badge>;
+    }
+    return <Badge variant="secondary" className="badge badge-warning">Partial</Badge>;
   };
 
   const getStatusBadge = (status: string) => {
@@ -189,6 +306,22 @@ export default function SaleInvoiceList() {
         ),
       },
       {
+        id: "paid",
+        header: "Paid",
+        cell: ({ row }) => {
+          const sale = row.original;
+          const paid = sale.amountPaid ?? 0;
+          return (
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                {paid > 0 ? formatMoney(paid) : formatMoney(0)}
+              </span>
+              {getPaymentBadge(sale)}
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => getStatusBadge(row.original.status),
@@ -198,6 +331,22 @@ export default function SaleInvoiceList() {
         header: "Actions",
         cell: ({ row }) => {
           const sale = row.original;
+
+          if (view === "deleted") {
+            return (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-emerald-600 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg"
+                onClick={() => setConfirmTarget({ row: sale, action: "restore" })}
+                disabled={confirmBusy}
+              >
+                <span className="sr-only">Restore</span>
+                <RotateCw className="size-3.5" />
+              </Button>
+            );
+          }
+
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -206,7 +355,7 @@ export default function SaleInvoiceList() {
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={() => handlePrint(sale.id)}
                   className="cursor-pointer font-medium"
@@ -222,14 +371,40 @@ export default function SaleInvoiceList() {
                   Download PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => navigate(`/sales/${sale.id}/edit`)}
+                  onClick={() => handleShare(sale)}
                   className="cursor-pointer font-medium"
                 >
-                  <Edit className="size-4 mr-2" />
-                  Edit Invoice
+                  <MessageCircle className="size-4 mr-2 text-emerald-500" />
+                  Share on WhatsApp
                 </DropdownMenuItem>
+                {sale.status !== "Cancelled" && (
+                  <DropdownMenuItem
+                    onClick={() => navigate(`/sales/${sale.id}/edit`)}
+                    className="cursor-pointer font-medium"
+                  >
+                    <Edit className="size-4 mr-2" />
+                    Edit Invoice
+                  </DropdownMenuItem>
+                )}
+                {sale.status !== "Cancelled" ? (
+                  <DropdownMenuItem
+                    onClick={() => setConfirmTarget({ row: sale, action: "cancel" })}
+                    className="cursor-pointer font-medium"
+                  >
+                    <Ban className="size-4 mr-2 text-destructive" />
+                    Cancel Invoice
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => setConfirmTarget({ row: sale, action: "uncancel" })}
+                    className="cursor-pointer font-medium"
+                  >
+                    <RotateCw className="size-4 mr-2 text-emerald-500" />
+                    Un-cancel
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
-                  onClick={() => handleDelete(sale.id, sale.saleCode)}
+                  onClick={() => setConfirmTarget({ row: sale, action: "delete" })}
                   className="cursor-pointer text-destructive focus:text-destructive font-medium"
                 >
                   <Trash2 className="size-4 mr-2" />
@@ -241,7 +416,7 @@ export default function SaleInvoiceList() {
         },
       },
     ],
-    [navigate]
+    [navigate, view, confirmBusy]
   );
 
   const visibleColumns = useMemo(
@@ -327,7 +502,29 @@ export default function SaleInvoiceList() {
           placeholder: "Search invoices by code or customer...",
         }}
         filters={
-          <Select
+          <>
+            <div className="inline-flex rounded-lg bg-muted p-0.5" role="tablist" aria-label="Invoice view">
+              {(["active", "deleted"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab}
+                  onClick={() => {
+                    setView(tab);
+                    setPage(1);
+                  }}
+                  className={`px-3 h-8 rounded-md text-xs font-medium capitalize transition-colors cursor-pointer ${
+                    view === tab
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <Select
             value={statusFilter}
             onValueChange={(val) => {
               setStatusFilter(val);
@@ -344,6 +541,7 @@ export default function SaleInvoiceList() {
               <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
+          </>
         }
         skeleton={
           <div className="space-y-3 py-4">
@@ -369,13 +567,17 @@ export default function SaleInvoiceList() {
             <div className="w-14 h-14 rounded-lg bg-muted/40 flex items-center justify-center mb-4">
               <Receipt className="size-7 text-muted-foreground" />
             </div>
-            <h3 className="text-base font-semibold text-foreground">No sale invoices found</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              {view === "deleted" ? "No deleted invoices" : "No sale invoices found"}
+            </h3>
             <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
               {search || statusFilter !== "all"
                 ? "Try adjusting your search query or filter options."
-                : "Get started by generating your first customer sales invoice."}
+                : view === "deleted"
+                  ? "Deleted invoices stay here until they are restored."
+                  : "Get started by generating your first customer sales invoice."}
             </p>
-            {!search && statusFilter === "all" && (
+            {view === "active" && !search && statusFilter === "all" && (
               <Link to="/sales/new">
                 <Button size="sm" className="h-9 rounded-md">
                   <Plus className="size-4 mr-2" />
@@ -385,6 +587,48 @@ export default function SaleInvoiceList() {
             )}
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={
+          confirmTarget?.action === "restore"
+            ? `Restore invoice "${confirmTarget?.row.saleCode ?? ""}"?`
+            : confirmTarget?.action === "cancel"
+              ? `Cancel invoice "${confirmTarget?.row.saleCode ?? ""}"?`
+              : confirmTarget?.action === "uncancel"
+                ? `Un-cancel invoice "${confirmTarget?.row.saleCode ?? ""}"?`
+                : `Delete invoice "${confirmTarget?.row.saleCode ?? ""}"?`
+        }
+        description={
+          confirmTarget?.action === "restore"
+            ? "The stock this invoice took will be re-applied and it returns to the active list."
+            : confirmTarget?.action === "cancel"
+              ? "The invoice stops counting toward sales and the ledger until it is un-cancelled. Payments already recorded against it are refused first, so nothing settles a cancelled invoice."
+              : confirmTarget?.action === "uncancel"
+                ? "The invoice returns to the status it held before it was cancelled."
+                : "The stock this invoice took will be returned, the invoice moves to the Deleted tab, and it can be restored later. Invoices with payments or returns are refused."
+        }
+        confirmLabel={
+          confirmTarget?.action === "restore"
+            ? "Restore invoice"
+            : confirmTarget?.action === "cancel"
+              ? "Cancel invoice"
+              : confirmTarget?.action === "uncancel"
+                ? "Un-cancel invoice"
+                : "Delete invoice"
+        }
+        destructive={confirmTarget?.action === "delete" || confirmTarget?.action === "cancel"}
+        busy={confirmBusy}
+        onConfirm={() => {
+          if (!confirmTarget) return;
+          const { row, action } = confirmTarget;
+          if (action === "restore") void handleRestore(row);
+          else if (action === "cancel") void handleCancel(row);
+          else if (action === "uncancel") void handleUncancel(row);
+          else void handleDelete(row);
+        }}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

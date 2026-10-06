@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Link } from "react-router-dom";
 import {
+  BookOpen,
   CreditCard,
   Edit,
   Filter,
@@ -27,6 +29,7 @@ import {
   Skeleton,
 } from "@dms/ui";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatMoney } from "../lib/format";
 import { CustomerDialog, type CustomerRow } from "../components/customers/CustomerDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -80,16 +83,21 @@ export default function CustomerList() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete customer "${name}"?`)) {
-      return;
-    }
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; label: string } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setConfirmBusy(true);
     try {
-      await api.delete(`/customers/${id}`);
+      await api.delete(`/customers/${confirmTarget.id}`);
       toast.success("Customer removed successfully");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete customer");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -170,6 +178,13 @@ export default function CustomerList() {
           const customer = row.original;
           return (
             <div className="flex items-center gap-1">
+              <Link
+                to={`/customers/${customer.id}/ledger`}
+                className="inline-flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label={`Open ledger for ${customer.name}`}
+              >
+                <BookOpen className="size-3.5 text-emerald-600" />
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
@@ -183,7 +198,7 @@ export default function CustomerList() {
                 variant="ghost"
                 size="icon"
                 className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-                onClick={() => handleDelete(customer.id, customer.name)}
+                onClick={() => setConfirmTarget({ id: customer.id, label: customer.name })}
               >
                 <span className="sr-only">Delete</span>
                 <Trash2 className="size-3.5" />
@@ -344,6 +359,16 @@ export default function CustomerList() {
         onOpenChange={setDialogOpen}
         customer={selectedCustomer}
         onSuccess={() => mutate()}
+      />
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={`Delete customer "${confirmTarget?.label ?? ""}"?`}
+        description="Only customers without sales history or payments on record can be removed. Otherwise set them inactive instead."
+        confirmLabel="Delete customer"
+        destructive
+        busy={confirmBusy}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

@@ -97,7 +97,7 @@ describe("GET /api/dashboard/stats", () => {
       where: { organizationId: ORG },
     });
     expect(models.sale.aggregate).toHaveBeenCalledWith({
-      where: { organizationId: ORG },
+      where: { organizationId: ORG, deletedAt: null },
       _sum: { totalAmount: true },
     });
     expect(models.purchase.aggregate).toHaveBeenCalledWith({
@@ -144,7 +144,7 @@ describe("GET /api/dashboard/stats", () => {
 
     expect(models.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { organizationId: ORG },
+        where: { organizationId: ORG, deletedAt: null },
         orderBy: { saleDate: "desc" },
         take: 5,
       })

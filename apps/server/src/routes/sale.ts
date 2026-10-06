@@ -7,11 +7,14 @@ import {
 } from "@dms/shared";
 import { asyncHandler, badRequest, notFound } from "../http";
 import {
+  cancelSale,
   createSale,
   deleteSale,
   getSaleByIdOrCode,
   getSales,
   getSalesByCustomer,
+  restoreSale,
+  uncancelSale,
   updateSale,
 } from "../services/sale";
 
@@ -116,7 +119,53 @@ saleRouter.put(
 saleRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deleteSale(req.params.id, req.auth.organizationId);
-    res.status(204).send();
+    // A delete reverses the stock the invoice consumed, so it writes ledger rows
+    // and needs attribution for the same reason the create does.
+    if (!req.auth.userId) {
+      throw badRequest(
+        "Missing user context. Send the x-user-id header so the stock reversal " +
+          "can be attributed.",
+        "USER_REQUIRED"
+      );
+    }
+
+    const deleted = await deleteSale(req.params.id, req.auth.organizationId, req.auth.userId);
+    res.json(deleted);
+  })
+);
+
+saleRouter.post(
+  "/:id/restore",
+  asyncHandler(async (req, res) => {
+    // A restore re-consumes the stock the delete gave back — same ledger, same
+    // attribution requirement.
+    if (!req.auth.userId) {
+      throw badRequest(
+        "Missing user context. Send the x-user-id header so the stock restoration " +
+          "can be attributed.",
+        "USER_REQUIRED"
+      );
+    }
+
+    const restored = await restoreSale(req.params.id, req.auth.organizationId, req.auth.userId);
+    res.json(restored);
+  })
+);
+
+// Cancel and un-cancel move no stock and write no ledger rows, so unlike the
+// two above they need no user attribution.
+saleRouter.post(
+  "/:id/cancel",
+  asyncHandler(async (req, res) => {
+    const cancelled = await cancelSale(req.params.id, req.auth.organizationId);
+    res.json(cancelled);
+  })
+);
+
+saleRouter.post(
+  "/:id/uncancel",
+  asyncHandler(async (req, res) => {
+    const restored = await uncancelSale(req.params.id, req.auth.organizationId);
+    res.json(restored);
   })
 );

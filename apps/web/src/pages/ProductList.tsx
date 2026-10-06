@@ -33,6 +33,7 @@ import {
   Skeleton,
 } from "@dms/ui";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
@@ -100,16 +101,21 @@ export default function ProductList() {
   const totalProducts = data?.total ?? 0;
   const activeProducts = (data?.data ?? []).filter((p: ProductItem) => p.isActive).length;
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
-      return;
-    }
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; label: string } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setConfirmBusy(true);
     try {
-      await api.delete(`/products/${id}`);
+      await api.delete(`/products/${confirmTarget.id}`);
       toast.success("Product deleted successfully");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete product");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -222,7 +228,7 @@ export default function ProductList() {
                   Edit Product
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => handleDelete(product.id, product.name)}
+                  onClick={() => setConfirmTarget({ id: product.id, label: product.name })}
                   className="cursor-pointer text-destructive focus:text-destructive font-medium"
                 >
                   <Trash2 className="size-4 mr-2" />
@@ -399,6 +405,16 @@ export default function ProductList() {
             )}
           </div>
         }
+      />
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={`Delete product "${confirmTarget?.label ?? ""}"?`}
+        description="The product will be removed from the catalogue. Sales history that references it is kept."
+        confirmLabel="Delete product"
+        destructive
+        busy={confirmBusy}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

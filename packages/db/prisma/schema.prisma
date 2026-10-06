@@ -29,6 +29,7 @@ model User {
   inventoryLogs  InventoryLog[]
 
   returns    Return[]
+  payments   Payment[]
   role       String?
   banned     Boolean?
   banReason  String?
@@ -106,6 +107,7 @@ model Organization {
   Categories  Category[]
   Brands      Brand[]
   Inventory   Inventory[]
+  Payments    Payment[]
 
   @@map("organization")
 }
@@ -177,6 +179,7 @@ model Customer {
   creditLimit  Float?
   isActive     Boolean      @default(true)
   sale         Sale[]
+  payments     Payment[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   //Relations
@@ -264,10 +267,24 @@ model Sale {
   totalAmount Float
   taxAmount   Float?
   discount    Float?
-  status      String // 'Pending', 'Completed'
+  status      String // 'Pending', 'Completed', 'Cancelled'
   saleDate    DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Sum of the payments allocated to this invoice, maintained inside the same
+  // transaction that writes the Payment row, so `amountPaid <= totalAmount` can
+  // be guarded with one conditional update instead of a read-then-write.
+  amountPaid Float @default(0)
+
+  // What the invoice was before it was cancelled, so un-cancel puts back the
+  // status it had rather than guessing between Pending and Completed.
+  statusBeforeCancel String?
+
+  // Soft delete (checkpoint 14). A deleted invoice keeps its lines and its
+  // payment history; only the stock it consumed is reversed, and restore
+  // re-consumes it under an availability check.
+  deletedAt DateTime?
 
   // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -276,7 +293,9 @@ model Sale {
   items    SaleItem[]
   // Sale returns point back at the invoice the goods came off.
   returns  Return[]
+  payments Payment[]
 
+  @@index([customerId])
   @@map("sales")
 }
 
@@ -406,6 +425,11 @@ model Return {
   saleId     String?
   purchaseId String?
 
+  // Soft delete (checkpoint 14): DELETE reverses the stock and stamps this
+  // column instead of removing the row, so the audit trail survives and a
+  // restore can re-apply the movement under an availability check.
+  deletedAt DateTime?
+
   user         User         @relation(fields: [userId], references: [id])
   items        ReturnItem[]
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -432,6 +456,48 @@ model ReturnItem {
   product   Product @relation(fields: [productId], references: [id])
 
   @@map("return_items")
+}
+
+/**
+ * Money received from a customer (checkpoint 15).
+ *
+ * `saleId` is optional on purpose: an allocated payment settles one invoice and
+ * is what moves `Sale.amountPaid`, while an unallocated payment is cash on the
+ * customer's account and appears on the ledger as a receipt without touching any
+ * invoice. Both are the same record, so a statement shows them side by side.
+ *
+ * Correction is a soft delete too -- `deletedAt` -- because a payment that
+ * vanished would make the ledger stop reconciling against reality.
+ */
+model Payment {
+  id             String  @id @default(cuid())
+  paymentCode    String  @unique
+  organizationId String
+  customerId     String
+  saleId         String?
+
+  amount   Float
+  method   String // 'Cash', 'Bank Transfer', 'Mobile Wallet', 'Cheque', 'Other'
+  reference String?
+  note     String?
+  paidAt   DateTime @default(now())
+  userId   String
+
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id])
+  customer     Customer     @relation(fields: [customerId], references: [id])
+  // SetNull rather than a cascade: a fixture tearing down a hard-deleted sale
+  // should leave the money record on the customer's account, not swallow it.
+  sale         Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([customerId])
+  @@index([saleId])
+  @@map("payments")
 }
 
 enum ReturnType {

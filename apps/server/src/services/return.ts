@@ -176,9 +176,14 @@ export async function getReturns({
   pageSize,
   search,
   returnType,
+  deleted,
 }: ReturnListQuery & { organizationId: string }) {
   const where: Prisma.ReturnWhereInput = {
     organizationId,
+    // The Deleted tab asks for the soft-deleted rows explicitly; every other
+    // caller sees active returns only, which is what they saw before the column
+    // existed.
+    deletedAt: deleted ? { not: null } : null,
     ...(returnType ? { returnType } : {}),
     ...(search ? { returnCode: { contains: search, mode: "insensitive" } } : {}),
   };
@@ -318,8 +323,10 @@ export async function createReturn(
       }
 
       if (returnType === "SALE" && saleId) {
+        // A soft-deleted invoice has had its stock reversed, so nothing is left
+        // for a return to hand back against it.
         const sale = await tx.sale.findFirst({
-          where: { id: saleId, organizationId },
+          where: { id: saleId, organizationId, deletedAt: null },
           select: {
             saleCode: true,
             items: { select: { productId: true, quantity: true } },
@@ -334,8 +341,10 @@ export async function createReturn(
           );
         }
 
+        // Deleted returns have given their headroom back, so they must not
+        // still be counted against the document.
         const previous = await tx.return.findMany({
-          where: { saleId, organizationId },
+          where: { saleId, organizationId, deletedAt: null },
           select: { items: { select: { productId: true, quantity: true } } },
         });
 
@@ -367,7 +376,7 @@ export async function createReturn(
         }
 
         const previous = await tx.return.findMany({
-          where: { purchaseId, organizationId },
+          where: { purchaseId, organizationId, deletedAt: null },
           select: { items: { select: { productId: true, quantity: true } } },
         });
 
@@ -503,22 +512,19 @@ export async function updateReturn(
 }
 
 /**
- * Deleting a return has to put the stock back where it found it.
+ * Deleting a return has to put the stock back where it found it — and the row
+ * itself has to survive.
  *
- * Every return this service creates moves stock, so a delete that only removed
+ * Every return this service creates moves stock, so a delete that only stamped
  * the row would leave a SALE return's goods on hand forever with nothing behind
  * them, and would take a PURCHASE or DAMAGED write-off's deduction out of the
- * ledger without ever recording it. The legacy `deleteReturn` had no stock
- * handling at all, because no return had any stock handling to undo.
+ * ledger without ever recording it. The reversal therefore runs exactly as it
+ * always did: its own ledger rows (never edits to the originals), guarded so a
+ * return whose goods have been sold on since is refused rather than clamped.
  *
- * The reversal is written as its own ledger rows rather than by editing or
- * removing the originals: the point of the log is to show what happened to the
- * stock, and a return that was later deleted did happen. A reader sees the
- * movement out and the movement back, which is the truth.
- *
- * Reversing a SALE return is a decrease, so it is guarded like any other. If the
- * returned goods have since been sold on, the reversal is refused rather than
- * clamped at zero, which is the same refusal `createReturn` makes.
+ * What changed at checkpoint 14 is the second half: the row is soft-deleted
+ * (`deletedAt` stamped) instead of removed, so the audit trail survives and the
+ * return can be restored. Physical deletion exists only in test fixtures.
  *
  * `userId` is the member performing the delete, not `Return.userId`. The ledger
  * answers who moved the stock, and the member who took the goods back out is not
@@ -534,6 +540,13 @@ export async function deleteReturn(id: string, organizationId: string, userId: s
 
       if (!existing) {
         throw notFound("Return not found", "RETURN_NOT_FOUND");
+      }
+
+      if (existing.deletedAt) {
+        throw conflict("This return has already been deleted", "RETURN_ALREADY_DELETED", {
+          id: existing.id,
+          returnCode: existing.returnCode,
+        });
       }
 
       // The reversal is the opposite of what the return did.
@@ -583,8 +596,173 @@ export async function deleteReturn(id: string, organizationId: string, userId: s
         });
       }
 
-      // `ReturnItem` rows cascade from the parent, so the lines go with it.
-      return tx.return.delete({ where: { id, organizationId } });
+      // The lines stay: they are the record of what was returned, and the
+      // Deleted tab shows the same detail view as the active list.
+      return tx.return.update({
+        where: { id, organizationId },
+        data: { deletedAt: new Date() },
+        include: detailInclude,
+      });
+    },
+    { isolationLevel: "Serializable" }
+  );
+}
+
+/**
+ * Undo a soft delete: re-apply the movement the delete reversed, then clear
+ * `deletedAt`.
+ *
+ * The asymmetry with `deleteReturn` is deliberate. Restoring a SALE return moves
+ * stock *in*, which needs no guard. Restoring a PURCHASE return or a write-off
+ * moves stock *out* — the deduction the delete gave back — and is refused with
+ * `INSUFFICIENT_STOCK_FOR_RESTORE` if the goods are no longer there, because
+ * clamping at zero would put a movement in the ledger that never happened.
+ *
+ * The document headroom is re-checked too, at `Serializable` for the same reason
+ * `createReturn` is: while the return was deleted, another return could have
+ * taken the quantity this one is about to claim back, and a sum over other rows
+ * cannot hold under READ COMMITTED.
+ */
+export async function restoreReturn(id: string, organizationId: string, userId: string) {
+  return prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.return.findFirst({
+        where: { id, organizationId },
+        include: { items: { select: { productId: true, quantity: true } } },
+      });
+
+      if (!existing) {
+        throw notFound("Return not found", "RETURN_NOT_FOUND");
+      }
+
+      if (!existing.deletedAt) {
+        throw conflict("This return is not deleted", "RETURN_NOT_DELETED", {
+          id: existing.id,
+          returnCode: existing.returnCode,
+        });
+      }
+
+      const requested = sumByProduct(existing.items);
+
+      // The deleted return is excluded from its own headroom: it is claiming
+      // back exactly the quantity it held before, and counting itself would
+      // refuse every restore of a return against a document it filled.
+      if (existing.returnType === "SALE" && existing.saleId) {
+        const sale = await tx.sale.findFirst({
+          where: { id: existing.saleId, organizationId, deletedAt: null },
+          select: {
+            saleCode: true,
+            items: { select: { productId: true, quantity: true } },
+          },
+        });
+
+        if (!sale) {
+          throw conflict(
+            "The invoice this return reverses has been deleted, so the return " +
+              "cannot be brought back",
+            "SALE_DELETED",
+            { saleId: existing.saleId }
+          );
+        }
+
+        const previous = await tx.return.findMany({
+          where: { saleId: existing.saleId, organizationId, deletedAt: null },
+          select: { items: { select: { productId: true, quantity: true } } },
+        });
+
+        assertQuantitiesFit({
+          requested,
+          documentLines: sale.items,
+          alreadyReturned: sumByProduct(previous.flatMap((entry) => entry.items)),
+          documentLabel: "sale",
+          documentCode: sale.saleCode,
+          reference: { saleId: existing.saleId },
+        });
+      }
+
+      if (existing.returnType === "PURCHASE" && existing.purchaseId) {
+        const purchase = await tx.purchase.findFirst({
+          where: { id: existing.purchaseId, organizationId },
+          select: {
+            purchaseCode: true,
+            purchaseItems: { select: { productId: true, quantity: true } },
+          },
+        });
+
+        if (!purchase) {
+          throw conflict(
+            "The purchase this return reverses no longer exists, so the return " +
+              "cannot be brought back",
+            "PURCHASE_NOT_FOUND",
+            { purchaseId: existing.purchaseId }
+          );
+        }
+
+        const previous = await tx.return.findMany({
+          where: { purchaseId: existing.purchaseId, organizationId, deletedAt: null },
+          select: { items: { select: { productId: true, quantity: true } } },
+        });
+
+        assertQuantitiesFit({
+          requested,
+          documentLines: purchase.purchaseItems,
+          alreadyReturned: sumByProduct(previous.flatMap((entry) => entry.items)),
+          documentLabel: "purchase",
+          documentCode: purchase.purchaseCode,
+          reference: { purchaseId: existing.purchaseId },
+        });
+      }
+
+      // Restore re-applies what the return originally did, so the direction is
+      // the return's own — not the delete's reversal.
+      const direction = movesStockIn(existing.returnType) ? "in" : "out";
+
+      for (const [productId, quantity] of requested) {
+        const row = await tx.inventory.findFirst({
+          where: { productId, organizationId },
+          select: { id: true, quantityOnHand: true },
+        });
+
+        if (!row) {
+          throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
+            productId,
+          });
+        }
+
+        const { previousQty, newQty } = await applyStockMovement(
+          tx,
+          row,
+          organizationId,
+          direction,
+          quantity,
+          {
+            code: "INSUFFICIENT_STOCK_FOR_RESTORE",
+            message:
+              "There is no longer enough stock on hand to re-apply this return, so it " +
+              "cannot be restored",
+          }
+        );
+
+        await tx.inventoryLog.create({
+          data: {
+            inventoryId: row.id,
+            productId,
+            userId,
+            movementType: movementTypeFor(existing.returnType),
+            quantity,
+            previousQty,
+            newQty,
+            reason: `Restoration of return ${existing.returnCode}`,
+            reference: existing.returnCode,
+          },
+        });
+      }
+
+      return tx.return.update({
+        where: { id, organizationId },
+        data: { deletedAt: null },
+        include: detailInclude,
+      });
     },
     { isolationLevel: "Serializable" }
   );

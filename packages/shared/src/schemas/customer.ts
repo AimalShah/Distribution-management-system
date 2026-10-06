@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { nullableEmail, nullableMoneyInput, nullableText } from "../inputs";
+import { nullableEmail, nullableMoneyInput, nullableText, optionalDate } from "../inputs";
 import { paginationQuerySchema } from "../pagination";
 
 /**
@@ -58,7 +58,21 @@ export const customerListQuerySchema = paginationQuerySchema.extend({
     .optional(),
 });
 
+/**
+ * The window a statement is rendered for.
+ *
+ * `to` alone is the "as of" statement (everything up to a date, opening balance
+ * zero); both bounds give a period statement whose opening balance is what was
+ * already owed when the window opened. Neither is required: no bounds means the
+ * customer's full history.
+ */
+export const customerLedgerQuerySchema = z.object({
+  from: optionalDate,
+  to: optionalDate,
+});
+
 export type CustomerInput = z.output<typeof CustomerSchema>;
 export type CustomerUpdateInput = z.output<typeof CustomerUpdateSchema>;
 export type CustomerListQuery = z.output<typeof customerListQuerySchema>;
+export type CustomerLedgerQuery = z.output<typeof customerLedgerQuerySchema>;
 export type CustomerFormData = CustomerInput;

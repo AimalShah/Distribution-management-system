@@ -239,7 +239,10 @@ describe("Checkpoint 4h — Supplier Page", () => {
 
     // Delete handler and API call
     expect(listSrc).toContain("handleDelete");
-    expect(listSrc).toMatch(/api\.delete\(\s*`\/suppliers\/\$\{id\}`/);
+    // Checkpoint 17: the delete runs behind the shared ConfirmDialog.
+    expect(listSrc).toMatch(/api\.delete\(\s*`\/suppliers\/\$\{confirmTarget\.id\}`/);
+    expect(listSrc).toContain("ConfirmDialog");
+    expect(listSrc).not.toContain("window.confirm");
     expect(listSrc).toContain("toast.success");
 
     // Route mounted in App.tsx

@@ -2,12 +2,14 @@ import { Router } from "express";
 import {
   CustomerSchema,
   CustomerUpdateSchema,
+  customerLedgerQuerySchema,
   customerListQuerySchema,
 } from "@dms/shared";
 import { asyncHandler, notFound } from "../http";
 import {
   addCustomer,
   getCustomerById,
+  getCustomerLedger,
   getCustomers,
   removeCustomer,
   updateCustomer,
@@ -33,6 +35,20 @@ customerRouter.get(
     const customer = await getCustomerById(req.params.id, req.auth.organizationId);
     if (!customer) throw notFound("Customer not found", "CUSTOMER_NOT_FOUND");
     res.json(customer);
+  })
+);
+
+// `/:id` matches a single segment, so it never captures this two-segment path.
+customerRouter.get(
+  "/:id/ledger",
+  asyncHandler(async (req, res) => {
+    const query = customerLedgerQuerySchema.parse(req.query);
+    const ledger = await getCustomerLedger({
+      customerId: req.params.id,
+      organizationId: req.auth.organizationId,
+      ...query,
+    });
+    res.json(ledger);
   })
 );
 

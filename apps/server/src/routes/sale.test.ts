@@ -15,7 +15,13 @@ const { models, transaction } = vi.hoisted(() => {
     },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
-    inventory: { findFirst: vi.fn(), updateMany: vi.fn() },
+    return: { count: vi.fn() },
+    inventory: {
+      findFirst: vi.fn(),
+      findFirstOrThrow: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     inventoryLog: { create: vi.fn() },
   };
 
@@ -68,6 +74,9 @@ const saleFixture = (overrides: Record<string, unknown> = {}) => ({
   taxAmount: null,
   discount: null,
   status: "Pending",
+  amountPaid: 0,
+  statusBeforeCancel: null,
+  deletedAt: null,
   saleDate: new Date("2026-01-01T00:00:00.000Z"),
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -100,7 +109,10 @@ beforeEach(() => {
   models.sale.delete.mockResolvedValue(saleFixture());
   models.customer.findFirst.mockResolvedValue({ id: "cus_1" });
   models.product.findMany.mockResolvedValue([{ id: "prod_1" }]);
+  models.return.count.mockResolvedValue(0);
   models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 10 });
+  models.inventory.findFirstOrThrow.mockResolvedValue({ id: "inv_1", quantityOnHand: 8 });
+  models.inventory.update.mockResolvedValue({ quantityOnHand: 8 });
   models.inventory.updateMany.mockResolvedValue({ count: 1 });
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
 });
@@ -118,7 +130,7 @@ describe("organization context", () => {
     await request(app).get("/api/sales").set(auth());
 
     expect(models.sale.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 });
@@ -143,6 +155,7 @@ describe("GET /api/sales", () => {
       expect.objectContaining({
         where: {
           organizationId: ORG,
+          deletedAt: null,
           status: "Completed",
           saleCode: { contains: "sal-00", mode: "insensitive" },
         },
@@ -151,7 +164,7 @@ describe("GET /api/sales", () => {
 
     await request(app).get("/api/sales?search=").set(auth());
     expect(models.sale.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 
@@ -210,7 +223,7 @@ describe("GET /api/sales/customer/:customerId", () => {
     expect(res.body.pageCount).toBe(1);
     expect(models.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { customerId: "cus_1", organizationId: ORG },
+        where: { customerId: "cus_1", organizationId: ORG, deletedAt: null },
       })
     );
   });
@@ -594,7 +607,7 @@ describe("PUT /api/sales/:id", () => {
 
     expect(res.status).toBe(200);
     expect(models.sale.update).toHaveBeenCalledWith({
-      where: { id: "sal_1", organizationId: ORG },
+      where: { id: "sal_1", organizationId: ORG, deletedAt: null },
       data: { status: "Completed", taxAmount: 5 },
       include: { customer: true, items: { include: { product: true } } },
     });
@@ -655,38 +668,224 @@ describe("PUT /api/sales/:id", () => {
     expect(models.customer.findFirst).not.toHaveBeenCalled();
   });
 
-  it("does not return stock when a sale is cancelled", async () => {
-    await request(app).put("/api/sales/sal_1").set(auth()).send({ status: "Cancelled" });
+  it("refuses to cancel through PUT, sending the caller to the guarded endpoint", async () => {
+    const res = await request(app)
+      .put("/api/sales/sal_1")
+      .set(auth())
+      .send({ status: "Cancelled" });
 
-    expect(models.sale.update).toHaveBeenCalled();
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USE_CANCEL_ENDPOINT");
+    expect(models.sale.update).not.toHaveBeenCalled();
     expect(models.inventory.updateMany).not.toHaveBeenCalled();
-    expect(models.inventoryLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to edit an invoice that is cancelled", async () => {
+    models.sale.findFirst.mockResolvedValue({ status: "Cancelled" });
+
+    const res = await request(app)
+      .put("/api/sales/sal_1")
+      .set(auth())
+      .send({ status: "Completed" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_IS_CANCELLED");
+    expect(models.sale.update).not.toHaveBeenCalled();
   });
 });
 
 describe("DELETE /api/sales/:id", () => {
-  it("deletes scoped to the organization and returns 204", async () => {
+  it("stamps the invoice, returns its stock, and answers 200", async () => {
     const res = await request(app).delete("/api/sales/sal_1").set(auth());
 
-    expect(res.status).toBe(204);
-    expect(models.sale.delete).toHaveBeenCalledWith({
-      where: { id: "sal_1", organizationId: ORG },
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("sal_1");
+    expect(models.return.count).toHaveBeenCalledWith({
+      where: { saleId: "sal_1", organizationId: ORG, deletedAt: null },
     });
+    // The two units the invoice took come back, one ledger row each.
+    expect(models.inventory.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG }),
+        data: { quantityOnHand: { increment: 2 } },
+      })
+    );
+    expect(models.inventoryLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          movementType: "IN",
+          quantity: 2,
+          reason: "Reversal of sale SAL-001",
+        }),
+      })
+    );
+    expect(models.sale.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "sal_1", organizationId: ORG },
+        data: { deletedAt: expect.any(Date) },
+      })
+    );
   });
 
   it("404s for a sale owned by another tenant", async () => {
-    models.sale.delete.mockRejectedValue(prismaError("P2025"));
+    models.sale.findFirst.mockResolvedValue(null);
 
     const res = await request(app).delete("/api/sales/foreign").set(auth());
 
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe("NOT_FOUND");
+    expect(res.body.code).toBe("SALE_NOT_FOUND");
+    expect(models.sale.update).not.toHaveBeenCalled();
   });
 
-  it("does not return the consumed stock, matching the legacy delete", async () => {
-    await request(app).delete("/api/sales/sal_1").set(auth());
+  it("refuses to delete an invoice that has payments", async () => {
+    models.sale.findFirst.mockResolvedValue(saleFixture({ amountPaid: 20 }));
 
+    const res = await request(app).delete("/api/sales/sal_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_HAS_PAYMENTS");
+    expect(models.inventory.update).not.toHaveBeenCalled();
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete an invoice with active returns", async () => {
+    models.return.count.mockResolvedValue(1);
+
+    const res = await request(app).delete("/api/sales/sal_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_HAS_RETURNS");
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete an invoice that is already deleted", async () => {
+    models.sale.findFirst.mockResolvedValue(saleFixture({ deletedAt: new Date() }));
+
+    const res = await request(app).delete("/api/sales/sal_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_ALREADY_DELETED");
+    expect(models.inventory.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses without a user to attribute the reversal to", async () => {
+    const res = await request(app)
+      .delete("/api/sales/sal_1")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USER_REQUIRED");
+    expect(models.sale.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/sales/:id/restore", () => {
+  it("refuses without a user to attribute the restoration to", async () => {
+    const res = await request(app)
+      .post("/api/sales/sal_1/restore")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USER_REQUIRED");
+    expect(models.sale.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("re-consumes the stock and clears the stamp", async () => {
+    models.sale.findFirst.mockResolvedValue(saleFixture({ deletedAt: new Date() }));
+
+    const res = await request(app).post("/api/sales/sal_1/restore").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(models.inventory.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ quantityOnHand: { gte: 2 } }),
+        data: { quantityOnHand: { decrement: 2 } },
+      })
+    );
+    expect(models.inventoryLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          movementType: "OUT",
+          reason: "Restoration of sale SAL-001",
+        }),
+      })
+    );
+    expect(models.sale.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "sal_1", organizationId: ORG },
+        data: { deletedAt: null },
+      })
+    );
+  });
+
+  it("refuses when the stock has been sold on since", async () => {
+    models.sale.findFirst.mockResolvedValue(saleFixture({ deletedAt: new Date() }));
+    models.inventory.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app).post("/api/sales/sal_1/restore").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STOCK_FOR_RESTORE");
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/sales/:id/cancel and /uncancel", () => {
+  it("cancels and remembers the status it came from", async () => {
+    const res = await request(app).post("/api/sales/sal_1/cancel").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(models.sale.update).toHaveBeenCalledWith({
+      where: { id: "sal_1", organizationId: ORG },
+      data: { status: "Cancelled", statusBeforeCancel: "Pending" },
+      include: { customer: true, items: { include: { product: true } } },
+    });
+    // Cancelling moves no stock and writes no ledger rows.
     expect(models.inventory.updateMany).not.toHaveBeenCalled();
     expect(models.inventoryLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to cancel a paid invoice", async () => {
+    models.sale.findFirst.mockResolvedValue(saleFixture({ amountPaid: 20 }));
+
+    const res = await request(app).post("/api/sales/sal_1/cancel").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_HAS_PAYMENTS");
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to cancel an invoice with returns", async () => {
+    models.return.count.mockResolvedValue(1);
+
+    const res = await request(app).post("/api/sales/sal_1/cancel").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_HAS_RETURNS");
+    expect(models.sale.update).not.toHaveBeenCalled();
+  });
+
+  it("uncancels back to the remembered status", async () => {
+    models.sale.findFirst.mockResolvedValue(
+      saleFixture({ status: "Cancelled", statusBeforeCancel: "Completed" })
+    );
+
+    const res = await request(app).post("/api/sales/sal_1/uncancel").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(models.sale.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "sal_1", organizationId: ORG },
+        data: { status: "Completed", statusBeforeCancel: null },
+      })
+    );
+  });
+
+  it("refuses to un-cancel an invoice that is not cancelled", async () => {
+    const res = await request(app).post("/api/sales/sal_1/uncancel").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SALE_NOT_CANCELLED");
+    expect(models.sale.update).not.toHaveBeenCalled();
   });
 });

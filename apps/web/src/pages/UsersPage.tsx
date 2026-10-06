@@ -20,6 +20,7 @@ import {
   Skeleton,
 } from "@dms/ui";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { UserDialog, type UserRow } from "../components/settings/UserDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 
@@ -89,16 +90,21 @@ export default function UsersPage() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to remove user "${name}"?`)) {
-      return;
-    }
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; label: string } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setConfirmBusy(true);
     try {
-      await api.delete(`/users/${id}`);
+      await api.delete(`/users/${confirmTarget.id}`);
       toast.success("User removed successfully");
+      setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to remove user");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -187,7 +193,7 @@ export default function UsersPage() {
                 variant="ghost"
                 size="icon"
                 className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-                onClick={() => handleDelete(u.id, u.name)}
+                onClick={() => setConfirmTarget({ id: u.id, label: u.name })}
               >
                 <span className="sr-only">Delete</span>
                 <Trash2 className="size-3.5" />
@@ -323,6 +329,16 @@ export default function UsersPage() {
         onOpenChange={setDialogOpen}
         user={selectedUser}
         onSuccess={() => mutate()}
+      />
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title={`Delete user "${confirmTarget?.label ?? ""}"?`}
+        description="The member loses access immediately. Their activity on invoices and payments stays on record."
+        confirmLabel="Remove user"
+        destructive
+        busy={confirmBusy}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmTarget(null)}
       />
     </div>
   );

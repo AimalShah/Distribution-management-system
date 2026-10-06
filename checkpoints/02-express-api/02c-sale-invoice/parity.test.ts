@@ -389,27 +389,55 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
   it("leaves the lines and the deducted stock alone on a header-only update", async () => {
     // `SaleUpdateSchema` omits `items`: rewriting lines without replaying the
     // stock movement would put `Inventory.quantityOnHand` out of step with the
-    // sale rows.
+    // sale rows. Cancelling left that path too — it is a guarded endpoint now,
+    // not a status the PUT can set for itself.
     const product = await stockedProduct(10);
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 3, unitPrice: 10 }] })
     );
 
-    const res = await request(app)
+    const viaPut = await request(app)
       .put(`/api/sales/${created.body.id}`)
       .set(asOrg(t.organizationId))
       .send({ status: "Cancelled", items: [] });
 
+    expect(viaPut.status).toBe(400);
+    expect(viaPut.body).toMatchObject({ code: "USE_CANCEL_ENDPOINT" });
+
+    const res = await request(app)
+      .put(`/api/sales/${created.body.id}`)
+      .set(asOrg(t.organizationId))
+      .send({ status: "Completed", items: [] });
+
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("Cancelled");
+    expect(res.body.status).toBe("Completed");
     expect(res.body.items).toHaveLength(1);
-    // Cancelling does not return the stock either -- a reversal flow is still owed.
+    // A header edit moves no stock.
     expect(
       (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
     ).toBe(7);
+
+    // The guarded cancel changes the status and remembers where it came from,
+    // and it moves no stock either.
+    const cancelled = await request(app)
+      .post(`/api/sales/${created.body.id}/cancel`)
+      .set(asOrg(t.organizationId));
+
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.status).toBe("Cancelled");
+    expect(
+      (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
+    ).toBe(7);
+
+    const uncancelled = await request(app)
+      .post(`/api/sales/${created.body.id}/uncancel`)
+      .set(asOrg(t.organizationId));
+
+    expect(uncancelled.status).toBe(200);
+    expect(uncancelled.body.status).toBe("Completed");
   });
 
-  it("deletes the invoice and its lines, but does not return the stock", async () => {
+  it("stamps the invoice, keeps its lines, and returns the stock", async () => {
     const product = await stockedProduct(10);
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 9, unitPrice: 10 }] })
@@ -418,11 +446,30 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
     const res = await request(app)
       .delete(`/api/sales/${id}`)
-      .set(asOrg(t.organizationId));
-    expect(res.status).toBe(204);
+      .set(asUser(t.organizationId, t.userId));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
 
-    expect(await prisma.sale.findUnique({ where: { id } })).toBeNull();
-    expect(await prisma.saleItem.count({ where: { saleId: id } })).toBe(0);
+    // The row and its lines survive for audit; the stamp is what takes the
+    // invoice out of circulation.
+    const row = await prisma.sale.findUnique({ where: { id } });
+    expect(row).not.toBeNull();
+    expect(row?.deletedAt).not.toBeNull();
+    expect(await prisma.saleItem.count({ where: { saleId: id } })).toBe(1);
+    // Unlike the legacy delete, the nine units come back.
+    expect(
+      (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
+    ).toBe(10);
+
+    // A stamped invoice is out of every list the client can reach.
+    const list = await request(app).get("/api/sales").set(asOrg(t.organizationId));
+    expect(list.body.data.some((row: { id: string }) => row.id === id)).toBe(false);
+
+    // Restore puts it back in circulation and takes the stock out again.
+    const restored = await request(app)
+      .post(`/api/sales/${id}/restore`)
+      .set(asUser(t.organizationId, t.userId));
+    expect(restored.status).toBe(200);
+    expect(restored.body.deletedAt).toBeNull();
     expect(
       (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
     ).toBe(1);

@@ -1,7 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { SaleInvoiceInput, SaleUpdateInput } from "@dms/shared";
-import { badRequest, conflict } from "../http/errors";
+import { badRequest, conflict, notFound } from "../http/errors";
 
 const listInclude = {
   customer: true,
@@ -33,20 +33,32 @@ export type SaleListArgs = {
   pageSize: number;
   search?: string;
   status?: SaleInvoiceInput["status"];
+  /** `true` for the Deleted tab; absent means active invoices only. */
+  deleted?: boolean;
 };
 
 /** Total units of one product across every line, so repeats are checked together. */
-const demandByProduct = (data: SaleInvoiceInput) => {
+const demandByProduct = (lines: { productId: string; quantity: number }[]) => {
   const demand = new Map<string, number>();
-  for (const item of data.items) {
-    demand.set(item.productId, (demand.get(item.productId) ?? 0) + item.quantity);
+  for (const line of lines) {
+    demand.set(line.productId, (demand.get(line.productId) ?? 0) + line.quantity);
   }
   return demand;
 };
 
-export async function getSales({ organizationId, page, pageSize, search, status }: SaleListArgs) {
+export async function getSales({
+  organizationId,
+  page,
+  pageSize,
+  search,
+  status,
+  deleted,
+}: SaleListArgs) {
   const where: Prisma.SaleWhereInput = {
     organizationId,
+    // The Deleted tab asks for the soft-deleted invoices explicitly; every other
+    // caller sees active invoices only, as before.
+    deletedAt: deleted ? { not: null } : null,
     ...(status ? { status } : {}),
     ...(search ? { saleCode: { contains: search, mode: "insensitive" } } : {}),
   };
@@ -96,7 +108,9 @@ export async function getSalesByCustomer({
   page,
   pageSize,
 }: SaleCustomerListArgs) {
-  const where: Prisma.SaleWhereInput = { customerId, organizationId };
+  // Soft-deleted invoices are out of circulation: a customer's history (and the
+  // Payments page that picks invoices to settle) shows active invoices only.
+  const where: Prisma.SaleWhereInput = { customerId, organizationId, deletedAt: null };
 
   const [data, total] = await Promise.all([
     prisma.sale.findMany({
@@ -153,7 +167,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
       );
     }
 
-    const productIds = [...demandByProduct(data).keys()];
+    const productIds = [...demandByProduct(data.items).keys()];
     const owned = await tx.product.findMany({
       where: { id: { in: productIds }, organizationId },
       select: { id: true },
@@ -184,7 +198,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     // reserves stock, so `quantityReserved` is not part of availability yet.
     const shortages: { productId: string; available: number; requested: number }[] = [];
 
-    for (const [productId, requested] of demandByProduct(data)) {
+    for (const [productId, requested] of demandByProduct(data.items)) {
       const inventory = await tx.inventory.findFirst({
         where: { productId, organizationId },
         select: { quantityOnHand: true },
@@ -333,18 +347,328 @@ export async function updateSale(
     }
   }
 
+  // Cancel and un-cancel are guarded contracts, not free-form status edits:
+  // the endpoints refuse invoices with payments or returns and remember the
+  // status they came from. A PUT that could set `Cancelled` directly would be a
+  // second, unguarded way past exactly those checks.
+  if (data.status !== undefined) {
+    const current = await prisma.sale.findFirst({
+      where: { id, organizationId, deletedAt: null },
+      select: { status: true },
+    });
+
+    if (current) {
+      if (data.status === "Cancelled") {
+        throw badRequest(
+          "Cancel an invoice through POST /api/sales/:id/cancel, which checks " +
+            "for payments and returns first",
+          "USE_CANCEL_ENDPOINT"
+        );
+      }
+
+      if (current.status === "Cancelled") {
+        throw conflict(
+          "This invoice is cancelled. Un-cancel it through POST /api/sales/:id/uncancel first",
+          "SALE_IS_CANCELLED",
+          { status: current.status }
+        );
+      }
+    }
+  }
+
   const updateData: Prisma.SaleUncheckedUpdateInput = { ...data };
 
+  // A soft-deleted invoice is out of circulation: its stock has been given
+  // back, so rewriting its header would edit a document nothing matches
+  // anymore. Restore it first.
   return prisma.sale.update({
-    where: { id, organizationId },
+    where: { id, organizationId, deletedAt: null },
     data: updateData,
     include: detailInclude,
   });
 }
 
-// Deleting a sale does not return the stock it consumed, and moving a sale to
-// "Cancelled" does not either. The legacy delete behaved the same way. Both need
-// a reversal flow, which this checkpoint does not invent.
-export async function deleteSale(id: string, organizationId: string) {
-  await prisma.sale.delete({ where: { id, organizationId } });
+/**
+ * Soft delete: give the stock back, stamp `deletedAt`, keep the document.
+ *
+ * The legacy delete removed the row and returned nothing — the comment that sat
+ * here said a reversal flow "this checkpoint does not invent". Checkpoint 14
+ * invents it, because a deleted invoice whose stock never came back leaves
+ * `quantityOnHand` disagreeing with every document that exists.
+ *
+ * Three guards run before anything moves, all inside one `Serializable`
+ * transaction so a concurrent payment or return cannot slip past them:
+ *
+ * - **Payments.** An invoice with money against it cannot vanish: the payment
+ *   would become a credit with no invoice it was ever applied to. Correct the
+ *   payments first (a payment soft-deletes too), then the invoice.
+ * - **Returns.** A SALE return is held to this invoice's lines. Deleting the
+ *   invoice underneath an active return would strand the return on a document
+ *   that no longer claims to have sold anything.
+ * - **Cancelled invoices reverse nothing.** Cancelling already left the stock
+ *   where it is, so this is the one path where the reversal is real work rather
+ *   than bookkeeping — see below.
+ *
+ * The reversal itself is an increase, so it needs no availability guard: the
+ * sale took these units out, and they are either in the warehouse or they are
+ * not, but putting them back can never go negative.
+ */
+export async function deleteSale(id: string, organizationId: string, userId: string) {
+  return prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.sale.findFirst({
+        where: { id, organizationId },
+        include: { items: { select: { productId: true, quantity: true } } },
+      });
+
+      if (!existing) {
+        throw notFound("Sale not found", "SALE_NOT_FOUND");
+      }
+
+      if (existing.deletedAt) {
+        throw conflict("This invoice has already been deleted", "SALE_ALREADY_DELETED", {
+          id: existing.id,
+          saleCode: existing.saleCode,
+        });
+      }
+
+      if (existing.amountPaid > 0) {
+        throw conflict(
+          "This invoice has payments recorded against it. Correct them first, " +
+            "then delete the invoice.",
+          "SALE_HAS_PAYMENTS",
+          { saleCode: existing.saleCode, amountPaid: existing.amountPaid }
+        );
+      }
+
+      const activeReturns = await tx.return.count({
+        where: { saleId: existing.id, organizationId, deletedAt: null },
+      });
+
+      if (activeReturns > 0) {
+        throw conflict(
+          "Returns have been recorded against this invoice. Delete those first, " +
+            "then delete the invoice.",
+          "SALE_HAS_RETURNS",
+          { saleCode: existing.saleCode, returns: activeReturns }
+        );
+      }
+
+      for (const [productId, quantity] of demandByProduct(existing.items)) {
+        const row = await tx.inventory.findFirst({
+          where: { productId, organizationId },
+          select: { id: true, quantityOnHand: true },
+        });
+
+        if (!row) {
+          throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
+            productId,
+          });
+        }
+
+        const updated = await tx.inventory.update({
+          where: { id: row.id, organizationId },
+          data: { quantityOnHand: { increment: quantity } },
+          select: { quantityOnHand: true },
+        });
+
+        await tx.inventoryLog.create({
+          data: {
+            inventoryId: row.id,
+            productId,
+            userId,
+            movementType: "IN",
+            quantity,
+            previousQty: updated.quantityOnHand - quantity,
+            newQty: updated.quantityOnHand,
+            reason: `Reversal of sale ${existing.saleCode}`,
+            reference: existing.saleCode,
+          },
+        });
+      }
+
+      return tx.sale.update({
+        where: { id, organizationId },
+        data: { deletedAt: new Date() },
+        include: detailInclude,
+      });
+    },
+    { isolationLevel: "Serializable" }
+  );
+}
+
+/**
+ * Undo a soft delete: re-consume the stock the delete gave back, then clear
+ * `deletedAt`.
+ *
+ * This is the direction that can fail. The sale is asking for units back out of
+ * the warehouse, and they may have been sold on since — the guarded decrement
+ * refuses rather than clamps, exactly like `createSale`, so a restore can never
+ * drive `quantityOnHand` negative or write a ledger row whose arithmetic does
+ * not hold.
+ */
+export async function restoreSale(id: string, organizationId: string, userId: string) {
+  return prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.sale.findFirst({
+        where: { id, organizationId },
+        include: { items: { select: { productId: true, quantity: true } } },
+      });
+
+      if (!existing) {
+        throw notFound("Sale not found", "SALE_NOT_FOUND");
+      }
+
+      if (!existing.deletedAt) {
+        throw conflict("This invoice is not deleted", "SALE_NOT_DELETED", {
+          id: existing.id,
+          saleCode: existing.saleCode,
+        });
+      }
+
+      for (const [productId, quantity] of demandByProduct(existing.items)) {
+        const claimed = await tx.inventory.updateMany({
+          where: {
+            productId,
+            organizationId,
+            quantityOnHand: { gte: quantity },
+          },
+          data: { quantityOnHand: { decrement: quantity } },
+        });
+
+        if (claimed.count === 0) {
+          const current = await tx.inventory.findFirst({
+            where: { productId, organizationId },
+            select: { quantityOnHand: true },
+          });
+
+          if (!current) {
+            throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
+              productId,
+            });
+          }
+
+          throw conflict(
+            "There is no longer enough stock on hand to re-apply this invoice, " +
+              "so it cannot be restored",
+            "INSUFFICIENT_STOCK_FOR_RESTORE",
+            { productId, available: current.quantityOnHand, requested: quantity }
+          );
+        }
+
+        const current = await tx.inventory.findFirstOrThrow({
+          where: { productId, organizationId },
+          select: { id: true, quantityOnHand: true },
+        });
+
+        await tx.inventoryLog.create({
+          data: {
+            inventoryId: current.id,
+            productId,
+            userId,
+            movementType: "OUT",
+            quantity,
+            previousQty: current.quantityOnHand + quantity,
+            newQty: current.quantityOnHand,
+            reason: `Restoration of sale ${existing.saleCode}`,
+            reference: existing.saleCode,
+          },
+        });
+      }
+
+      return tx.sale.update({
+        where: { id, organizationId },
+        data: { deletedAt: null },
+        include: detailInclude,
+      });
+    },
+    { isolationLevel: "Serializable" }
+  );
+}
+
+/**
+ * Cancel an invoice without touching stock — cancelling never has, and that is
+ * the point of it as distinct from deleting: cancel keeps the goods out of the
+ * warehouse (the sale still happened) while taking the document out of
+ * circulation. `statusBeforeCancel` remembers what it was, so un-cancel is an
+ * exact undo rather than a guess.
+ *
+ * Refused while money is against it, for the same reason deletion is: a
+ * cancelled invoice nothing can settle would strand the payments.
+ */
+export async function cancelSale(id: string, organizationId: string) {
+  const existing = await prisma.sale.findFirst({
+    where: { id, organizationId, deletedAt: null },
+    select: { id: true, saleCode: true, status: true, amountPaid: true },
+  });
+
+  if (!existing) {
+    throw notFound("Sale not found", "SALE_NOT_FOUND");
+  }
+
+  if (existing.status === "Cancelled") {
+    throw conflict("This invoice is already cancelled", "SALE_ALREADY_CANCELLED", {
+      saleCode: existing.saleCode,
+    });
+  }
+
+  if (existing.amountPaid > 0) {
+    throw conflict(
+      "This invoice has payments recorded against it. Correct them first, " +
+        "then cancel the invoice.",
+      "SALE_HAS_PAYMENTS",
+      { saleCode: existing.saleCode, amountPaid: existing.amountPaid }
+    );
+  }
+
+  // A cancelled invoice that still carries returns would leave the customer's
+  // goods credited against a document that never happened. Same refusal the
+  // delete gives, for the same reason.
+  const activeReturns = await prisma.return.count({
+    where: { saleId: existing.id, organizationId, deletedAt: null },
+  });
+
+  if (activeReturns > 0) {
+    throw conflict(
+      "Returns have been recorded against this invoice. Delete those first, " +
+        "then cancel the invoice.",
+      "SALE_HAS_RETURNS",
+      { saleCode: existing.saleCode, returns: activeReturns }
+    );
+  }
+
+  return prisma.sale.update({
+    where: { id, organizationId },
+    data: { status: "Cancelled", statusBeforeCancel: existing.status },
+    include: detailInclude,
+  });
+}
+
+/**
+ * Un-cancel. Stock was never touched by the cancel, so nothing is re-applied
+ * and no availability check is needed — the asymmetry with `restoreSale` is
+ * what makes cancel the cheap operation and delete the expensive one.
+ */
+export async function uncancelSale(id: string, organizationId: string) {
+  const existing = await prisma.sale.findFirst({
+    where: { id, organizationId, deletedAt: null },
+    select: { id: true, saleCode: true, status: true, statusBeforeCancel: true },
+  });
+
+  if (!existing) {
+    throw notFound("Sale not found", "SALE_NOT_FOUND");
+  }
+
+  if (existing.status !== "Cancelled") {
+    throw conflict("This invoice is not cancelled", "SALE_NOT_CANCELLED", {
+      saleCode: existing.saleCode,
+      status: existing.status,
+    });
+  }
+
+  return prisma.sale.update({
+    where: { id, organizationId },
+    data: { status: existing.statusBeforeCancel ?? "Pending", statusBeforeCancel: null },
+    include: detailInclude,
+  });
 }
