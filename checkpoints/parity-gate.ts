@@ -114,6 +114,10 @@ export const GATE: readonly GateEntry[] = [
     status: "gated",
   },
   {
+    dir: "09-brand-scoping-sale-purchase",
+    status: "gated",
+  },
+  {
     dir: "04-react-web-app",
     status: "pending",
     reason:

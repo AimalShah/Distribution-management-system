@@ -4,7 +4,7 @@ import type { PurchaseReportQuery } from "@dms/shared";
 
 const purchaseWindow = (
   organizationId: string,
-  { startDate, endDate }: PurchaseReportQuery
+  { startDate, endDate, brandId }: PurchaseReportQuery
 ): Prisma.PurchaseWhereInput => ({
   organizationId,
   ...(startDate || endDate
@@ -12,6 +12,15 @@ const purchaseWindow = (
         purchaseDate: {
           ...(startDate ? { gte: startDate } : {}),
           ...(endDate ? { lte: endDate } : {}),
+        },
+      }
+    : {}),
+  ...(brandId
+    ? {
+        purchaseItems: {
+          some: {
+            product: { brandId },
+          },
         },
       }
     : {}),
@@ -186,7 +195,10 @@ export async function getPurchaseByProduct(
   // spend-weighted -- the number the loop produced, preserved here.
   const groups = await prisma.purchaseItem.groupBy({
     by: ["productId"],
-    where: { purchase: purchaseWindow(organizationId, query) },
+    where: {
+      purchase: purchaseWindow(organizationId, query),
+      ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
+    },
     _count: { _all: true },
     _sum: { quantity: true, totalCost: true, unitCost: true },
     orderBy: { _sum: { totalCost: "desc" } },
@@ -196,6 +208,7 @@ export async function getPurchaseByProduct(
     where: {
       organizationId,
       id: { in: groups.map((group) => group.productId) },
+      ...(query.brandId ? { brandId: query.brandId } : {}),
     },
     select: { id: true, name: true, productCode: true, unit: true },
   });
@@ -224,15 +237,87 @@ export async function getPurchaseByProduct(
   });
 }
 
+/**
+ * Purchases grouped by Brand.
+ */
+export async function getPurchaseByBrand(
+  organizationId: string,
+  query: PurchaseReportQuery
+) {
+  const where: Prisma.PurchaseItemWhereInput = {
+    purchase: purchaseWindow(organizationId, query),
+    ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
+  };
+
+  const groups = await prisma.purchaseItem.groupBy({
+    by: ["productId"],
+    where,
+    _count: { _all: true },
+    _sum: { quantity: true, totalCost: true },
+  });
+
+  if (groups.length === 0) return [];
+
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((g) => g.productId) },
+    },
+    select: {
+      id: true,
+      name: true,
+      brandId: true,
+      brand: { select: { id: true, name: true } },
+    },
+  });
+
+  const productMap = new Map(products.map((p) => [p.id, p]));
+  const brandMap = new Map<
+    string,
+    {
+      brandId: string;
+      brandName: string;
+      productCount: number;
+      quantity: number;
+      totalCost: number;
+      lineItems: number;
+    }
+  >();
+
+  for (const group of groups) {
+    const prod = productMap.get(group.productId);
+    if (!prod || !prod.brand) continue;
+
+    const bId = prod.brand.id;
+    const existing = brandMap.get(bId) || {
+      brandId: bId,
+      brandName: prod.brand.name,
+      productCount: 0,
+      quantity: 0,
+      totalCost: 0,
+      lineItems: 0,
+    };
+
+    existing.productCount += 1;
+    existing.quantity += group._sum.quantity ?? 0;
+    existing.totalCost += group._sum.totalCost ?? 0;
+    existing.lineItems += group._count._all;
+    brandMap.set(bId, existing);
+  }
+
+  return [...brandMap.values()].sort((a, b) => b.totalCost - a.totalCost);
+}
+
 export async function getFullPurchaseReport(
   organizationId: string,
   query: PurchaseReportQuery
 ) {
-  const [basic, bySupplier, byProduct] = await Promise.all([
+  const [basic, bySupplier, byProduct, byBrand] = await Promise.all([
     getBasicPurchaseReport(organizationId, query),
     getPurchaseBySupplier(organizationId, query),
     getPurchaseByProduct(organizationId, query),
+    getPurchaseByBrand(organizationId, query),
   ]);
 
-  return { basic, bySupplier, byProduct, generatedAt: new Date() };
+  return { basic, bySupplier, byProduct, byBrand, generatedAt: new Date() };
 }

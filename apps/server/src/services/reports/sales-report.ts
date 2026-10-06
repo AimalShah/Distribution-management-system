@@ -4,7 +4,7 @@ import type { SalesReportQuery } from "@dms/shared";
 
 const saleWindow = (
   organizationId: string,
-  { startDate, endDate }: SalesReportQuery
+  { startDate, endDate, brandId }: SalesReportQuery
 ): Prisma.SaleWhereInput => ({
   organizationId,
   // A soft-deleted invoice gave its stock back and is out of circulation, so
@@ -15,6 +15,15 @@ const saleWindow = (
         saleDate: {
           ...(startDate ? { gte: startDate } : {}),
           ...(endDate ? { lte: endDate } : {}),
+        },
+      }
+    : {}),
+  ...(brandId
+    ? {
+        items: {
+          some: {
+            product: { brandId },
+          },
         },
       }
     : {}),
@@ -215,7 +224,10 @@ export async function getSalesByProduct(
   // different number and a different question.
   const groups = await prisma.saleItem.groupBy({
     by: ["productId"],
-    where: { sale: saleWindow(organizationId, query) },
+    where: {
+      sale: saleWindow(organizationId, query),
+      ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
+    },
     _count: { _all: true },
     _sum: { quantity: true, totalPrice: true, unitPrice: true },
     orderBy: { _sum: { totalPrice: "desc" } },
@@ -225,6 +237,7 @@ export async function getSalesByProduct(
     where: {
       organizationId,
       id: { in: groups.map((group) => group.productId) },
+      ...(query.brandId ? { brandId: query.brandId } : {}),
     },
     select: { id: true, name: true, productCode: true, unit: true },
   });
@@ -253,15 +266,87 @@ export async function getSalesByProduct(
   });
 }
 
+/**
+ * Sales grouped by Brand.
+ */
+export async function getSalesByBrand(
+  organizationId: string,
+  query: SalesReportQuery
+) {
+  const where: Prisma.SaleItemWhereInput = {
+    sale: saleWindow(organizationId, query),
+    ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
+  };
+
+  const groups = await prisma.saleItem.groupBy({
+    by: ["productId"],
+    where,
+    _count: { _all: true },
+    _sum: { quantity: true, totalPrice: true },
+  });
+
+  if (groups.length === 0) return [];
+
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      id: { in: groups.map((g) => g.productId) },
+    },
+    select: {
+      id: true,
+      name: true,
+      brandId: true,
+      brand: { select: { id: true, name: true } },
+    },
+  });
+
+  const productMap = new Map(products.map((p) => [p.id, p]));
+  const brandMap = new Map<
+    string,
+    {
+      brandId: string;
+      brandName: string;
+      productCount: number;
+      quantity: number;
+      totalAmount: number;
+      lineItems: number;
+    }
+  >();
+
+  for (const group of groups) {
+    const prod = productMap.get(group.productId);
+    if (!prod || !prod.brand) continue;
+
+    const bId = prod.brand.id;
+    const existing = brandMap.get(bId) || {
+      brandId: bId,
+      brandName: prod.brand.name,
+      productCount: 0,
+      quantity: 0,
+      totalAmount: 0,
+      lineItems: 0,
+    };
+
+    existing.productCount += 1;
+    existing.quantity += group._sum.quantity ?? 0;
+    existing.totalAmount += group._sum.totalPrice ?? 0;
+    existing.lineItems += group._count._all;
+    brandMap.set(bId, existing);
+  }
+
+  return [...brandMap.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+}
+
 export async function getFullSalesReport(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  const [basic, byCustomer, byProduct] = await Promise.all([
+  const [basic, byCustomer, byProduct, byBrand] = await Promise.all([
     getBasicSalesReport(organizationId, query),
     getSalesByCustomer(organizationId, query),
     getSalesByProduct(organizationId, query),
+    getSalesByBrand(organizationId, query),
   ]);
 
-  return { basic, byCustomer, byProduct, generatedAt: new Date() };
+  return { basic, byCustomer, byProduct, byBrand, generatedAt: new Date() };
 }

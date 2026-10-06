@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   purchaseBasicQuerySchema,
+  purchaseByBrandQuerySchema,
   purchaseByProductQuerySchema,
   purchaseBySupplierQuerySchema,
   purchaseFullQuerySchema,
@@ -9,6 +10,7 @@ import { asyncHandler } from "../../http";
 import {
   getBasicPurchaseReport,
   getFullPurchaseReport,
+  getPurchaseByBrand,
   getPurchaseByProduct,
   getPurchaseBySupplier,
 } from "../../services/reports/purchase-report";
@@ -41,6 +43,14 @@ purchaseReportRouter.get(
   asyncHandler(async (req, res) => {
     const query = purchaseByProductQuerySchema.parse(req.query);
     res.json(await getPurchaseByProduct(req.auth.organizationId, query));
+  })
+);
+
+purchaseReportRouter.get(
+  "/by-brand",
+  asyncHandler(async (req, res) => {
+    const query = purchaseByBrandQuerySchema.parse(req.query);
+    res.json(await getPurchaseByBrand(req.auth.organizationId, query));
   })
 );
 

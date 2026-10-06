@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   salesBasicQuerySchema,
+  salesByBrandQuerySchema,
   salesByCustomerQuerySchema,
   salesByProductQuerySchema,
   salesFullQuerySchema,
@@ -9,6 +10,7 @@ import { asyncHandler } from "../../http";
 import {
   getBasicSalesReport,
   getFullSalesReport,
+  getSalesByBrand,
   getSalesByCustomer,
   getSalesByProduct,
 } from "../../services/reports/sales-report";
@@ -41,6 +43,14 @@ salesReportRouter.get(
   asyncHandler(async (req, res) => {
     const query = salesByProductQuerySchema.parse(req.query);
     res.json(await getSalesByProduct(req.auth.organizationId, query));
+  })
+);
+
+salesReportRouter.get(
+  "/by-brand",
+  asyncHandler(async (req, res) => {
+    const query = salesByBrandQuerySchema.parse(req.query);
+    res.json(await getSalesByBrand(req.auth.organizationId, query));
   })
 );
 

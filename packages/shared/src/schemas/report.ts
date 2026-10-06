@@ -30,6 +30,7 @@ export const reportRangeQuerySchema = z
   .object({
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),
+    brandId: z.string().trim().optional(),
   })
   .superRefine(({ startDate, endDate }, ctx) => {
     if (startDate && endDate && startDate > endDate) {
@@ -71,11 +72,13 @@ export const inventoryFullQuerySchema = reportExpiryQuerySchema;
 export const purchaseBasicQuerySchema = reportRangeQuerySchema;
 export const purchaseBySupplierQuerySchema = reportRangeQuerySchema;
 export const purchaseByProductQuerySchema = reportRangeQuerySchema;
+export const purchaseByBrandQuerySchema = reportRangeQuerySchema;
 export const purchaseFullQuerySchema = reportRangeQuerySchema;
 
 export const salesBasicQuerySchema = reportRangeQuerySchema;
 export const salesByCustomerQuerySchema = reportRangeQuerySchema;
 export const salesByProductQuerySchema = reportRangeQuerySchema;
+export const salesByBrandQuerySchema = reportRangeQuerySchema;
 export const salesFullQuerySchema = reportRangeQuerySchema;
 
 export type ReportRangeQuery = z.output<typeof reportRangeQuerySchema>;

@@ -33,7 +33,8 @@ not from what a `plan.md` claims.
 | 06 — RBAC Rebuild | **Implemented** — Prisma roles/permissions, Express API `/api/roles`, web matrix UI, `gated` |
 | 07 — Batch/Lot Inventory + Expiry KPI | **Implemented** — `StockBatch` model, FEFO deductions, expiry reports, web lot views & KPI card, `gated` |
 | 08 — GST Fields + Sale Tax Invoice | **Implemented** — Product/Sale/SaleItem GST columns, intra/inter-state tax logic, invoice template & PDF, UI forms, `gated` |
-| 09–12 — Domain features | **Spec only** |
+| 09 — Brand-Scoping on Sale/Purchase | **Implemented** — brand-scoping queries on sales & purchases, sales/purchase by-brand endpoints, web UI BrandReportTab & filter bar, `gated` |
+| 10–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 | 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
 | 15 — Payments & Invoice Lifecycle | **Partial** — code + server tests on `main`; parity suite is a plan only |
@@ -204,13 +205,21 @@ Landed in this checkpoint. Complete GST lifecycle implemented:
 - **Web UI**: `ProductForm.tsx` supports GST Applicable toggle and GST Rate input; `SaleInvoiceForm.tsx` supports Invoice Type ("Regular" vs "Tax Invoice") select, Inter-State checkbox, and real-time CGST/SGST/IGST breakdown cards.
 - **Parity Gate**: `checkpoints/08-gst-fields-sale-tax-invoice/parity.test.ts` (11 tests) is `gated` in `checkpoints/parity-gate.ts`, and acceptance suite is implemented.
 
-## 09–12 — Domain features · Spec only
+## 09 — Brand-Scoping on Sale/Purchase · Implemented
+
+Brand-scoping and brand grouping on sales and purchase reports (Option B):
+- **Schemas**: `packages/shared/src/schemas/report.ts` updated with optional `brandId` on `reportRangeQuerySchema`, plus `salesByBrandQuerySchema` and `purchaseByBrandQuerySchema`.
+- **Backend Services**: `getSalesByProduct` and `getPurchaseByProduct` filter sales/purchases by product brand; `getSalesByBrand` and `getPurchaseByBrand` compute volume, spend, revenue, and item breakdowns grouped by brand; `getFullSalesReport` and `getFullPurchaseReport` include brand analytics.
+- **Express Routes**: `GET /api/reports/sales/by-brand` and `GET /api/reports/purchase/by-brand` mounted in sales/purchase report routers with auth and validation.
+- **Web UI**: `BrandReportTab.tsx` provides high-level brand metrics (active brands, revenue, spend, margin), brand volume/value breakdowns, and comprehensive tabular analytics. `ReportsPage.tsx` integrates the Brand dropdown selector (`brand-filter-select`) into query parameters and mounts the Brand Report tab.
+- **Parity Gate**: `checkpoints/09-brand-scoping-sale-purchase/parity.test.ts` (6 tests) is `gated` in `checkpoints/parity-gate.ts`, and all 5 acceptance test cases are implemented and passing.
+
+## 10–12 — Domain features · Spec only
 
 Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
 
 | ID | Checkpoint | Empty stubs |
 |---|---|---|
-| 09 | Brand-Scoping on Sale/Purchase | 5 |
 | 10 | Bulk Import, Wired for Real | 7 |
 | 11 | Return Policy, Credit Terms, Customer GST | 6 |
 | 12 | Client's Invoice Layout Swap-In | 6 |

@@ -17,10 +17,22 @@ import {
 import { SalesReportTab } from "../components/reports/SalesReportTab";
 import { PurchaseReportTab } from "../components/reports/PurchaseReportTab";
 import { InventoryReportTab } from "../components/reports/InventoryReportTab";
+import { BrandReportTab } from "../components/reports/BrandReportTab";
 import { ListPageHeader } from "../components/list/ListPageHeader";
+import { api } from "../lib/api";
+import useSWR from "swr";
+
+const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<string>("monthly");
+  const [selectedBrandId, setSelectedBrandId] = useState<string>("");
+  const { data: brandsData } = useSWR<{ data: Array<{ id: string; name: string }> }>(
+    "/brands?pageSize=100",
+    fetcher
+  );
+  const brands = brandsData?.data ?? [];
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const end = new Date();
     const start = new Date(end.getFullYear(), end.getMonth(), 1);
@@ -62,8 +74,11 @@ export default function ReportsPage() {
     if (dateRange?.to) {
       params.set("endDate", dateRange.to.toISOString());
     }
+    if (selectedBrandId) {
+      params.set("brandId", selectedBrandId);
+    }
     return params.toString();
-  }, [dateRange]);
+  }, [dateRange, selectedBrandId]);
 
   return (
     <div className="space-y-5 animate-slideInUp">
@@ -99,7 +114,7 @@ export default function ReportsPage() {
         }
       />
 
-      {/* Date Filters Card */}
+      {/* Date & Brand Filters Card */}
       <div className="card p-4 flex flex-wrap items-center justify-between gap-3 bg-card border-border">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground mr-1">Time Horizon:</span>
@@ -131,6 +146,29 @@ export default function ReportsPage() {
             }}
             className="h-9 text-xs rounded-lg"
           />
+
+          <span className="text-xs font-medium text-muted-foreground ml-3 mr-1">Brand:</span>
+          <Select
+            value={selectedBrandId || "all"}
+            onValueChange={(val) => {
+              setSelectedBrandId(val === "all" ? "" : val);
+            }}
+          >
+            <SelectTrigger
+              data-testid="brand-filter-select"
+              className="w-[160px] h-9 text-xs rounded-lg bg-background"
+            >
+              <SelectValue placeholder="All Brands" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Brands</SelectItem>
+              {brands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -140,6 +178,7 @@ export default function ReportsPage() {
           <TabsTrigger value="salesReport" className="rounded-lg text-xs font-medium px-4">Sales Report</TabsTrigger>
           <TabsTrigger value="purchaseReport" className="rounded-lg text-xs font-medium px-4">Purchase Report</TabsTrigger>
           <TabsTrigger value="inventoryReport" className="rounded-lg text-xs font-medium px-4">Inventory Report</TabsTrigger>
+          <TabsTrigger value="brandReport" className="rounded-lg text-xs font-medium px-4">Brand Report</TabsTrigger>
         </TabsList>
 
         <TabsContent value="salesReport">
@@ -152,6 +191,10 @@ export default function ReportsPage() {
 
         <TabsContent value="inventoryReport">
           <InventoryReportTab queryString={queryString} />
+        </TabsContent>
+
+        <TabsContent value="brandReport">
+          <BrandReportTab queryString={queryString} />
         </TabsContent>
       </Tabs>
     </div>
