@@ -30,7 +30,7 @@ not from what a `plan.md` claims.
 | 03 — Auth | **Implemented** — better-auth sessions + header trusted-proxy; `gated` |
 | 04a–04j — React Web App | **Implemented** — 23 pages, all ten sub-suites `gated` |
 | 05 — Electron Shell | **Implemented** — packaging, security contracts & build output `gated` |
-| 06 — RBAC Rebuild | **Spec only** |
+| 06 — RBAC Rebuild | **Implemented** — Prisma roles/permissions, Express API `/api/roles`, web matrix UI, `gated` |
 | 07–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 | 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
@@ -174,25 +174,28 @@ guarded IPC preload bridge, standard 1400x900 window, dev/prod load switches, Co
 config (`dist/`), and multi-platform packaging (`electron-builder.yml`). Its parity suite is `gated`
 and passes.
 
-## 06–12 — Domain features · Spec only
+## 06 — RBAC Rebuild · Implemented
+
+Replaced the placeholder `project`-only model with real resource/action statements across all 12 DMS resources
+(`inventory`, `sales`, `purchases`, `returns`, `customers`, `suppliers`, `products`, `categories`, `brands`, `reports`, `settings`, `users`).
+Prisma models `Role` and `RolePermission` added with `Member.roleId` relationship. Default system roles seeded:
+`Admin` (full access), `Sales`, `Inventory Staff`, and `Manager`. Express API endpoints `/api/roles` support listing, creating,
+updating, and deleting custom roles, with system role protection against deletion and rename. `PermissionPage.tsx`
+provides a complete permission matrix comparison view and custom role editor dialog with action checklists.
+Gated in `parity-gate.ts` and covered by `checkpoints/06-rbac-rebuild/parity.test.ts`.
+
+## 07–12 — Domain features · Spec only
 
 Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
 
 | ID | Checkpoint | Empty stubs |
 |---|---|---|
-| 06 | RBAC Rebuild | 7 of 7 |
 | 07 | Batch/Lot Inventory + Expiry KPI | 7 |
 | 08 | GST Fields + Sale Tax Invoice | 6 |
 | 09 | Brand-Scoping on Sale/Purchase | 5 |
 | 10 | Bulk Import, Wired for Real | 7 |
 | 11 | Return Policy, Credit Terms, Customer GST | 6 |
 | 12 | Client's Invoice Layout Swap-In | 6 |
-
-Checkpoint 6 matters more than its empty tests suggest: it owns reconciling the role
-vocabulary. `Member.role` is a plain `String` with three competing spellings in the codebase —
-`Member.role` uses `owner`/`adminRole`, `User.role` spells it `admin`, and `prisma/seed.ts`
-writes `ADMIN` and `STAFF`. Role comparisons are case-sensitive on purpose, so a row saying
-`ADMIN` is not elevated.
 
 ## 13 — Invenza UI Theme & Dashboard · Implemented
 

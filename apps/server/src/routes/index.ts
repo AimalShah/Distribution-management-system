@@ -11,6 +11,7 @@ import { returnRouter } from "./return";
 import { inventoryReportRouter } from "./reports/inventory";
 import { purchaseReportRouter } from "./reports/purchase";
 import { salesReportRouter } from "./reports/sales";
+import { roleRouter } from "./role";
 import { saleRouter } from "./sale";
 import { supplierRouter } from "./supplier";
 
@@ -26,6 +27,7 @@ apiRouter.use("/payments", paymentRouter);
 apiRouter.use("/suppliers", supplierRouter);
 apiRouter.use("/categories", categoryRouter);
 apiRouter.use("/brands", brandRouter);
+apiRouter.use("/roles", roleRouter);
 apiRouter.use("/reports/inventory", inventoryReportRouter);
 apiRouter.use("/reports/purchase", purchaseReportRouter);
 apiRouter.use("/reports/sales", salesReportRouter);

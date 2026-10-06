@@ -108,6 +108,7 @@ model Organization {
   Brands      Brand[]
   Inventory   Inventory[]
   Payments    Payment[]
+  roles       Role[]
 
   @@map("organization")
 }
@@ -119,6 +120,8 @@ model Member {
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           String
+  roleId         String?
+  customRole     Role?        @relation(fields: [roleId], references: [id], onDelete: SetNull)
   createdAt      DateTime
 
   // One membership per user per organization, enforced by the database. The
@@ -130,6 +133,34 @@ model Member {
   // owner and no route to appoint one.
   @@unique([organizationId, userId])
   @@map("member")
+}
+
+model Role {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  isSystem       Boolean          @default(false)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions    RolePermission[]
+  members        Member[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([name, organizationId])
+  @@map("role")
+}
+
+model RolePermission {
+  id        String   @id @default(cuid())
+  roleId    String
+  resource  String
+  action    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, resource, action])
+  @@map("role_permission")
 }
 
 model Invitation {
