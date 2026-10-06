@@ -107,7 +107,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
-                Selling Price ($)
+                Selling Price (Rs)
               </label>
               <input
                 type="number"

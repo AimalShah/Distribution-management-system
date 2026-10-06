@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { KeyRound, Mail, MapPin, Phone, Shield, User } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../lib/auth";
 import {
   Avatar,
   AvatarFallback,
@@ -37,9 +38,10 @@ export const changePasswordSchema = z
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export default function ProfilePage() {
+  const { user: authUser } = useAuth();
   const [user, setUser] = useState({
-    name: "IJAZ",
-    email: "alex.morgan@inventioo.test",
+    name: authUser?.name ?? "IJAZ",
+    email: authUser?.username ?? "alex.morgan@inventioo.test",
     role: "Administrator",
     phone: "+1 (555) 234-5678",
     city: "Chicago, IL",

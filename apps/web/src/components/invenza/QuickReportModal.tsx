@@ -299,11 +299,11 @@ export const QuickReportModal: React.FC<QuickReportModalProps> = ({
             </div>
             <div className="flex items-center gap-3 mt-1">
               <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>
-                ${estRev.toLocaleString()} Rev
+                Rs {estRev.toLocaleString()} Rev
               </span>
               <span style={{ fontSize: '12px', color: 'var(--muted)' }}>•</span>
               <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary-strong)' }}>
-                ${estProfit.toLocaleString()} Net
+                Rs {estProfit.toLocaleString()} Net
               </span>
               <span style={{ fontSize: '12px', color: 'var(--muted)' }}>•</span>
               <span style={{ fontSize: '14px', fontWeight: 700, color: criticalCount > 0 ? 'var(--danger)' : 'var(--text)' }}>

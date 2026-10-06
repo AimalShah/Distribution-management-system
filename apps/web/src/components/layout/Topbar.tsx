@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { NotificationItem, SaleItem, LowStockProduct } from "../../types/invenza";
+import { useAuth } from "../../lib/auth";
 
 interface TopbarProps {
   onToggleSidebar?: () => void;
@@ -28,6 +29,7 @@ export function Topbar({
   onOpenQuickReport,
 }: TopbarProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -54,6 +56,16 @@ export function Topbar({
   }, []);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+
+  // The signed-in account is the source of truth; the literals are what the
+  // shell falls back to before a session resolves.
+  const displayName = user?.name ?? "IJAZ";
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const filteredSales = sales.filter(
     (s) =>
@@ -195,7 +207,7 @@ export function Topbar({
                       <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>{s.saleCode}</div>
                       <div style={{ fontSize: "12px", color: "var(--muted)" }}>{s.customerName} • {s.date}</div>
                     </div>
-                    <span className="font-bold text-sm text-primary-strong">${s.amount.toFixed(2)}</span>
+                    <span className="font-bold text-sm text-primary-strong">Rs {s.amount.toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -342,9 +354,9 @@ export function Topbar({
               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
               style={{ background: "var(--primary)" }}
             >
-              AM
+              {initials}
             </div>
-            <span className="hidden sm:inline text-xs font-semibold text-[var(--text)]">IJAZ</span>
+            <span className="hidden sm:inline text-xs font-semibold text-[var(--text)]">{displayName}</span>
           </button>
 
           {showUserMenu && (
@@ -363,8 +375,10 @@ export function Topbar({
               }}
             >
               <div className="p-2 border-b mb-1" style={{ borderColor: "var(--border)" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>IJAZ</div>
-                <div style={{ fontSize: "12px", color: "var(--muted)" }}>alex.morgan@inventioo.test</div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>{displayName}</div>
+                <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                  {user?.username ?? "alex.morgan@inventioo.test"}
+                </div>
               </div>
               <button
                 type="button"
@@ -399,9 +413,10 @@ export function Topbar({
               <button
                 type="button"
                 className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] text-xs text-[var(--danger)] cursor-pointer border-none bg-transparent font-medium"
-                onClick={() => {
+                onClick={async () => {
                   setShowUserMenu(false);
-                  onShowToast("Signed Out", "You have been signed out.", "info");
+                  await logout();
+                  navigate("/login", { replace: true });
                 }}
               >
                 Sign Out

@@ -22,6 +22,13 @@ export const conflict = (message: string, code = "CONFLICT", details?: unknown) 
   new HttpError(409, message, code, details);
 
 /**
+ * No usable credentials were presented. 401 rather than 403 because the fix is
+ * to authenticate again, not to ask someone else for permission.
+ */
+export const unauthorized = (message: string, code = "UNAUTHORIZED", details?: unknown) =>
+  new HttpError(401, message, code, details);
+
+/**
  * The caller is known -- they hold a valid user and session -- but this action
  * is not theirs to take. Distinguished from 404 because "you are not a member of
  * this organization" is the useful answer, and from 422 because nothing about

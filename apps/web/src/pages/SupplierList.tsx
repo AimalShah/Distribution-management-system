@@ -88,7 +88,7 @@ export default function SupplierList() {
       toast.success("Supplier removed successfully");
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete supplier");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete supplier");
     }
   };
 

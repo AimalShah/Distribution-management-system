@@ -100,8 +100,8 @@ export function generateQuickReportPdf(
     const cardHeight = 18;
 
     const cards = [
-      { label: 'Total Revenue', value: `$${rev.toLocaleString()}`, color: [59, 130, 246] as [number, number, number] },
-      { label: 'Net Profit', value: `$${profit.toLocaleString()}`, color: [34, 181, 115] as [number, number, number] },
+      { label: 'Total Revenue', value: `Rs ${rev.toLocaleString()}`, color: [59, 130, 246] as [number, number, number] },
+      { label: 'Net Profit', value: `Rs ${profit.toLocaleString()}`, color: [34, 181, 115] as [number, number, number] },
       { label: 'Sales Orders', value: salesCount.toLocaleString(), color: [139, 92, 246] as [number, number, number] },
       { label: 'Critical Stock Items', value: `${criticalCount} Items`, color: [239, 68, 68] as [number, number, number] },
     ];
@@ -152,7 +152,7 @@ export function generateQuickReportPdf(
       prod.category,
       prod.currentStock.toString(),
       prod.minStock.toString(),
-      `$${prod.price.toFixed(2)}`,
+      `Rs ${prod.price.toFixed(2)}`,
       prod.status,
     ]);
 
@@ -227,7 +227,7 @@ export function generateQuickReportPdf(
       sale.customerName,
       sale.date,
       sale.paymentMethod,
-      `$${sale.amount.toFixed(2)}`,
+      `Rs ${sale.amount.toFixed(2)}`,
       sale.status,
     ]);
 

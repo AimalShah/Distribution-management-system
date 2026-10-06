@@ -28,8 +28,8 @@ const tooltipStyle = {
 
 const formatAxisMoney = (value: number) =>
   Math.abs(value) >= 1000
-    ? `$${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`
-    : `$${value}`;
+    ? `Rs ${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`
+    : `Rs ${value}`;
 
 export function SalesChart({
   data,

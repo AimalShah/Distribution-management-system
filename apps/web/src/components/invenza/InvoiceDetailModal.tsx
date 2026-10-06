@@ -136,9 +136,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <td className="font-medium text-[var(--text)]">{item.name}</td>
                 <td className="font-mono text-[var(--muted)]">{item.sku}</td>
                 <td className="text-right">{item.qty}</td>
-                <td className="text-right">${item.unitPrice.toFixed(2)}</td>
+                <td className="text-right">Rs {item.unitPrice.toFixed(2)}</td>
                 <td className="text-right font-semibold text-[var(--text)]">
-                  ${item.total.toFixed(2)}
+                  Rs {item.total.toFixed(2)}
                 </td>
               </tr>
             ))}
@@ -150,18 +150,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           <div style={{ width: '220px', fontSize: '14px' }}>
             <div className="flex justify-between py-1 text-[var(--muted)]">
               <span>Subtotal:</span>
-              <span className="font-medium text-[var(--text)]">${subtotal.toFixed(2)}</span>
+              <span className="font-medium text-[var(--text)]">Rs {subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1 text-[var(--muted)]">
               <span>Tax (8%):</span>
-              <span className="font-medium text-[var(--text)]">${tax.toFixed(2)}</span>
+              <span className="font-medium text-[var(--text)]">Rs {tax.toFixed(2)}</span>
             </div>
             <div
               className="flex justify-between py-2 border-t mt-1 font-bold text-base"
               style={{ borderColor: 'var(--border)', color: 'var(--primary-strong)' }}
             >
               <span>Total:</span>
-              <span>${total.toFixed(2)}</span>
+              <span>Rs {total.toFixed(2)}</span>
             </div>
           </div>
         </div>

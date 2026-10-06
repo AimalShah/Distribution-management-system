@@ -83,7 +83,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ dateFilter, stats, sales
           </div>
           <div className="trend-up">↑ 12.5%</div>
         </div>
-        <div className="dash-stat-value">${revenue.toLocaleString()}</div>
+        <div className="dash-stat-value">Rs {revenue.toLocaleString()}</div>
         <div className="dash-stat-label">Revenue</div>
         <div className="dash-stat-bar">
           <div className="dash-stat-bar-fill" style={{ width: '85%', background: 'var(--info)' }}></div>
@@ -110,7 +110,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ dateFilter, stats, sales
           </div>
           <div className="trend-down">↓ 3.1%</div>
         </div>
-        <div className="dash-stat-value">${cost.toLocaleString()}</div>
+        <div className="dash-stat-value">Rs {cost.toLocaleString()}</div>
         <div className="dash-stat-label">Cost</div>
         <div className="dash-stat-bar">
           <div className="dash-stat-bar-fill" style={{ width: '62%', background: 'var(--danger)' }}></div>
@@ -139,7 +139,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ dateFilter, stats, sales
           </div>
           <div className="trend-up">↑ 18.4%</div>
         </div>
-        <div className="dash-stat-value">${profit.toLocaleString()}</div>
+        <div className="dash-stat-value">Rs {profit.toLocaleString()}</div>
         <div className="dash-stat-label">Profit</div>
         <div className="dash-stat-bar">
           <div className="dash-stat-bar-fill" style={{ width: '91%', background: 'var(--warning)' }}></div>

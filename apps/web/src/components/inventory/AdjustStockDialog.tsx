@@ -90,7 +90,7 @@ export function AdjustStockDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to adjust inventory");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to adjust inventory");
     } finally {
       setSubmitting(false);
     }

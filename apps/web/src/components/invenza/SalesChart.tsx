@@ -15,9 +15,9 @@ const salesData = {
     daily:   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   },
   totals: {
-    monthly: '$ 67,347',
-    weekly: '$ 18,400',
-    daily: '$ 3,100',
+    monthly: 'Rs 67,347',
+    weekly: 'Rs 18,400',
+    daily: 'Rs 3,100',
   }
 };
 
@@ -89,7 +89,7 @@ export const SalesChart: React.FC<SalesChartProps> = ({ isDark = false }) => {
             titleFont: { size: 12, weight: 'bold' },
             bodyFont: { size: 13 },
             callbacks: {
-              label: (context) => ` $${(context.parsed.y ?? 0).toLocaleString()}`,
+              label: (context) => ` Rs ${(context.parsed.y ?? 0).toLocaleString()}`,
             },
           },
         },

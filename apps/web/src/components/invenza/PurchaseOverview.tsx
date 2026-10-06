@@ -87,7 +87,7 @@ export const PurchaseOverview: React.FC<PurchaseOverviewProps> = ({ stats }) => 
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium">Purchase Cost</span>
-                <span className="text-base font-bold">${purchaseCost.toLocaleString()}</span>
+                <span className="text-base font-bold">Rs {purchaseCost.toLocaleString()}</span>
               </div>
               <div className="dash-progress-track">
                 <div className="dash-progress-fill" style={{ width: '62%', background: 'var(--warning)' }}></div>
@@ -148,7 +148,7 @@ export const PurchaseOverview: React.FC<PurchaseOverviewProps> = ({ stats }) => 
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium">Purchase Returns</span>
-                <span className="text-base font-bold">$0</span>
+                <span className="text-base font-bold">Rs 0</span>
               </div>
               <div className="dash-progress-track">
                 <div className="dash-progress-fill" style={{ width: '0%', background: 'var(--danger)' }}></div>

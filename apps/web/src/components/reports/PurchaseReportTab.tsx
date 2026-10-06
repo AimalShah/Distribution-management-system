@@ -113,7 +113,7 @@ export function PurchaseReportTab({ queryString }: PurchaseReportTabProps) {
                   minTickGap={28}
                 />
                 <YAxis
-                  tickFormatter={(v) => (v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`)}
+                  tickFormatter={(v) => (v >= 1000 ? `Rs ${(v / 1000).toFixed(0)}k` : `Rs ${v}`)}
                   tick={axisTick}
                   tickLine={false}
                   axisLine={false}

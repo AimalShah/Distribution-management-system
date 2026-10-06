@@ -25,30 +25,9 @@ import { ListPageHeader } from "../components/list/ListPageHeader";
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
-// Default mock users when backend auth isn't fully provisioned
-const defaultUsers: UserRow[] = [
-  {
-    id: "usr-1",
-    name: "IJAZ",
-    email: "alex.morgan@inventioo.test",
-    role: "adminRole",
-    isActive: true,
-  },
-  {
-    id: "usr-2",
-    name: "Jordan Lee",
-    email: "jordan.lee@inventioo.test",
-    role: "member",
-    isActive: true,
-  },
-  {
-    id: "usr-3",
-    name: "Sam Taylor",
-    email: "sam.taylor@inventioo.test",
-    role: "member",
-    isActive: false,
-  },
-];
+// The API is the source of truth; this is only what the table shows before the
+// first response lands, and it starts blank so a fresh install invents nobody.
+const defaultUsers: UserRow[] = [];
 
 export default function UsersPage() {
   const [page, setPage] = useState(1);
@@ -119,7 +98,7 @@ export default function UsersPage() {
       toast.success("User removed successfully");
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to remove user");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to remove user");
     }
   };
 

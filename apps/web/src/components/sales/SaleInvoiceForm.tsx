@@ -183,7 +183,7 @@ export function SaleInvoiceForm({
       }
       navigate("/sales");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save sale invoice");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save sale invoice");
     } finally {
       setSubmitting(false);
     }

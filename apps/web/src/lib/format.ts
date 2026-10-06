@@ -4,23 +4,24 @@
  * sweep through the tree.
  */
 
-const money = new Intl.NumberFormat("en-US", {
+/** `Rs 1,500` — PKR carries no practical cents, so CLDR drops the decimals. */
+const money = new Intl.NumberFormat("en-PK", {
   style: "currency",
-  currency: "USD",
+  currency: "PKR",
 });
 
-const wholeMoney = new Intl.NumberFormat("en-US", {
+const wholeMoney = new Intl.NumberFormat("en-PK", {
   style: "currency",
-  currency: "USD",
+  currency: "PKR",
   maximumFractionDigits: 0,
 });
 
-/** `$1,500.00` — line items, invoice totals. */
+/** `Rs 1,500` — line items, invoice totals. */
 export function formatMoney(value: number): string {
   return money.format(value);
 }
 
-/** `$48,000` — headline totals, where the cents are noise. */
+/** `Rs 48,000` — headline totals, where the cents are noise. */
 export function formatTotal(value: number): string {
   return wholeMoney.format(value);
 }

@@ -210,7 +210,7 @@ export function PurchaseForm({
       }
       navigate("/purchases");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save purchase order");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save purchase order");
     } finally {
       setSubmitting(false);
     }

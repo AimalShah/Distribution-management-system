@@ -57,8 +57,8 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
             <span class="text-xs text-gray-500 ml-1">${prodCode}</span>
           </td>
           <td class="py-3 px-4 text-center text-gray-700">${item.quantity}</td>
-          <td class="py-3 px-4 text-right text-gray-700">$${item.unitPrice.toFixed(2)}</td>
-          <td class="py-3 px-4 text-right font-semibold text-gray-900">$${lineTotal.toFixed(2)}</td>
+          <td class="py-3 px-4 text-right text-gray-700">Rs ${item.unitPrice.toFixed(2)}</td>
+          <td class="py-3 px-4 text-right font-semibold text-gray-900">Rs ${lineTotal.toFixed(2)}</td>
         </tr>
       `;
     })
@@ -134,21 +134,21 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       <div class="w-64 space-y-2 text-sm">
         <div class="flex justify-between text-gray-600">
           <span>Subtotal:</span>
-          <span class="font-medium text-gray-900">$${subtotal.toFixed(2)}</span>
+          <span class="font-medium text-gray-900">Rs ${subtotal.toFixed(2)}</span>
         </div>
         ${discount > 0 ? `
         <div class="flex justify-between text-green-600">
           <span>Discount:</span>
-          <span>-$${discount.toFixed(2)}</span>
+          <span>-Rs ${discount.toFixed(2)}</span>
         </div>` : ""}
         ${tax > 0 ? `
         <div class="flex justify-between text-gray-600">
           <span>Tax:</span>
-          <span>+$${tax.toFixed(2)}</span>
+          <span>+Rs ${tax.toFixed(2)}</span>
         </div>` : ""}
         <div class="border-t border-gray-200 pt-2 flex justify-between text-base font-bold text-gray-900">
           <span>Total:</span>
-          <span class="text-blue-600">$${total.toFixed(2)}</span>
+          <span class="text-blue-600">Rs ${total.toFixed(2)}</span>
         </div>
       </div>
     </div>

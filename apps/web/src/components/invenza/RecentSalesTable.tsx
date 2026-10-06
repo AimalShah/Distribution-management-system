@@ -113,7 +113,7 @@ export const RecentSalesTable: React.FC<RecentSalesTableProps> = ({
                   </div>
                 </td>
                 <td className="text-xs text-[var(--muted)]">{sale.date}</td>
-                <td className="font-bold text-xs">${sale.amount.toFixed(2)}</td>
+                <td className="font-bold text-xs">Rs {sale.amount.toFixed(2)}</td>
                 <td className="text-xs">{sale.paymentMethod}</td>
                 <td>{getStatusBadge(sale.status)}</td>
                 <td>

@@ -49,7 +49,7 @@ export const RevenueBreakdown: React.FC<RevenueBreakdownProps> = ({ stats }) => 
               <div className="dash-revenue-desc">{txCount.toLocaleString()} transactions</div>
             </div>
           </div>
-          <div className="dash-revenue-amount">${rawRevenue.toLocaleString()}</div>
+          <div className="dash-revenue-amount">Rs {rawRevenue.toLocaleString()}</div>
         </div>
         <div className="dash-revenue-item">
           <div className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export const RevenueBreakdown: React.FC<RevenueBreakdownProps> = ({ stats }) => 
               <div className="dash-revenue-desc">Gross proceeds</div>
             </div>
           </div>
-          <div className="dash-revenue-amount">${rawRevenue.toLocaleString()}</div>
+          <div className="dash-revenue-amount">Rs {rawRevenue.toLocaleString()}</div>
         </div>
         <div className="dash-revenue-item">
           <div className="flex items-center gap-3">
@@ -69,7 +69,7 @@ export const RevenueBreakdown: React.FC<RevenueBreakdownProps> = ({ stats }) => 
               <div className="dash-revenue-desc">Purchase inventory</div>
             </div>
           </div>
-          <div className="dash-revenue-amount">${rawCost.toLocaleString()}</div>
+          <div className="dash-revenue-amount">Rs {rawCost.toLocaleString()}</div>
         </div>
         <div className="dash-revenue-item">
           <div className="flex items-center gap-3">
@@ -79,7 +79,7 @@ export const RevenueBreakdown: React.FC<RevenueBreakdownProps> = ({ stats }) => 
               <div className="dash-revenue-desc">Net profit balance</div>
             </div>
           </div>
-          <div className="dash-revenue-amount dash-stat-profit">${rawProfit.toLocaleString()}</div>
+          <div className="dash-revenue-amount dash-stat-profit">Rs {rawProfit.toLocaleString()}</div>
         </div>
       </div>
     </div>

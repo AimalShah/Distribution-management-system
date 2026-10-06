@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../lib/auth";
 
 type NavItem = {
   title: string;
@@ -63,6 +64,15 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const displayName = user?.name ?? "IJAZ";
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const [openSubmenus, setOpenSubmenus] = useState<{ [key: string]: boolean }>({
     inventory: pathname.startsWith("/inventory") || pathname.startsWith("/products"),
@@ -638,7 +648,7 @@ export function AppSidebar({
             className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm"
             style={{ background: "var(--primary)" }}
           >
-            AM
+            {initials}
           </div>
           <div className="sidebar-label min-w-0">
             <div
@@ -651,7 +661,7 @@ export function AppSidebar({
                 textOverflow: "ellipsis",
               }}
             >
-              IJAZ
+              {user?.name ?? "IJAZ"}
             </div>
             <div style={{ fontSize: "12px", color: "var(--muted)" }}>Administrator</div>
           </div>

@@ -98,7 +98,7 @@ export default function PurchaseList() {
       toast.success("Purchase order deleted successfully");
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete purchase order");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete purchase order");
     }
   };
 

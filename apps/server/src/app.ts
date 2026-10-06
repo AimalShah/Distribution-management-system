@@ -4,6 +4,7 @@ import { allowedOrigins } from "./config/env";
 import { errorHandler, notFoundHandler } from "./http";
 import { authContext, bootstrapAuthContext } from "./middleware/auth-context";
 import { apiRouter } from "./routes";
+import { authRouter } from "./routes/auth";
 import { organizationRouter } from "./routes/organization";
 import {
   memberRouter,
@@ -63,6 +64,13 @@ export function createApp(): Express {
   // 400 ORGANIZATION_REQUIRED for a by-id member route that needs no tenant
   // header of its own.
   app.use("/api/members", bootstrapAuthContext, memberRouter, notFoundHandler);
+
+  // Sign-in has to be reachable before `authContext`: the whole point is to
+  // exchange a username and password for the token every other call carries,
+  // so a caller at this point has no session and no organization to declare.
+  // Mounted on its own prefix rather than through `apiRouter`, which sits
+  // behind that middleware.
+  app.use("/api/auth", authRouter, notFoundHandler);
 
   app.use("/api", authContext, apiRouter);
 

@@ -125,7 +125,7 @@ export function SupplierDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save supplier");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save supplier");
     } finally {
       setSubmitting(false);
     }

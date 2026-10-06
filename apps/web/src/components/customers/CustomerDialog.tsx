@@ -128,7 +128,7 @@ export function CustomerDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save customer");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save customer");
     } finally {
       setSubmitting(false);
     }
@@ -241,7 +241,7 @@ export function CustomerDialog({
                 name="creditLimit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Credit Limit ($)</FormLabel>
+                    <FormLabel>Credit Limit (Rs)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"

@@ -165,7 +165,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       setNewCategoryDesc("");
       setCategoryModalOpen(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create category");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to create category");
     } finally {
       setCreatingCategory(false);
     }
@@ -196,7 +196,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       setNewBrandDesc("");
       setBrandModalOpen(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create brand");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to create brand");
     } finally {
       setCreatingBrand(false);
     }
@@ -226,7 +226,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       }
       navigate("/products");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save product");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save product");
     } finally {
       setSubmitting(false);
     }

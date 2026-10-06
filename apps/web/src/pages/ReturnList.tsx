@@ -88,7 +88,7 @@ export default function ReturnList() {
       toast.success("Return deleted and stock reversed successfully");
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete return");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete return");
     }
   };
 

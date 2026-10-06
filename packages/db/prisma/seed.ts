@@ -1,4 +1,7 @@
 // prisma/seed.js
+// First import, because it has to populate `process.env` before `../src/client`
+// builds a PrismaClient from it. See `./load-env`.
+import "./load-env";
 import prisma from "../src/client";
 import { faker } from "@faker-js/faker";
 import type { InventoryMovement } from "./generated/client";

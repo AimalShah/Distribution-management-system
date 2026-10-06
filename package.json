@@ -14,6 +14,7 @@
     "db:generate": "pnpm --filter @dms/db run generate",
     "db:migrate": "pnpm --filter @dms/db run migrate",
     "db:seed": "pnpm --filter @dms/db run seed",
+    "db:wipe": "pnpm --filter @dms/db run wipe",
     "debug": "tsx packages/devtools/src/cli.ts"
   },
   "devDependencies": {

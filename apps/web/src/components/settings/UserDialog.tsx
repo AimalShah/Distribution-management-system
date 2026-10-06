@@ -141,7 +141,7 @@ export function UserDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save user");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save user");
     } finally {
       setSubmitting(false);
     }

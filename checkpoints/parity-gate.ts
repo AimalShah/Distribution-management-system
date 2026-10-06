@@ -48,7 +48,12 @@ export const GATE: readonly GateEntry[] = [
     dir: "03-auth",
     status: "pending",
     reason:
-      "Auth is the temporary header-trust shim in `middleware/auth-context.ts`; `better-auth` is not a dependency yet. The three HTTP tests fail against the shim by design.",
+      "Sign-in is real (`POST /api/auth/login` with username/password and an HMAC token), " +
+      "but tenant resolution is still the header-trust shim in `middleware/auth-context.ts` " +
+      "and no data route is 401-gated. The three HTTP tests assert better-auth's " +
+      "`/api/auth/sign-in/email` shape and an unauthenticated `GET /api/products` answering 401, " +
+      "which the gated 02/04 suites -- all callers without an Authorization header -- forbid. " +
+      "They fail by design until checkpoint 3 replaces the shim.",
   },
   // A checkpoint is gated one subdirectory at a time when its suites land
   // separately. `dir` may therefore be a path under `checkpoints/` rather than

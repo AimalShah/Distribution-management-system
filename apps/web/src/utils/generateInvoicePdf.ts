@@ -79,8 +79,8 @@ export function generateInvoicePdf(sale: SaleItem): jsPDF {
     it.name,
     it.sku,
     it.qty.toString(),
-    `$${it.unitPrice.toFixed(2)}`,
-    `$${it.total.toFixed(2)}`,
+    `Rs ${it.unitPrice.toFixed(2)}`,
+    `Rs ${it.total.toFixed(2)}`,
   ]);
 
   autoTable(doc, {
@@ -117,10 +117,10 @@ export function generateInvoicePdf(sale: SaleItem): jsPDF {
   doc.setFontSize(9);
   doc.setTextColor(...mutedColor);
   doc.text('Subtotal:', totalsX, finalY + 12);
-  doc.text(`$${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 12, { align: 'right' });
+  doc.text(`Rs ${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 12, { align: 'right' });
 
   doc.text('Tax (0%):', totalsX, finalY + 18);
-  doc.text('$0.00', pageWidth - 14, finalY + 18, { align: 'right' });
+  doc.text('Rs 0.00', pageWidth - 14, finalY + 18, { align: 'right' });
 
   doc.setDrawColor(232, 237, 241);
   doc.line(totalsX, finalY + 22, pageWidth - 14, finalY + 22);
@@ -129,7 +129,7 @@ export function generateInvoicePdf(sale: SaleItem): jsPDF {
   doc.setFontSize(12);
   doc.setTextColor(...primaryColor);
   doc.text('Total Due:', totalsX, finalY + 28);
-  doc.text(`$${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 28, { align: 'right' });
+  doc.text(`Rs ${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 28, { align: 'right' });
 
   // Footer
   doc.setFont('helvetica', 'normal');

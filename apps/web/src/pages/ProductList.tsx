@@ -109,7 +109,7 @@ export default function ProductList() {
       toast.success("Product deleted successfully");
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete product");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete product");
     }
   };
 

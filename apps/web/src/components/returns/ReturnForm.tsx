@@ -145,7 +145,7 @@ export function ReturnForm() {
       toast.success("Return processed successfully");
       navigate("/returns");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to process return");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to process return");
     } finally {
       setSubmitting(false);
     }

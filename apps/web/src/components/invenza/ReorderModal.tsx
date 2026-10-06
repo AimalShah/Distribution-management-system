@@ -119,7 +119,7 @@ export const ReorderModal: React.FC<ReorderModalProps> = ({
           >
             <div className="flex justify-between py-1 text-xs text-[var(--muted)]">
               <span>Estimated Unit Cost:</span>
-              <span className="font-medium text-[var(--text)]">${unitCost.toFixed(2)}</span>
+              <span className="font-medium text-[var(--text)]">Rs {unitCost.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1 text-xs text-[var(--muted)]">
               <span>Units to Replenish:</span>
@@ -127,7 +127,7 @@ export const ReorderModal: React.FC<ReorderModalProps> = ({
             </div>
             <div className="flex justify-between py-2 border-t mt-1 font-bold text-sm text-[var(--text)]" style={{ borderColor: 'var(--border)' }}>
               <span>Estimated Total PO:</span>
-              <span style={{ color: 'var(--primary-strong)' }}>${totalCost.toLocaleString()}.00</span>
+              <span style={{ color: 'var(--primary-strong)' }}>Rs {totalCost.toLocaleString()}.00</span>
             </div>
           </div>
         </div>
