@@ -33,7 +33,8 @@ export function generateInvoicePdf(sale: SaleItem): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(...darkColor);
-  doc.text(`INVOICE: ${sale.saleCode}`, pageWidth - 14, 20, { align: 'right' });
+  const isTaxInvoice = sale.invoiceType === 'tax';
+  doc.text(`${isTaxInvoice ? 'Tax Invoice' : 'Invoice'}: ${sale.saleCode}`, pageWidth - 14, 20, { align: 'right' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -119,17 +120,36 @@ export function generateInvoicePdf(sale: SaleItem): jsPDF {
   doc.text('Subtotal:', totalsX, finalY + 12);
   doc.text(`Rs ${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 12, { align: 'right' });
 
-  doc.text('Tax (0%):', totalsX, finalY + 18);
-  doc.text('Rs 0.00', pageWidth - 14, finalY + 18, { align: 'right' });
+  let curY = finalY + 18;
+  if ((sale.cgstAmount ?? 0) > 0) {
+    doc.text('CGST:', totalsX, curY);
+    doc.text(`Rs ${(sale.cgstAmount ?? 0).toFixed(2)}`, pageWidth - 14, curY, { align: 'right' });
+    curY += 5;
+  }
+  if ((sale.sgstAmount ?? 0) > 0) {
+    doc.text('SGST:', totalsX, curY);
+    doc.text(`Rs ${(sale.sgstAmount ?? 0).toFixed(2)}`, pageWidth - 14, curY, { align: 'right' });
+    curY += 5;
+  }
+  if ((sale.igstAmount ?? 0) > 0) {
+    doc.text('IGST:', totalsX, curY);
+    doc.text(`Rs ${(sale.igstAmount ?? 0).toFixed(2)}`, pageWidth - 14, curY, { align: 'right' });
+    curY += 5;
+  }
+  if (sale.taxAmount && !sale.cgstAmount && !sale.sgstAmount && !sale.igstAmount) {
+    doc.text('Tax:', totalsX, curY);
+    doc.text(`Rs ${sale.taxAmount.toFixed(2)}`, pageWidth - 14, curY, { align: 'right' });
+    curY += 5;
+  }
 
   doc.setDrawColor(232, 237, 241);
-  doc.line(totalsX, finalY + 22, pageWidth - 14, finalY + 22);
+  doc.line(totalsX, curY + 2, pageWidth - 14, curY + 2);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...primaryColor);
-  doc.text('Total Due:', totalsX, finalY + 28);
-  doc.text(`Rs ${sale.amount.toFixed(2)}`, pageWidth - 14, finalY + 28, { align: 'right' });
+  doc.text('Total Due:', totalsX, curY + 8);
+  doc.text(`Rs ${sale.amount.toFixed(2)}`, pageWidth - 14, curY + 8, { align: 'right' });
 
   // Footer
   doc.setFont('helvetica', 'normal');

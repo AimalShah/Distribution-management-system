@@ -1,6 +1,11 @@
 type SaleInvoiceSkeleton = {
   saleCode: string;
   saleDate: Date | string;
+  invoiceType?: string;
+  isInterState?: boolean;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
   customer?: {
     name: string;
     email?: string | null;
@@ -12,6 +17,13 @@ type SaleInvoiceSkeleton = {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    taxPercent?: number | null;
+    cgstRate?: number | null;
+    sgstRate?: number | null;
+    igstRate?: number | null;
+    cgstAmount?: number | null;
+    sgstAmount?: number | null;
+    igstAmount?: number | null;
   }[];
   paymentStatus?: string;
   paymentMethod?: string;
@@ -27,6 +39,13 @@ type SaleInvoiceItem = {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  taxPercent?: number | null;
+  cgstRate?: number | null;
+  sgstRate?: number | null;
+  igstRate?: number | null;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
 };
 
 export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
@@ -38,13 +57,15 @@ export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
     return items.reduce((sum, item) => sum + (item?.totalPrice || 0), 0)
   }
 
+  const isTaxInvoice = saleInvoice.invoiceType === "tax";
+
   return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Invoice ${saleInvoice.saleCode}</title>
+      <title>${isTaxInvoice ? "Tax Invoice" : "Invoice"} ${saleInvoice.saleCode}</title>
       <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="font-sans leading-relaxed text-black bg-white text-sm">
@@ -52,11 +73,11 @@ export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
         <!-- Converted header to Tailwind classes -->
         <div class="flex justify-between items-start mb-8">
           <div class="company-info">
-            <h1 class="text-xl font-semibold mb-0.5">Your Company</h1>
-            <p class="text-gray-600 text-xs">Invoice Solutions</p>
+            <h1 class="text-xl font-semibold mb-0.5">${isTaxInvoice ? "Tax Invoice" : "Your Company"}</h1>
+            <p class="text-gray-600 text-xs">${isTaxInvoice ? "GST Registered" : "Invoice Solutions"}</p>
           </div>
           <div class="text-right">
-            <h2 class="text-lg font-semibold mb-1.5">Invoice</h2>
+            <h2 class="text-lg font-semibold mb-1.5">${isTaxInvoice ? "Tax Invoice" : "Invoice"}</h2>
             <p class="mb-0.5 text-gray-600 text-xs">#${saleInvoice.saleCode}</p>
             <p class="text-gray-600 text-xs">${formattedDate}</p>
           </div>
@@ -74,6 +95,7 @@ export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
           
           <div>
             <h3 class="text-xs font-semibold mb-2 uppercase tracking-wider">Details</h3>
+            <p class="mb-0.5 text-gray-900 text-xs"><strong>Invoice Type:</strong> ${isTaxInvoice ? "Tax Invoice" : "Regular"}</p>
             <p class="mb-0.5 text-gray-900 text-xs"><strong>Status:</strong> ${saleInvoice.paymentStatus || "Pending"}</p>
             <p class="mb-0.5 text-gray-900 text-xs"><strong>Method:</strong> ${saleInvoice.paymentMethod || "N/A"}</p>
             ${saleInvoice.notes ? `<p class="mb-0.5 text-gray-900 text-xs"><strong>Notes:</strong> ${saleInvoice.notes}</p>` : ""}
@@ -98,6 +120,7 @@ export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
                 <td class="py-3 border-b border-gray-200 text-xs last:border-b-0">
                   ${item?.product?.name || "N/A"}
                   ${item?.product?.description ? `<br><span class="text-gray-600 text-xs">${item.product.description}</span>` : ""}
+                  ${(item?.taxPercent || (item?.cgstRate && item?.sgstRate ? item.cgstRate + item.sgstRate : item?.igstRate)) ? `<br><span class="text-gray-500 text-[10px]">GST: ${item?.taxPercent || (item?.cgstRate && item?.sgstRate ? item.cgstRate + item.sgstRate : item?.igstRate)}%</span>` : ""}
                 </td>
                 <td class="py-3 border-b border-gray-200 text-center text-xs last:border-b-0">${item?.quantity || 0}</td>
                 <td class="py-3 border-b border-gray-200 text-right text-xs last:border-b-0">$${(item?.unitPrice || 0).toFixed(2)}</td>
@@ -122,6 +145,36 @@ export function saleInvoiceSkeleton(saleInvoice: SaleInvoiceSkeleton): string {
               <tr>
                 <td class="py-1.5 text-right pr-4 text-xs">Discount</td>
                 <td class="py-1.5 text-right text-xs">-$${(saleInvoice.discount ?? 0).toFixed(2)}</td>
+              </tr>
+            `
+                : ""
+            }
+            ${
+              (saleInvoice.cgstAmount ?? 0) > 0
+                ? `
+              <tr>
+                <td class="py-1.5 text-right pr-4 text-xs">CGST</td>
+                <td class="py-1.5 text-right text-xs">$${(saleInvoice.cgstAmount ?? 0).toFixed(2)}</td>
+              </tr>
+            `
+                : ""
+            }
+            ${
+              (saleInvoice.sgstAmount ?? 0) > 0
+                ? `
+              <tr>
+                <td class="py-1.5 text-right pr-4 text-xs">SGST</td>
+                <td class="py-1.5 text-right text-xs">$${(saleInvoice.sgstAmount ?? 0).toFixed(2)}</td>
+              </tr>
+            `
+                : ""
+            }
+            ${
+              (saleInvoice.igstAmount ?? 0) > 0
+                ? `
+              <tr>
+                <td class="py-1.5 text-right pr-4 text-xs">IGST</td>
+                <td class="py-1.5 text-right text-xs">$${(saleInvoice.igstAmount ?? 0).toFixed(2)}</td>
               </tr>
             `
                 : ""

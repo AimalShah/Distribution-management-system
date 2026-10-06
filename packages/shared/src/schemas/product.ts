@@ -30,6 +30,14 @@ export const ProductSchema = z.object({
   unitCost: moneyInput("Unit cost"),
   unitPrice: moneyInput("Unit price"),
   isActive: z.boolean().default(true),
+  gstApplicable: z.boolean().optional(),
+  gstRate: z
+    .union([z.number(), z.string().trim()])
+    .transform((value) => (typeof value === "number" ? value : value === "" ? 0 : Number(value)))
+    .refine((value) => Number.isFinite(value) && value >= 0, {
+      message: "GST rate must be a valid positive number",
+    })
+    .optional(),
 });
 
 /**

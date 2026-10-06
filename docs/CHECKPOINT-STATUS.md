@@ -32,7 +32,8 @@ not from what a `plan.md` claims.
 | 05 — Electron Shell | **Implemented** — packaging, security contracts & build output `gated` |
 | 06 — RBAC Rebuild | **Implemented** — Prisma roles/permissions, Express API `/api/roles`, web matrix UI, `gated` |
 | 07 — Batch/Lot Inventory + Expiry KPI | **Implemented** — `StockBatch` model, FEFO deductions, expiry reports, web lot views & KPI card, `gated` |
-| 08–12 — Domain features | **Spec only** |
+| 08 — GST Fields + Sale Tax Invoice | **Implemented** — Product/Sale/SaleItem GST columns, intra/inter-state tax logic, invoice template & PDF, UI forms, `gated` |
+| 09–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 | 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
 | 15 — Payments & Invoice Lifecycle | **Partial** — code + server tests on `main`; parity suite is a plan only |
@@ -193,13 +194,22 @@ supplier lot numbers, and organization relations. Purchases create/upsert stock 
 Web interface includes an `ExpiringSoonCard` on the dashboard, a dedicated `Batches` list view, and a tab on the inventory page.
 Gated in `parity-gate.ts` and covered by `checkpoints/07-batch-lot-inventory-expiry-kpi/parity.test.ts` and acceptance tests.
 
-## 08–12 — Domain features · Spec only
+## 08 — GST Fields + Sale Tax Invoice · Implemented
+
+Landed in this checkpoint. Complete GST lifecycle implemented:
+- **Schema & Migration**: `Product.gstApplicable` (boolean default true), `Product.gstRate` (float default 0); `Sale.invoiceType` ("regular"|"tax"), `Sale.isInterState` (boolean), `Sale.cgstAmount`, `Sale.sgstAmount`, `Sale.igstAmount`; `SaleItem.cgstRate`, `SaleItem.sgstRate`, `SaleItem.igstRate`, `SaleItem.cgstAmount`, `SaleItem.sgstAmount`, `SaleItem.igstAmount`.
+- **Tax Calculation Engine**: `calculateSaleBreakdown` calculates 50/50 intra-state CGST & SGST splits, 100% inter-state IGST splits, handles non-applicable / 0% GST products, and computes subtotal, item breakdowns, total tax, and grand totals.
+- **Service & Express Routes**: `createSale` persists item-level and header-level GST breakdown to the database; `GET /api/sales/:id/invoice` exposes invoice details including GST breakdown in JSON and HTML.
+- **Templates & Printing**: `renderSaleInvoiceHtml` and `saleInvoiceSkeleton.tsx` display "Tax Invoice" headers, item-level GST badges, and CGST/SGST/IGST summary tables. `generateInvoicePdf` supports Tax Invoice titles and GST breakdown rows.
+- **Web UI**: `ProductForm.tsx` supports GST Applicable toggle and GST Rate input; `SaleInvoiceForm.tsx` supports Invoice Type ("Regular" vs "Tax Invoice") select, Inter-State checkbox, and real-time CGST/SGST/IGST breakdown cards.
+- **Parity Gate**: `checkpoints/08-gst-fields-sale-tax-invoice/parity.test.ts` (11 tests) is `gated` in `checkpoints/parity-gate.ts`, and acceptance suite is implemented.
+
+## 09–12 — Domain features · Spec only
 
 Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
 
 | ID | Checkpoint | Empty stubs |
 |---|---|---|
-| 08 | GST Fields + Sale Tax Invoice | 6 |
 | 09 | Brand-Scoping on Sale/Purchase | 5 |
 | 10 | Bulk Import, Wired for Real | 7 |
 | 11 | Return Policy, Credit Terms, Customer GST | 6 |

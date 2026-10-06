@@ -5,6 +5,11 @@ export interface SaleInvoiceRenderData {
   totalAmount: number;
   taxAmount?: number | null;
   discount?: number | null;
+  invoiceType?: string | null;
+  isInterState?: boolean | null;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
   customer?: {
     name: string;
     email?: string | null;
@@ -15,9 +20,18 @@ export interface SaleInvoiceRenderData {
     quantity: number;
     unitPrice: number;
     totalPrice?: number;
+    taxPercent?: number | null;
+    cgstRate?: number | null;
+    sgstRate?: number | null;
+    igstRate?: number | null;
+    cgstAmount?: number | null;
+    sgstAmount?: number | null;
+    igstAmount?: number | null;
     product?: {
       name: string;
       productCode?: string;
+      gstApplicable?: boolean | null;
+      gstRate?: number | null;
     } | null;
   }[];
 }
@@ -29,6 +43,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     day: "numeric",
   });
 
+  const isTaxInvoice = sale.invoiceType === "tax";
   const customerName = sale.customer?.name || "Cash Customer";
   const customerEmail = sale.customer?.email || "";
   const customerPhone = sale.customer?.phone || "";
@@ -39,7 +54,9 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     (sum, it) => sum + it.quantity * it.unitPrice,
     0
   );
-  const tax = sale.taxAmount || 0;
+  const tax =
+    sale.taxAmount ||
+    (sale.cgstAmount || 0) + (sale.sgstAmount || 0) + (sale.igstAmount || 0);
   const discount = sale.discount || 0;
   const total = sale.totalAmount;
 
@@ -48,6 +65,12 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       const lineTotal = item.totalPrice ?? item.quantity * item.unitPrice;
       const prodName = item.product?.name || `Item #${idx + 1}`;
       const prodCode = item.product?.productCode ? `(${item.product.productCode})` : "";
+      const cgst = item.cgstRate ?? 0;
+      const sgst = item.sgstRate ?? 0;
+      const igst = item.igstRate ?? 0;
+      const gstRate = (cgst > 0 || sgst > 0)
+        ? (cgst + sgst)
+        : (igst || item.taxPercent || item.product?.gstRate || 0);
 
       return `
         <tr class="border-b border-gray-100">
@@ -55,6 +78,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
           <td class="py-3 px-4">
             <span class="font-medium text-gray-900">${prodName}</span>
             <span class="text-xs text-gray-500 ml-1">${prodCode}</span>
+            ${gstRate > 0 ? `<span class="block text-[11px] text-gray-400">GST: ${gstRate}%</span>` : ""}
           </td>
           <td class="py-3 px-4 text-center text-gray-700">${item.quantity}</td>
           <td class="py-3 px-4 text-right text-gray-700">Rs ${item.unitPrice.toFixed(2)}</td>
@@ -69,7 +93,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${sale.saleCode}</title>
+  <title>${isTaxInvoice ? "Tax Invoice" : "Invoice"} ${sale.saleCode}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @media print {
@@ -83,12 +107,12 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     <!-- Header -->
     <div class="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Distribution Management System</h1>
-        <p class="text-xs text-gray-500 mt-1">Inventioo DMS Distribution Network</p>
+        <h1 class="text-2xl font-bold text-gray-900">${isTaxInvoice ? "Tax Invoice" : "Distribution Management System"}</h1>
+        <p class="text-xs text-gray-500 mt-1">${isTaxInvoice ? "Official GST Tax Invoice" : "Inventioo DMS Distribution Network"}</p>
       </div>
       <div class="text-right">
-        <span class="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded">
-          ${sale.status.toUpperCase()}
+        <span class="inline-block ${isTaxInvoice ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"} text-xs font-semibold px-2.5 py-1 rounded">
+          ${isTaxInvoice ? "TAX INVOICE" : sale.status.toUpperCase()}
         </span>
         <h2 class="text-xl font-bold text-gray-900 mt-2 font-mono">${sale.saleCode}</h2>
         <p class="text-xs text-gray-500 mt-1">Date: ${formattedDate}</p>
@@ -106,7 +130,8 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       </div>
       <div class="text-right">
         <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Invoice Summary</h3>
-        <p class="text-xs text-gray-600">Total Items: <span class="font-medium text-gray-900">${items.length}</span></p>
+        <p class="text-xs text-gray-600">Invoice Type: <span class="font-medium text-gray-900">${isTaxInvoice ? "Tax Invoice" : "Regular Invoice"}</span></p>
+        <p class="text-xs text-gray-600 mt-1">Total Items: <span class="font-medium text-gray-900">${items.length}</span></p>
         <p class="text-xs text-gray-600 mt-1">Payment Status: <span class="font-medium text-gray-900">${sale.status}</span></p>
       </div>
     </div>
@@ -141,9 +166,24 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
           <span>Discount:</span>
           <span>-Rs ${discount.toFixed(2)}</span>
         </div>` : ""}
-        ${tax > 0 ? `
+        ${(sale.cgstAmount ?? 0) > 0 ? `
         <div class="flex justify-between text-gray-600">
-          <span>Tax:</span>
+          <span>CGST:</span>
+          <span>Rs ${(sale.cgstAmount ?? 0).toFixed(2)}</span>
+        </div>` : ""}
+        ${(sale.sgstAmount ?? 0) > 0 ? `
+        <div class="flex justify-between text-gray-600">
+          <span>SGST:</span>
+          <span>Rs ${(sale.sgstAmount ?? 0).toFixed(2)}</span>
+        </div>` : ""}
+        ${(sale.igstAmount ?? 0) > 0 ? `
+        <div class="flex justify-between text-gray-600">
+          <span>IGST:</span>
+          <span>Rs ${(sale.igstAmount ?? 0).toFixed(2)}</span>
+        </div>` : ""}
+        ${tax > 0 ? `
+        <div class="flex justify-between text-gray-600 font-medium">
+          <span>Total Tax:</span>
           <span>+Rs ${tax.toFixed(2)}</span>
         </div>` : ""}
         <div class="border-t border-gray-200 pt-2 flex justify-between text-base font-bold text-gray-900">

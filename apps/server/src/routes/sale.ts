@@ -11,6 +11,7 @@ import {
   createSale,
   deleteSale,
   getSaleByIdOrCode,
+  getSaleInvoiceData,
   getSales,
   getSalesByCustomer,
   restoreSale,
@@ -70,6 +71,19 @@ saleRouter.get(
       .type("pdf")
       .set("Content-Disposition", `inline; filename="invoice-${sale.saleCode}.pdf"`)
       .send(Buffer.from(pdf));
+  })
+);
+
+saleRouter.get(
+  "/:id/invoice",
+  asyncHandler(async (req, res) => {
+    const sale = await getSaleInvoiceData(req.params.id, req.auth.organizationId);
+    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+    if (req.accepts("html") && !req.accepts("json")) {
+      const html = renderSaleInvoiceHtml(sale as any);
+      return res.type("html").send(html);
+    }
+    res.json(sale);
   })
 );
 

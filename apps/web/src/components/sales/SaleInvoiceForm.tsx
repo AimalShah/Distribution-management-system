@@ -12,6 +12,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Checkbox,
   Form,
   FormControl,
   FormField,
@@ -78,6 +79,8 @@ export function SaleInvoiceForm({
         ? new Date(initialData.saleDate).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
       status: initialData?.status ?? "Pending",
+      invoiceType: initialData?.invoiceType ?? "regular",
+      isInterState: initialData?.isInterState ?? false,
       discount: initialData?.discount ?? 0,
       taxAmount: initialData?.taxAmount ?? 0,
       items: initialData?.items?.length
@@ -106,6 +109,8 @@ export function SaleInvoiceForm({
           ? new Date(initialData.saleDate).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0],
         status: initialData.status ?? "Pending",
+        invoiceType: initialData.invoiceType ?? "regular",
+        isInterState: initialData.isInterState ?? false,
         discount: initialData.discount ?? 0,
         taxAmount: initialData.taxAmount ?? 0,
         items: initialData.items?.length
@@ -123,23 +128,49 @@ export function SaleInvoiceForm({
   const watchedItems = form.watch("items") || [];
   const watchedDiscount = form.watch("discount") || 0;
   const watchedTaxAmount = form.watch("taxAmount") || 0;
+  const watchedInvoiceType = form.watch("invoiceType") || "regular";
+  const watchedIsInterState = form.watch("isInterState") || false;
 
   // Real-time totals matching backend formula
-  const { subtotal, grandTotal } = useMemo(() => {
+  const { subtotal, grandTotal, cgstTotal, sgstTotal, igstTotal, totalTax } = useMemo(() => {
     let sub = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
     for (const item of watchedItems) {
       const qty = Number(item?.quantity) || 0;
       const price = Number(item?.unitPrice) || 0;
-      sub += qty * price;
+      const taxRate = Number(item?.taxPercent) || 0;
+      const lineAmt = qty * price;
+      sub += lineAmt;
+
+      if (taxRate > 0) {
+        if (watchedIsInterState) {
+          igst += (lineAmt * taxRate) / 100;
+        } else {
+          cgst += (lineAmt * (taxRate / 2)) / 100;
+          sgst += (lineAmt * (taxRate / 2)) / 100;
+        }
+      }
     }
 
+    const calculatedTax = cgst + sgst + igst;
+    const effectiveTax = Number(watchedTaxAmount) || calculatedTax;
     const total = Math.max(
       0,
-      sub + (Number(watchedTaxAmount) || 0) - (Number(watchedDiscount) || 0)
+      sub + effectiveTax - (Number(watchedDiscount) || 0)
     );
 
-    return { subtotal: sub, grandTotal: total };
-  }, [watchedItems, watchedDiscount, watchedTaxAmount]);
+    return {
+      subtotal: sub,
+      grandTotal: total,
+      cgstTotal: cgst,
+      sgstTotal: sgst,
+      igstTotal: igst,
+      totalTax: calculatedTax,
+    };
+  }, [watchedItems, watchedDiscount, watchedTaxAmount, watchedIsInterState]);
 
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
@@ -158,6 +189,8 @@ export function SaleInvoiceForm({
           saleCode: values.saleCode,
           saleDate: values.saleDate,
           status: values.status,
+          invoiceType: values.invoiceType,
+          isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
           taxAmount: Number(values.taxAmount) || 0,
         };
@@ -169,6 +202,8 @@ export function SaleInvoiceForm({
           saleCode: values.saleCode,
           saleDate: values.saleDate,
           status: values.status,
+          invoiceType: values.invoiceType,
+          isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
           taxAmount: Number(values.taxAmount) || 0,
           items: values.items.map((it) => ({
@@ -198,7 +233,7 @@ export function SaleInvoiceForm({
             <CardTitle>{isEditing ? "Edit Sale Invoice" : "Sale Invoice Details"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               <FormField
                 control={form.control}
                 name="saleCode"
@@ -273,6 +308,46 @@ export function SaleInvoiceForm({
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="invoiceType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Invoice Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="regular">Regular Invoice</SelectItem>
+                        <SelectItem value="tax">Tax Invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isInterState"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-3 mt-6">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="text-xs">Inter-State (IGST)</FormLabel>
+                    </div>
                   </FormItem>
                 )}
               />
@@ -466,6 +541,10 @@ export function SaleInvoiceForm({
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Invoice Type:</span>
+                <span className="font-medium capitalize">{watchedInvoiceType === "tax" ? "Tax Invoice" : "Regular Invoice"}</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Items Subtotal:</span>
                 <span className="font-medium">{formatMoney(subtotal)}</span>
               </div>
@@ -475,10 +554,28 @@ export function SaleInvoiceForm({
                   <span>-{formatMoney(Number(watchedDiscount))}</span>
                 </div>
               )}
-              {Number(watchedTaxAmount) > 0 && (
+              {cgstTotal > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>CGST:</span>
+                  <span>+{formatMoney(cgstTotal)}</span>
+                </div>
+              )}
+              {sgstTotal > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>SGST:</span>
+                  <span>+{formatMoney(sgstTotal)}</span>
+                </div>
+              )}
+              {igstTotal > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>IGST:</span>
+                  <span>+{formatMoney(igstTotal)}</span>
+                </div>
+              )}
+              {(Number(watchedTaxAmount) > 0 || totalTax > 0) && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax Amount:</span>
-                  <span>+{formatMoney(Number(watchedTaxAmount))}</span>
+                  <span className="text-muted-foreground">Total Tax:</span>
+                  <span>+{formatMoney(Number(watchedTaxAmount) || totalTax)}</span>
                 </div>
               )}
               <Separator className="my-2" />

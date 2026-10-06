@@ -110,6 +110,10 @@ export const GATE: readonly GateEntry[] = [
     status: "gated",
   },
   {
+    dir: "08-gst-fields-sale-tax-invoice",
+    status: "gated",
+  },
+  {
     dir: "04-react-web-app",
     status: "pending",
     reason:

@@ -9,6 +9,12 @@ export const SaleInvoiceItemSchema = z.object({
   quantity: z.number().int().min(1, "Quantity must be at least 1"),
   unitPrice: z.number().min(0, "Unit price must be positive"),
   taxPercent: optionalPercent,
+  cgstRate: optionalPercent,
+  sgstRate: optionalPercent,
+  igstRate: optionalPercent,
+  cgstAmount: optionalMoney,
+  sgstAmount: optionalMoney,
+  igstAmount: optionalMoney,
 });
 
 /**
@@ -25,8 +31,13 @@ export const SaleInvoiceSchema = z.object({
   // sent `new Date()` and ignored anything the user picked.
   saleDate: optionalDate,
   status: z.enum(SaleStatus),
+  invoiceType: z.enum(["regular", "tax"]).default("regular"),
+  isInterState: z.boolean().default(false),
   discount: optionalMoney,
   taxAmount: optionalMoney,
+  cgstAmount: optionalMoney,
+  sgstAmount: optionalMoney,
+  igstAmount: optionalMoney,
   items: z.array(SaleInvoiceItemSchema).min(1, "A sale needs at least one item"),
 });
 
@@ -35,9 +46,14 @@ export const SaleInvoiceSchema = z.object({
  * rewriting lines without replaying the stock movement would leave
  * `Inventory.quantityOnHand` disagreeing with the sale rows.
  */
-export const SaleUpdateSchema = SaleInvoiceSchema.partial().omit({
-  items: true,
-});
+export const SaleUpdateSchema = SaleInvoiceSchema.partial()
+  .omit({
+    items: true,
+  })
+  .extend({
+    invoiceType: z.enum(["regular", "tax"]).optional(),
+    isInterState: z.boolean().optional(),
+  });
 
 export const saleListQuerySchema = paginationQuerySchema.extend({
   // An empty search box trims to "" and the service reads that as "no filter".

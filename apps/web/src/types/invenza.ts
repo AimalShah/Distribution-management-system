@@ -7,6 +7,12 @@ export interface SaleItem {
   amount: number;
   paymentMethod: string;
   status: 'Paid' | 'Pending' | 'Partial' | 'Cancelled';
+  invoiceType?: string;
+  isInterState?: boolean;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  taxAmount?: number;
   items?: { name: string; sku: string; qty: number; unitPrice: number; total: number }[];
 }
 

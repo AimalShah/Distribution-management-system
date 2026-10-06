@@ -110,6 +110,8 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       unitCost: initialData?.unitCost !== undefined ? String(initialData.unitCost) : "",
       unitPrice: initialData?.unitPrice !== undefined ? String(initialData.unitPrice) : "",
       isActive: initialData?.isActive ?? true,
+      gstApplicable: initialData?.gstApplicable ?? true,
+      gstRate: initialData?.gstRate !== undefined ? Number(initialData.gstRate) : 0,
     },
   });
 
@@ -126,6 +128,8 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
         unitCost: initialData.unitCost !== undefined ? String(initialData.unitCost) : "",
         unitPrice: initialData.unitPrice !== undefined ? String(initialData.unitPrice) : "",
         isActive: initialData.isActive ?? true,
+        gstApplicable: initialData.gstApplicable ?? true,
+        gstRate: initialData.gstRate !== undefined ? Number(initialData.gstRate) : 0,
       });
     }
   }, [initialData, form]);
@@ -550,6 +554,55 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground">GST / Tax Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <FormField
+                  control={form.control}
+                  name="gstApplicable"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>GST Applicable</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Enable GST calculation for this product
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="gstRate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GST Rate (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          placeholder="e.g. 18"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </div>
 

@@ -22,10 +22,134 @@ const detailInclude = {
  * `taxPercent` is stored on the line but was never part of that sum, so it is
  * not part of this one either.
  */
-export const calculateSaleTotal = (data: SaleInvoiceInput) =>
-  data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) +
-  (data.taxAmount ?? 0) -
-  (data.discount ?? 0);
+export const calculateSaleTotal = (data: SaleInvoiceInput) => {
+  const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const gstTax = (data.cgstAmount ?? 0) + (data.sgstAmount ?? 0) + (data.igstAmount ?? 0);
+  const tax = data.taxAmount ?? (gstTax > 0 ? gstTax : 0);
+  return subtotal + tax - (data.discount ?? 0);
+};
+
+export interface SaleBreakdownItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  productName?: string;
+  productCode?: string;
+  gstApplicable?: boolean;
+  gstRate?: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+}
+
+export interface SaleBreakdownResult {
+  subtotal: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  taxAmount: number;
+  discount: number;
+  total: number;
+  items: SaleBreakdownItem[];
+}
+
+export function calculateSaleBreakdown(params: {
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal?: number;
+    gstApplicable?: boolean;
+    gstRate?: number;
+    taxPercent?: number;
+    cgstRate?: number;
+    sgstRate?: number;
+    igstRate?: number;
+    cgstAmount?: number;
+    sgstAmount?: number;
+    igstAmount?: number;
+    productName?: string;
+    productCode?: string;
+  }>;
+  isInterState?: boolean;
+  discount?: number;
+  taxAmount?: number;
+}): SaleBreakdownResult {
+  const isInterState = Boolean(params.isInterState);
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalIgst = 0;
+  let subtotal = 0;
+
+  const items: SaleBreakdownItem[] = params.items.map((item) => {
+    const lineTotal = item.subtotal ?? item.quantity * item.unitPrice;
+    subtotal += lineTotal;
+    const isGstApplicable = item.gstApplicable ?? true;
+    const rawRate = isGstApplicable ? (item.taxPercent ?? item.gstRate ?? 0) : 0;
+
+    let cgstRate = item.cgstRate ?? 0;
+    let sgstRate = item.sgstRate ?? 0;
+    let igstRate = item.igstRate ?? 0;
+    let cgstAmount = item.cgstAmount ?? 0;
+    let sgstAmount = item.sgstAmount ?? 0;
+    let igstAmount = item.igstAmount ?? 0;
+
+    if (rawRate > 0 && !item.cgstRate && !item.sgstRate && !item.igstRate && !item.cgstAmount && !item.sgstAmount && !item.igstAmount) {
+      if (isInterState) {
+        igstRate = rawRate;
+        igstAmount = Number(((lineTotal * igstRate) / 100).toFixed(2));
+      } else {
+        cgstRate = Number((rawRate / 2).toFixed(2));
+        sgstRate = Number((rawRate / 2).toFixed(2));
+        cgstAmount = Number(((lineTotal * cgstRate) / 100).toFixed(2));
+        sgstAmount = Number(((lineTotal * sgstRate) / 100).toFixed(2));
+      }
+    }
+
+    totalCgst += cgstAmount;
+    totalSgst += sgstAmount;
+    totalIgst += igstAmount;
+
+    return {
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: lineTotal,
+      productName: item.productName,
+      productCode: item.productCode,
+      gstApplicable: item.gstApplicable,
+      gstRate: item.gstRate,
+      cgstRate,
+      sgstRate,
+      igstRate,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
+    };
+  });
+
+  const cgstAmount = Number(totalCgst.toFixed(2));
+  const sgstAmount = Number(totalSgst.toFixed(2));
+  const igstAmount = Number(totalIgst.toFixed(2));
+  const totalTax = params.taxAmount !== undefined ? params.taxAmount : Number((cgstAmount + sgstAmount + igstAmount).toFixed(2));
+  const discount = params.discount ?? 0;
+  const total = Number((subtotal + totalTax - discount).toFixed(2));
+
+  return {
+    subtotal: Number(subtotal.toFixed(2)),
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    taxAmount: totalTax,
+    discount,
+    total,
+    items,
+  };
+}
 
 export type SaleListArgs = {
   organizationId: string;
@@ -137,14 +261,6 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     );
   }
 
-  const saleItems = data.items.map((item) => ({
-    productId: item.productId,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    totalPrice: item.quantity * item.unitPrice,
-    taxPercent: item.taxPercent,
-  }));
-
   // Legacy `addSaleInvoice` wrote the sale, the stock deductions and the log
   // entries as independent statements, so a failure part way through left a
   // sale with stock still on hand. One transaction per POST commits or rolls
@@ -170,7 +286,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     const productIds = [...demandByProduct(data.items).keys()];
     const owned = await tx.product.findMany({
       where: { id: { in: productIds }, organizationId },
-      select: { id: true },
+      select: { id: true, gstApplicable: true, gstRate: true },
     });
 
     if (owned.length !== productIds.length) {
@@ -181,6 +297,64 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         { productIds: productIds.filter((id) => !ownedIds.has(id)) }
       );
     }
+
+    const productMap = new Map(owned.map((product) => [product.id, product]));
+    const isInterState = Boolean(data.isInterState);
+    let totalCgstAmount = 0;
+    let totalSgstAmount = 0;
+    let totalIgstAmount = 0;
+
+    const saleItems = data.items.map((item) => {
+      const prod = productMap.get(item.productId);
+      const isGstApplicable = prod?.gstApplicable ?? true;
+      const rawRate = isGstApplicable ? (item.taxPercent ?? prod?.gstRate ?? 0) : 0;
+      const lineTotal = item.quantity * item.unitPrice;
+
+      let cgstRate = item.cgstRate ?? 0;
+      let sgstRate = item.sgstRate ?? 0;
+      let igstRate = item.igstRate ?? 0;
+      let cgstAmount = item.cgstAmount ?? 0;
+      let sgstAmount = item.sgstAmount ?? 0;
+      let igstAmount = item.igstAmount ?? 0;
+
+      if (rawRate > 0 && !item.cgstRate && !item.sgstRate && !item.igstRate && !item.cgstAmount && !item.sgstAmount && !item.igstAmount) {
+        if (isInterState) {
+          igstRate = rawRate;
+          igstAmount = Number(((lineTotal * igstRate) / 100).toFixed(2));
+        } else {
+          cgstRate = Number((rawRate / 2).toFixed(2));
+          sgstRate = Number((rawRate / 2).toFixed(2));
+          cgstAmount = Number(((lineTotal * cgstRate) / 100).toFixed(2));
+          sgstAmount = Number(((lineTotal * sgstRate) / 100).toFixed(2));
+        }
+      }
+
+      totalCgstAmount += cgstAmount;
+      totalSgstAmount += sgstAmount;
+      totalIgstAmount += igstAmount;
+
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: lineTotal,
+        taxPercent: rawRate > 0 ? rawRate : item.taxPercent,
+        cgstRate,
+        sgstRate,
+        igstRate,
+        cgstAmount,
+        sgstAmount,
+        igstAmount,
+      };
+    });
+
+    const calculatedCgst = data.cgstAmount !== undefined ? data.cgstAmount : Number(totalCgstAmount.toFixed(2));
+    const calculatedSgst = data.sgstAmount !== undefined ? data.sgstAmount : Number(totalSgstAmount.toFixed(2));
+    const calculatedIgst = data.igstAmount !== undefined ? data.igstAmount : Number(totalIgstAmount.toFixed(2));
+    const totalGst = calculatedCgst + calculatedSgst + calculatedIgst;
+    const finalTaxAmount = data.taxAmount !== undefined ? data.taxAmount : (totalGst > 0 || data.invoiceType === "tax" ? totalGst : undefined);
+    const subtotal = data.items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
+    const finalTotalAmount = data.taxAmount !== undefined ? totalAmount : (subtotal + (finalTaxAmount ?? 0) - (data.discount ?? 0));
 
     // The legacy service deducted optimistically and clamped at zero:
     // `quantityOnHand: Math.max(0, newQty)` with only a `console.warn`. Selling
@@ -222,9 +396,14 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         saleCode: data.saleCode,
         customerId: data.customerId,
         saleDate: data.saleDate,
-        totalAmount,
+        totalAmount: finalTotalAmount,
         discount: data.discount,
-        taxAmount: data.taxAmount,
+        taxAmount: finalTaxAmount,
+        invoiceType: data.invoiceType ?? "regular",
+        isInterState,
+        cgstAmount: calculatedCgst,
+        sgstAmount: calculatedSgst,
+        igstAmount: calculatedIgst,
         status: data.status,
         organizationId,
         items: { create: saleItems },
@@ -697,4 +876,25 @@ export async function uncancelSale(id: string, organizationId: string) {
     data: { status: existing.statusBeforeCancel ?? "Pending", statusBeforeCancel: null },
     include: detailInclude,
   });
+}
+
+export async function getSaleInvoiceData(id: string, organizationId: string) {
+  const sale = await getSaleByIdOrCode(id, organizationId);
+  if (!sale) return null;
+
+  const items = sale.items || [];
+  const subtotal = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
+  const totalTax =
+    (sale.cgstAmount || 0) + (sale.sgstAmount || 0) + (sale.igstAmount || 0) ||
+    (sale.taxAmount || 0);
+
+  return {
+    ...sale,
+    subtotal,
+    totalTax,
+    items: items.map((it) => ({
+      ...it,
+      totalPrice: it.totalPrice ?? it.quantity * it.unitPrice,
+    })),
+  };
 }

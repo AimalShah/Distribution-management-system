@@ -236,6 +236,8 @@ model Product {
   unitPrice   Float // base/unit price
   unitCost    Float
   isActive    Boolean  @default(true)
+  gstApplicable Boolean @default(true)
+  gstRate       Float   @default(0) // GST rate in percentage (e.g., 18 for 18%)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -301,13 +303,18 @@ model Sale {
   customerId     String
   organizationId String
 
-  totalAmount Float
-  taxAmount   Float?
-  discount    Float?
-  status      String // 'Pending', 'Completed', 'Cancelled'
-  saleDate    DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  totalAmount  Float
+  taxAmount    Float?
+  discount     Float?
+  status       String // 'Pending', 'Completed', 'Cancelled'
+  invoiceType  String   @default("regular") // "regular" | "tax"
+  isInterState Boolean  @default(false)
+  cgstAmount   Float    @default(0)
+  sgstAmount   Float    @default(0)
+  igstAmount   Float    @default(0)
+  saleDate     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Sum of the payments allocated to this invoice, maintained inside the same
   // transaction that writes the Payment row, so `amountPaid <= totalAmount` can
@@ -346,6 +353,13 @@ model SaleItem {
   taxPercent Float?
   discount   Float?
   batchId    String?
+
+  cgstRate   Float @default(0)
+  sgstRate   Float @default(0)
+  igstRate   Float @default(0)
+  cgstAmount Float @default(0)
+  sgstAmount Float @default(0)
+  igstAmount Float @default(0)
 
   // Relations
   sale    Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
