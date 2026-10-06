@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-06
 **Repo:** `Distribution-management-system`
-**Branch:** `main` @ `2dcbc69`
+**Branch:** `main` @ `1e629bc`
 
 Status of every checkpoint in `checkpoints/`, derived from what is actually on `main` —
 not from what a `plan.md` claims.
@@ -28,16 +28,20 @@ not from what a `plan.md` claims.
 | 01 — Shared Packages | **Implemented** |
 | 02a–02o — Express API | **Implemented** — all 15 parity suites `gated`; routes mounted |
 | 03 — Auth | **Partial** (shim only) |
-| 04a–04j — React Web App | **Implemented** — 21 pages, all ten sub-suites `gated` |
+| 04a–04j — React Web App | **Implemented** — 23 pages, all ten sub-suites `gated` |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Spec only** |
 | 07–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
+| 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
+| 15 — Payments & Invoice Lifecycle | **Partial** — code + server tests on `main`; parity suite is a plan only |
+| 16 — Customer Ledger & WhatsApp Statements | **Partial** — code + server tests on `main`; parity suite is a plan only |
+| 17 — App-wide Confirmation Dialogs | **Partial** — component + conversions on `main`; parity suite is a plan only |
 
-**The API layer is done and the web UI is built**: `apps/web` has 21 pages wired to the
+**The API layer is done and the web UI is built**: `apps/web` has 23 pages wired to the
 real API (dashboard, products, purchases, sales, returns, inventory, customers,
-suppliers, reports, users, billing, permissions, profile), all gated individually as
-04a–04j. The whole surface still runs on the header-trust auth shim (03), and
+suppliers, reports, users, billing, permissions, profile, payments, customer ledger),
+all gated individually as 04a–04j. The whole surface still runs on the header-trust auth shim (03), and
 `apps/web/src/data/mockData.ts` still feeds the dashboard notifications widget and the
 app-shell header alongside the real `GET /dashboard/stats`.
 
@@ -100,7 +104,7 @@ are mounted directly in `app.ts` instead — intentional (documented in a commen
 there) because their paths need the bootstrap context rather than a tenant header.
 Worth knowing before you add a route that expects them in the shared router.
 
-**650 tests pass, `tsc --noEmit` clean.**
+**685 tests pass, `tsc --noEmit` clean.**
 
 ### Defects found and fixed in review (PR #18 + per-checkpoint fixes)
 
@@ -185,12 +189,33 @@ One fitness function regressed with it: three Invenza components render a raw
 `<table>`, which `table-pagination-check` forbids — see the defects note in the CI
 table below.
 
+## 14–17 — Soft delete, payments, ledger, confirmations · Partial
+
+Landed in `1e629bc`. The **code** is on `main` and covered by the mocked server suite
+(685 tests) and the parity suites that already existed (02c/02e were rewritten for the
+new delete semantics, 04b/04g/04h/04j for `ConfirmDialog`). The **dedicated parity
+suites** for these four checkpoints are deliberately not written yet: `plan.md` +
+`plan.lock` exist for each, and each plan carries the "Parity suite outline" that the
+suite must assert once it is written. No `parity-gate.ts` entry exists for them, which
+is correct — a `gated` entry with no suite on disk fails the gate by design.
+
+| ID | Checkpoint | Code on `main` | Parity suite |
+|---|---|---|---|
+| 14 | Soft Delete & Restore | Yes — sale/return tombstones, stock reversal, restore, `deleted` list flag | Plan only (`checkpoints/14-soft-delete-restore/`) |
+| 15 | Payments & Invoice Lifecycle | Yes — `Payment` entity, `/api/payments`, cancel/uncancel, corrections | Plan only (`checkpoints/15-payments-invoice-lifecycle/`) |
+| 16 | Customer Ledger & WhatsApp | Yes — derived `GET /customers/:id/ledger`, `CustomerLedgerPage`, `wa.me` share | Plan only (`checkpoints/16-customer-ledger-whatsapp/`) |
+| 17 | Confirmation Dialogs | Yes — `ConfirmDialog`, every destructive action behind it, zero `window.confirm` | Plan only (`checkpoints/17-confirmation-dialogs/`) |
+
+Promoting each to **Implemented** requires: write the suite from its plan's outline,
+gate it in `parity-gate.ts`, and record the PR — the rules at the bottom of this file
+apply unchanged.
+
 ---
 
 ## Build and test
 
 ```bash
-# API tests — 650 pass
+# API tests — 685 pass
 pnpm --filter server run test
 
 # Typecheck (all workspaces)
@@ -211,13 +236,14 @@ The parity suites under `checkpoints/` are outside the pnpm workspace globs, so 
 
 ### CI status
 
-All three fitness-function jobs pass:
+Two of the three fitness-function jobs pass; `bundle-size` fails for reasons that
+predate the 14–17 wave (measured below):
 
 | Job | Status |
 |---|---|
-| `bundle-size` | Passes — configured by `apps/web/.size-limit.json`. Budget is **175 kB** brotli, see the note below for how that number was chosen. |
-| `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 650 tests). |
-| `table-pagination-check` | **Currently fails on `main`**: three Invenza components from checkpoint 13 (`LowStockTable`, `InvoiceDetailModal`, `RecentSalesTable`) render a raw `<table>` instead of the shared `DataTable`/`Table`. The job only runs on `pull_request`, which is why a green `main` hid it. |
+| `bundle-size` | **Currently fails on `main`**, and did before checkpoints 14–17 touched it: measured **1.28 MB** against the **260 kB** in `apps/web/.size-limit.json`. The failure is pre-existing (checkpoint 13's vendor chunks — jspdf/html2canvas/purify — all sit under the `dist/assets/*.{js,css}` glob); the 14–17 wave adds ~10 kB. Fixing it means `React.lazy` splitting, not a bigger number — see the note below. |
+| `checkpoint-parity` | Passes — runs `pnpm run test:parity` against a real PostgreSQL (the parity gate) plus the server suite (`pnpm --filter @dms/server test`, 685 tests). |
+| `table-pagination-check` | **Passes** — the three Invenza components from checkpoint 13 (`LowStockTable`, `InvoiceDetailModal`, `RecentSalesTable`) were converted to the shared `@dms/ui` `Table` in the 14–17 wave; no literal `<table` remains under `apps/web/src`. It had been failing only on `pull_request`, which is why a green `main` hid it. |
 
 **What the parity job actually enforces is now declared, not implied.**
 `checkpoints/parity-gate.ts` lists every checkpoint as `gated` or `pending`, each `pending`
@@ -230,7 +256,7 @@ fail against the header-trust shim until checkpoint 3 lands.
 
 The server suite runs alongside it. It mocks the database, so it cannot see the constraints
 the parity suites assert, but it covers far more request paths than the 19 gated parity
-files, it is where the 650 tests live, and no other workflow runs it.
+files, it is where the 685 tests live, and no other workflow runs it.
 
 ### The 02 parity suites are real now
 
@@ -265,6 +291,13 @@ recalibrated once the UI package landed, against brotli measurements of the real
 **175 kB** is set from the 128.23 kB worst case with roughly 35% headroom. Past that, charts,
 tables and the date range need `React.lazy` splitting rather than a bigger number — the
 measurements above are how to tell the difference between the two.
+
+**The number in the repo today is neither 175 kB nor believed.** `apps/web/.size-limit.json`
+now says **260 kB** against a glob of *every* built asset, and the measured total is
+**1.28 MB** — so `bundle-size` fails, and has since checkpoint 13 landed the PDF stack.
+Re-measured on `main` with and without the 14–17 changes: 1.28 MB before, 1.29 MB after,
+so this wave is not what moved it. The three measurements above still say what to do:
+split the charts, tables and PDF renderer behind `React.lazy` rather than raising the cap.
 
 Getting there needed `"sideEffects": false` on `@dms/ui`. Without it Rollup treats every
 `export *` in the barrel as potentially effectful and pulls all of recharts in for a single
