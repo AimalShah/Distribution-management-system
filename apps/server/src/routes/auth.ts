@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { z } from "zod";
 import { asyncHandler, unauthorized } from "../http";
 import {
@@ -22,6 +22,7 @@ const loginSchema = z.object({
  */
 authRouter.post(
   "/login",
+  express.json(),
   asyncHandler(async (req, res) => {
     const { username, password } = loginSchema.parse(req.body);
     const user = verifyCredentials(username, password);

@@ -28,6 +28,7 @@
   "dependencies": {
     "@dms/db": "workspace:*",
     "@dms/shared": "workspace:*",
+    "better-auth": "^1.7.7",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "puppeteer": "^25.12.0",

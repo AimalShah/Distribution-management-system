@@ -2,9 +2,9 @@
 // reads it at module scope (`config/env`) or on first query (`@dms/db`).
 import "./config/dev-env";
 import { createApp } from "./app";
-import { assertAuthShimIsSafe, host, port } from "./config/env";
+import { assertAuthIsSafe, host, port } from "./config/env";
 
-assertAuthShimIsSafe();
+assertAuthIsSafe();
 
 const app = createApp();
 

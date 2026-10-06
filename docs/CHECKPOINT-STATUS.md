@@ -1,6 +1,6 @@
 # Checkpoint Implementation Status
 
-**Last updated:** 2026-10-06
+**Last updated:** 2026-10-07
 **Repo:** `Distribution-management-system`
 **Branch:** `main` @ `1e629bc`
 
@@ -27,7 +27,7 @@ not from what a `plan.md` claims.
 | 00 — Harness + Monorepo Scaffold | **Implemented** |
 | 01 — Shared Packages | **Implemented** |
 | 02a–02o — Express API | **Implemented** — all 15 parity suites `gated`; routes mounted |
-| 03 — Auth | **Partial** (shim only) |
+| 03 — Auth | **Implemented** — better-auth sessions + header trusted-proxy; `gated` |
 | 04a–04j — React Web App | **Implemented** — 23 pages, all ten sub-suites `gated` |
 | 05 — Electron Shell | **Partial** |
 | 06 — RBAC Rebuild | **Spec only** |
@@ -41,9 +41,7 @@ not from what a `plan.md` claims.
 **The API layer is done and the web UI is built**: `apps/web` has 23 pages wired to the
 real API (dashboard, products, purchases, sales, returns, inventory, customers,
 suppliers, reports, users, billing, permissions, profile, payments, customer ledger),
-all gated individually as 04a–04j. The whole surface still runs on the header-trust auth shim (03), and
-`apps/web/src/data/mockData.ts` still feeds the dashboard notifications widget and the
-app-shell header alongside the real `GET /dashboard/stats`.
+all gated individually as 04a–04j. Checkpoint 03 (better-auth sessions + fallback auth) is implemented and gated.
 
 ---
 
@@ -124,13 +122,30 @@ Worth knowing before you add a route that expects them in the shared router.
 | `totalLineItems` on the sales report had the same defect, keyed on `saleId` | `feat/02-api-parity` |
 | `removeMember` checked the member's *current* role instead of the role being changed, so it could strip ownership from a second owner | `feat/02-api-parity` |
 
-## 03 — Auth · Partial
+## 03 — Auth · Implemented (PR pending review)
 
-The stand-in middleware reads a `USER_HEADER` and `ORGANIZATION_HEADER`. `app.ts` refuses to
-start in production with the shim enabled. Real auth is checkpoint 3 and is **not done**.
+`apps/server/src/auth/` configures better-auth (Prisma adapter, email/password, Resend
+verification, organization + admin + bearer plugins), mounted at `/api/auth/*`.
+`middleware/session.ts` fills `req.auth` from the session: 401 without one, 400
+`ORGANIZATION_REQUIRED` with no active organization, 403 `NOT_A_MEMBER` when the session's
+active organization has no `Member` row for the user (re-checked per request, because removing
+a member does not rewrite their sessions).
 
-Every authorization check built so far depends on this shim being replaced with something
-that makes `req.auth.userId` trustworthy.
+The old header shim now exists only as **trusted-proxy mode** (`DMS_TRUSTED_PROXY_AUTH=true`),
+for deployments behind an authenticating gateway. The mocked server suite and the 02 parity
+suites run in that mode; `checkpoints/03-auth/parity.test.ts` (20 tests, real database) covers
+the session path. Production refuses to start without a 32+ character `BETTER_AUTH_SECRET`.
+
+Deviations from the legacy config, both security fixes:
+
+| Legacy | Now | Why |
+|---|---|---|
+| `admin({ defaultRole: "admin" })` | `defaultRole: "user"` | The admin role is global: every sign-up could list, ban and delete every tenant's users |
+| `organizationId` writable at sign-up | `input: false` | A client-written tenant pointer is the checkpoint-2 defect pattern |
+
+Migration `0002_auth_invitation_created_at` adds `invitation.createdAt`, which the organization
+plugin writes. `apps/web` has `lib/auth-client.ts` and `hooks/use-auth.ts` (better-auth's own
+`useSession`, which refreshes itself on sign-in/out and org switch, instead of SWR).
 
 ## 04 — React Web App · Implemented (04a–04j gated individually)
 

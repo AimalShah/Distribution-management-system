@@ -15,18 +15,20 @@ export class HttpError extends Error {
 export const badRequest = (message: string, code = "BAD_REQUEST", details?: unknown) =>
   new HttpError(400, message, code, details);
 
+/**
+ * No valid session or credentials presented. Distinct from 403: the caller must authenticate.
+ */
+export const unauthorized = (
+  message = "Authentication required.",
+  code = "UNAUTHORIZED",
+  details?: unknown
+) => new HttpError(401, message, code, details);
+
 export const notFound = (message: string, code = "NOT_FOUND") =>
   new HttpError(404, message, code);
 
 export const conflict = (message: string, code = "CONFLICT", details?: unknown) =>
   new HttpError(409, message, code, details);
-
-/**
- * No usable credentials were presented. 401 rather than 403 because the fix is
- * to authenticate again, not to ask someone else for permission.
- */
-export const unauthorized = (message: string, code = "UNAUTHORIZED", details?: unknown) =>
-  new HttpError(401, message, code, details);
 
 /**
  * The caller is known -- they hold a valid user and session -- but this action
