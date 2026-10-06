@@ -15,6 +15,9 @@ import {
   updateSale,
 } from "../services/sale";
 
+import { renderSaleInvoiceHtml } from "../services/sale-invoice-template";
+import { generateSalePdf } from "../services/sale-pdf";
+
 export const saleRouter: Router = Router();
 
 saleRouter.get(
@@ -41,6 +44,29 @@ saleRouter.get(
       pageSize,
     });
     res.json(result);
+  })
+);
+
+saleRouter.get(
+  "/:id/print",
+  asyncHandler(async (req, res) => {
+    const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
+    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+    const html = renderSaleInvoiceHtml(sale as any);
+    res.type("html").send(html);
+  })
+);
+
+saleRouter.get(
+  "/:id/pdf",
+  asyncHandler(async (req, res) => {
+    const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
+    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+    const pdf = await generateSalePdf(sale as any);
+    res
+      .type("pdf")
+      .set("Content-Disposition", `inline; filename="invoice-${sale.saleCode}.pdf"`)
+      .send(Buffer.from(pdf));
   })
 );
 

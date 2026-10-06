@@ -5,6 +5,8 @@ packages:
 allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
+  core-js: false
   electron: true
   esbuild: true
   prisma: true
+  puppeteer: false

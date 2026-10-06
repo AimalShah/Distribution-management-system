@@ -36,19 +36,24 @@ function findParityTests(dir: string = checkpointsDir): string[] {
   return found.sort();
 }
 
-/** The checkpoint directory a test belongs to, e.g. `checkpoints/02-express-api`. */
+/**
+ * The gate entry a suite belongs to: the longest `GATE` directory that prefixes
+ * it, so `04-react-web-app/04a-dashboard/parity.test.ts` resolves to the `04a`
+ * entry and `04-react-web-app/04b-product/parity.test.ts` falls through to the
+ * checkpoint-wide one. `parts[1]` did this while every entry was a top-level
+ * directory and would have silently reported the nested `04a` entry as matching
+ * no suite.
+ */
 function owningDir(testPath: string): string {
-  const parts = testPath.split("/"); // checkpoints/<dir>[/<subdir>]/parity.test.ts
-  return parts[1];
+  const relative = testPath.replace(/^checkpoints\//, "");
+  const entries = [...GATED_DIRS, ...PENDING_DIRS].sort(
+    (a, b) => b.length - a.length
+  );
+  return entries.find((dir) => relative.startsWith(`${dir}/`)) ?? "";
 }
 
 describe("checkpoint parity gate", () => {
   const parityTests = findParityTests();
-  const checkpointDirs = fs
-    .readdirSync(checkpointsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
 
   it("finds the parity suites on disk", () => {
     // A glob that silently matches nothing is what made the old job useless,
@@ -85,7 +90,12 @@ describe("checkpoint parity gate", () => {
   });
 
   it("points every gate entry at a real checkpoint directory", () => {
-    const missing = GATE.map((e) => e.dir).filter((d) => !checkpointDirs.includes(d));
+    // `fs.existsSync` rather than a membership test against the top-level
+    // listing: an entry may name a subdirectory (`04-react-web-app/04a-dashboard`)
+    // when a checkpoint is gated one suite at a time.
+    const missing = GATE.map((e) => e.dir).filter(
+      (d) => !fs.existsSync(path.join(checkpointsDir, d))
+    );
 
     expect(missing, `Gate entries with no directory: ${missing.join(", ")}`).toEqual([]);
   });

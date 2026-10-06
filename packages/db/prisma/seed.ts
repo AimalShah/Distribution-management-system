@@ -51,6 +51,10 @@ async function main() {
         id: "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE",
         name: "Acme Distribution",
         slug: "acme",
+        // `Organization.createdAt` has no `@default(now())` in the schema, so
+        // the row cannot be inserted without one -- the seed stopped here with
+        // P2015-style "Argument createdAt is missing" on a fresh database.
+        createdAt: new Date(),
       },
     });
   }

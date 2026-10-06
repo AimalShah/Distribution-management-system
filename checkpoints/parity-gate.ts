@@ -50,11 +50,60 @@ export const GATE: readonly GateEntry[] = [
     reason:
       "Auth is the temporary header-trust shim in `middleware/auth-context.ts`; `better-auth` is not a dependency yet. The three HTTP tests fail against the shim by design.",
   },
+  // A checkpoint is gated one subdirectory at a time when its suites land
+  // separately. `dir` may therefore be a path under `checkpoints/` rather than
+  // only a directory name; `owningDir` in the test matches a suite to the
+  // longest entry that prefixes it, so `04a` reads as gated while the nine
+  // stubs beside it still read as pending.
+  {
+    dir: "04-react-web-app/04a-dashboard",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04b-product",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04c-purchase",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04d-sale-invoice",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04e-inventory",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04f-returns",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04g-customer",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04h-supplier",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04i-reports",
+    status: "gated",
+  },
+  {
+    dir: "04-react-web-app/04j-settings",
+    status: "gated",
+  },
+  {
+    dir: "13-invenza-ui-dashboard",
+    status: "gated",
+  },
   {
     dir: "04-react-web-app",
     status: "pending",
     reason:
-      "`apps/web` is a 4-file shell with no screens, so the ten suites have nothing to assert against. Blocked on 01 (shared UI, now landed) and 03 (real sessions).",
+      "All sub-checkpoints 04a-dashboard through 04j-settings are gated individually above. Top-level placeholder remains pending until entire suite is collapsed.",
   },
 ];
 

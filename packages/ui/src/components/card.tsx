@@ -2,19 +2,30 @@ import * as React from "react"
 
 import { cn } from "../lib/utils"
 
-const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "rounded-lg border bg-card text-card-foreground shadow-sm",
-      className
-    )}
-    {...props}
-  />
-))
+/**
+ * The card, as the shadcn-admin reference uses it: vertical padding lives on
+ * the card (`py-6`) rather than on its header and content, and a `gap-6`
+ * between the slots supplies the rhythm. That is why `CardHeader` and
+ * `CardContent` are horizontal-only padding — a caller adding `pb-2` to a
+ * header (as the stat tiles do) is shaping one slot without having to cancel
+ * the card's own padding first.
+ *
+ * `cn` runs tailwind-merge, so a caller passing `flex flex-row` or `gap-3`
+ * replaces the header's `flex-col`/`gap-2` instead of fighting it in the
+ * cascade, where the outcome would depend on stylesheet order.
+ */
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "flex flex-col gap-6 rounded-lg border bg-card py-6 text-card-foreground shadow-sm",
+        className
+      )}
+      {...props}
+    />
+  )
+)
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<
@@ -23,7 +34,7 @@ const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    className={cn("flex flex-col gap-2 px-6", className)}
     {...props}
   />
 ))
@@ -35,10 +46,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn(
-      "text-2xl font-semibold leading-none tracking-tight",
-      className
-    )}
+    className={cn("leading-none font-semibold", className)}
     {...props}
   />
 ))
@@ -60,7 +68,7 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+  <div ref={ref} className={cn("px-6", className)} {...props} />
 ))
 CardContent.displayName = "CardContent"
 
@@ -68,11 +76,7 @@ const CardFooter = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("flex items-center p-6 pt-0", className)}
-    {...props}
-  />
+  <div ref={ref} className={cn("flex items-center px-6", className)} {...props} />
 ))
 CardFooter.displayName = "CardFooter"
 
