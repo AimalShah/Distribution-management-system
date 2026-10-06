@@ -29,7 +29,7 @@ not from what a `plan.md` claims.
 | 02a–02o — Express API | **Implemented** — all 15 parity suites `gated`; routes mounted |
 | 03 — Auth | **Implemented** — better-auth sessions + header trusted-proxy; `gated` |
 | 04a–04j — React Web App | **Implemented** — 23 pages, all ten sub-suites `gated` |
-| 05 — Electron Shell | **Partial** |
+| 05 — Electron Shell | **Implemented** — packaging, security contracts & build output `gated` |
 | 06 — RBAC Rebuild | **Spec only** |
 | 07–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
@@ -167,11 +167,12 @@ are gated one at a time (see the comment in `checkpoints/parity-gate.ts`).
 | 04i | Reports Page | Implemented — `gated` |
 | 04j | Settings Pages | Implemented — `gated` (Billing and Permissions pages are still placeholders inside) |
 
-## 05 — Electron Shell · Partial
+## 05 — Electron Shell · Implemented
 
-`BrowserWindow` with `contextIsolation: true`, `nodeIntegration: false`, preload script, and
-dev/prod load paths all present. Acceptance test asserts 6 things but has no real Electron
-runtime behind it.
+`apps/desktop` wraps the web app in Electron with `contextIsolation: true`, `nodeIntegration: false`,
+guarded IPC preload bridge, standard 1400x900 window, dev/prod load switches, CommonJS compiler
+config (`dist/`), and multi-platform packaging (`electron-builder.yml`). Its parity suite is `gated`
+and passes.
 
 ## 06–12 — Domain features · Spec only
 

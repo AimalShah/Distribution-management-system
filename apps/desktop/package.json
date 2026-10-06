@@ -10,6 +10,9 @@
     "dist": "electron-builder",
     "dist:dir": "electron-builder --dir"
   },
+  "dependencies": {
+    "@dms/web": "workspace:*"
+  },
   "devDependencies": {
     "@dms/config-typescript": "workspace:*",
     "concurrently": "^8.0.0",

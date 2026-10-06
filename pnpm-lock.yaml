@@ -186,6 +186,10 @@ importers:
         version: 5.0.2(@types/node@20.19.43)(jsdom@25.0.1(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(tsx@4.23.15))
 
   apps/desktop:
+    dependencies:
+      '@dms/web':
+        specifier: workspace:*
+        version: link:../web
     devDependencies:
       '@dms/config-typescript':
         specifier: workspace:*
