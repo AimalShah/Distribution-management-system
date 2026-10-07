@@ -14,8 +14,10 @@ import {
   getStockBatchById,
   listStockBatches,
 } from "../services/batch";
+import Papa from "papaparse";
 import {
   adjustInventory,
+  bulkImportInventory,
   createInventory,
   getInventory,
   getInventoryById,
@@ -122,6 +124,39 @@ inventoryRouter.post(
       req.auth.userId
     );
     res.json(inventory);
+  })
+);
+
+inventoryRouter.post(
+  "/bulk-import",
+  asyncHandler(async (req, res) => {
+    let rows: any[] = [];
+    if (Array.isArray(req.body)) {
+      rows = req.body;
+    } else if (req.body && Array.isArray(req.body.rows)) {
+      rows = req.body.rows;
+    } else if (typeof req.body === "string" || (req.body && typeof req.body.csv === "string")) {
+      const csvStr = typeof req.body === "string" ? req.body : req.body.csv;
+      const parsed = Papa.parse<Record<string, any>>(csvStr, {
+        header: true,
+        skipEmptyLines: "greedy",
+      });
+      rows = parsed.data.map((r) => ({
+        productCode: r.productCode || r.product_code || r.code || r.sku,
+        productName: r.productName || r.product_name || r.name,
+        quantityOnHand: r.quantityOnHand ?? r.quantity ?? r.qty ?? r.stock,
+        reorderLevel: r.reorderLevel ?? r.reorder_level ?? r.minStock,
+        maxStockLevel: r.maxStockLevel ?? r.max_stock_level ?? r.maxStock,
+      }));
+    } else {
+      throw badRequest(
+        "Request body must contain 'rows' array or 'csv' string",
+        "INVALID_BULK_IMPORT_PAYLOAD"
+      );
+    }
+
+    const result = await bulkImportInventory(rows, req.auth.organizationId);
+    res.json(result);
   })
 );
 

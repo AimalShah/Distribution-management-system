@@ -27,7 +27,7 @@ const { models, transaction } = vi.hoisted(() => {
       count: vi.fn(),
       create: vi.fn(),
     },
-    product: { findFirst: vi.fn() },
+    product: { findFirst: vi.fn(), findMany: vi.fn() },
     reorderLevel,
   };
 
@@ -107,7 +107,8 @@ beforeEach(() => {
   models.inventoryLog.findMany.mockResolvedValue([logFixture()]);
   models.inventoryLog.count.mockResolvedValue(1);
   models.inventoryLog.create.mockResolvedValue(logFixture());
-  models.product.findFirst.mockResolvedValue({ id: "prod_1" });
+  models.product.findFirst.mockResolvedValue({ id: "prod_1", productCode: "PROD-001" });
+  models.product.findMany.mockResolvedValue([{ id: "prod_1", productCode: "PROD-001", name: "Product 1" }]);
 });
 
 describe("organization context", () => {
@@ -633,3 +634,119 @@ describe("PUT /api/inventory/:id/settings", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("POST /api/inventory/bulk-import", () => {
+  it("rejects unauthorized access without organization context", async () => {
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .send({ rows: [{ productCode: "P-1", quantityOnHand: 10 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("ORGANIZATION_REQUIRED");
+  });
+
+  it("rejects invalid payload format", async () => {
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .set(auth())
+      .send({ invalidField: 123 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_BULK_IMPORT_PAYLOAD");
+  });
+
+  it("imports valid rows and reports row success", async () => {
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", productCode: "PROD-001", name: "Widget" },
+    ]);
+    models.inventory.findFirst.mockResolvedValue(null);
+    models.inventory.create.mockResolvedValue(inventoryFixture());
+
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .set(auth())
+      .send({
+        rows: [
+          {
+            productCode: "PROD-001",
+            quantityOnHand: 50,
+            reorderLevel: 10,
+            maxStockLevel: 100,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(1);
+    expect(res.body.created).toBe(1);
+    expect(res.body.errors).toHaveLength(0);
+    expect(models.inventory.create).toHaveBeenCalled();
+  });
+
+  it("updates existing inventory record if already present", async () => {
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", productCode: "PROD-001", name: "Widget" },
+    ]);
+    models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 20 });
+    models.inventory.update.mockResolvedValue({ id: "inv_1", quantityOnHand: 75 });
+
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .set(auth())
+      .send({
+        rows: [
+          {
+            productCode: "PROD-001",
+            quantityOnHand: 75,
+            reorderLevel: 15,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(1);
+    expect(res.body.updated).toBe(1);
+    expect(res.body.errors).toHaveLength(0);
+    expect(models.inventory.update).toHaveBeenCalled();
+  });
+
+  it("reports error for non-existent product in organization", async () => {
+    models.product.findMany.mockResolvedValue([]);
+
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .set(auth())
+      .send({
+        rows: [
+          {
+            productCode: "NONEXISTENT",
+            quantityOnHand: 25,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(0);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].row).toBe(1);
+    expect(res.body.errors[0].error).toContain("NONEXISTENT");
+  });
+
+  it("parses CSV string payload directly", async () => {
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", productCode: "PROD-001", name: "Widget" },
+    ]);
+    models.inventory.findFirst.mockResolvedValue(null);
+
+    const csvData = "productCode,quantityOnHand,reorderLevel\nPROD-001,40,5";
+    const res = await request(app)
+      .post("/api/inventory/bulk-import")
+      .set(auth())
+      .send({ csv: csvData });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(1);
+    expect(res.body.errors).toHaveLength(0);
+  });
+});
+

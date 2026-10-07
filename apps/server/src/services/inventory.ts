@@ -2,6 +2,7 @@ import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type {
   InventoryAdjustInput,
+  InventoryBulkImportRow,
   InventoryCreateInput,
   InventoryMovementValue,
   InventorySettingsInput,
@@ -393,3 +394,161 @@ export async function updateInventorySettings(
     include: inventoryInclude,
   });
 }
+
+export interface BulkImportError {
+  row: number;
+  productCode?: string;
+  error: string;
+}
+
+export interface BulkImportResult {
+  success: number;
+  created: number;
+  updated: number;
+  errors: BulkImportError[];
+}
+
+export async function bulkImportInventory(
+  rows: InventoryBulkImportRow[],
+  organizationId: string
+): Promise<BulkImportResult> {
+  const errors: BulkImportError[] = [];
+  const validCandidates: { rowNum: number; data: InventoryBulkImportRow }[] = [];
+
+  // 1. Initial field validation per row
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 1;
+    if (!row.productCode || typeof row.productCode !== "string" || !row.productCode.trim()) {
+      errors.push({ row: rowNum, error: "Missing or invalid productCode" });
+      return;
+    }
+    const qty = Number(row.quantityOnHand);
+    if (isNaN(qty) || !Number.isInteger(qty) || qty < 0) {
+      errors.push({
+        row: rowNum,
+        productCode: row.productCode,
+        error: "quantityOnHand must be a non-negative integer",
+      });
+      return;
+    }
+    if (
+      row.reorderLevel !== undefined &&
+      (isNaN(Number(row.reorderLevel)) || !Number.isInteger(Number(row.reorderLevel)) || Number(row.reorderLevel) < 0)
+    ) {
+      errors.push({
+        row: rowNum,
+        productCode: row.productCode,
+        error: "reorderLevel must be a non-negative integer",
+      });
+      return;
+    }
+    if (
+      row.maxStockLevel !== undefined &&
+      (isNaN(Number(row.maxStockLevel)) || !Number.isInteger(Number(row.maxStockLevel)) || Number(row.maxStockLevel) < 0)
+    ) {
+      errors.push({
+        row: rowNum,
+        productCode: row.productCode,
+        error: "maxStockLevel must be a non-negative integer",
+      });
+      return;
+    }
+
+    validCandidates.push({
+      rowNum,
+      data: {
+        ...row,
+        productCode: row.productCode.trim(),
+        quantityOnHand: qty,
+        reorderLevel: row.reorderLevel !== undefined ? Number(row.reorderLevel) : undefined,
+        maxStockLevel: row.maxStockLevel !== undefined ? Number(row.maxStockLevel) : undefined,
+      },
+    });
+  });
+
+  if (validCandidates.length === 0) {
+    return { success: 0, created: 0, updated: 0, errors };
+  }
+
+  // 2. Resolve products in organization
+  const productCodes = Array.from(new Set(validCandidates.map((c) => c.data.productCode)));
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      productCode: { in: productCodes },
+    },
+    select: { id: true, productCode: true, name: true },
+  });
+
+  const productMap = new Map<string, { id: string; productCode: string; name: string }>();
+  for (const p of products) {
+    productMap.set(p.productCode, p);
+  }
+
+  const toImport: {
+    rowNum: number;
+    product: { id: string; productCode: string; name: string };
+    data: InventoryBulkImportRow;
+  }[] = [];
+
+  for (const item of validCandidates) {
+    const p = productMap.get(item.data.productCode);
+    if (!p) {
+      errors.push({
+        row: item.rowNum,
+        productCode: item.data.productCode,
+        error: `Product with code '${item.data.productCode}' not found in organization`,
+      });
+    } else {
+      toImport.push({ rowNum: item.rowNum, product: p, data: item.data });
+    }
+  }
+
+  if (toImport.length === 0) {
+    return { success: 0, created: 0, updated: 0, errors };
+  }
+
+  // 3. Atomically upsert inventory records in a transaction
+  let created = 0;
+  let updated = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const item of toImport) {
+      const existing = await tx.inventory.findFirst({
+        where: { productId: item.product.id, organizationId },
+      });
+
+      if (existing) {
+        await tx.inventory.update({
+          where: { id: existing.id },
+          data: {
+            quantityOnHand: item.data.quantityOnHand,
+            ...(item.data.reorderLevel !== undefined ? { reorderLevel: item.data.reorderLevel } : {}),
+            ...(item.data.maxStockLevel !== undefined ? { maxStockLevel: item.data.maxStockLevel } : {}),
+          },
+        });
+        updated++;
+      } else {
+        await tx.inventory.create({
+          data: {
+            productId: item.product.id,
+            organizationId,
+            quantityOnHand: item.data.quantityOnHand,
+            reorderLevel: item.data.reorderLevel ?? 0,
+            maxStockLevel: item.data.maxStockLevel ?? null,
+            quantityReserved: 0,
+          },
+        });
+        created++;
+      }
+    }
+  });
+
+  return {
+    success: toImport.length,
+    created,
+    updated,
+    errors,
+  };
+}
+

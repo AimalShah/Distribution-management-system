@@ -118,6 +118,10 @@ export const GATE: readonly GateEntry[] = [
     status: "gated",
   },
   {
+    dir: "10-bulk-import-wired-for-real",
+    status: "gated",
+  },
+  {
     dir: "04-react-web-app",
     status: "pending",
     reason:

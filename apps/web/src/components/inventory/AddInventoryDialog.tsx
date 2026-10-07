@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@dms/ui";
 import { api } from "../../lib/api";
+import { AddInventoryForm } from "./AddInventoryForm";
 
 export interface AddInventoryDialogProps {
   open: boolean;
@@ -45,6 +46,7 @@ export function AddInventoryDialog({
   onSuccess,
 }: AddInventoryDialogProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [importMode, setImportMode] = useState<"manual" | "bulk">("manual");
 
   // Load products to select
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
@@ -85,7 +87,7 @@ export function AddInventoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={importMode === "bulk" ? "sm:max-w-2xl max-h-[90vh] overflow-y-auto" : "sm:max-w-md"}>
         <DialogHeader>
           <DialogTitle>Add Inventory Record</DialogTitle>
           <DialogDescription>
@@ -93,11 +95,39 @@ export function AddInventoryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="productId"
+        <div className="flex items-center gap-2 border-b pb-3 mb-2">
+          <Button
+            type="button"
+            variant={importMode === "manual" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setImportMode("manual")}
+          >
+            Manual Entry
+          </Button>
+          <Button
+            type="button"
+            variant={importMode === "bulk" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setImportMode("bulk")}
+          >
+            Bulk CSV Import
+          </Button>
+        </div>
+
+        {importMode === "bulk" ? (
+          <AddInventoryForm
+            onSuccess={() => {
+              onSuccess();
+              onOpenChange(false);
+            }}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="productId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Product</FormLabel>
@@ -220,6 +250,7 @@ export function AddInventoryDialog({
             </DialogFooter>
           </form>
         </Form>
+        )}
       </DialogContent>
     </Dialog>
   );

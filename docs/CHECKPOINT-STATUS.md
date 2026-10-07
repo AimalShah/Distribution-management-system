@@ -34,7 +34,8 @@ not from what a `plan.md` claims.
 | 07 — Batch/Lot Inventory + Expiry KPI | **Implemented** — `StockBatch` model, FEFO deductions, expiry reports, web lot views & KPI card, `gated` |
 | 08 — GST Fields + Sale Tax Invoice | **Implemented** — Product/Sale/SaleItem GST columns, intra/inter-state tax logic, invoice template & PDF, UI forms, `gated` |
 | 09 — Brand-Scoping on Sale/Purchase | **Implemented** — brand-scoping queries on sales & purchases, sales/purchase by-brand endpoints, web UI BrandReportTab & filter bar, `gated` |
-| 10–12 — Domain features | **Spec only** |
+| 10 — Bulk Import, Wired for Real | **Implemented** — papaparse CSV parsing/validation utilities, POST /api/inventory/bulk-import, AddInventoryForm with preview & template download, `gated` |
+| 11–12 — Domain features | **Spec only** |
 | 13 — Invenza UI Dashboard | **Implemented** — `gated` |
 | 14 — Soft Delete & Restore | **Partial** — code + server tests on `main`; parity suite is a plan only |
 | 15 — Payments & Invoice Lifecycle | **Partial** — code + server tests on `main`; parity suite is a plan only |
@@ -214,13 +215,22 @@ Brand-scoping and brand grouping on sales and purchase reports (Option B):
 - **Web UI**: `BrandReportTab.tsx` provides high-level brand metrics (active brands, revenue, spend, margin), brand volume/value breakdowns, and comprehensive tabular analytics. `ReportsPage.tsx` integrates the Brand dropdown selector (`brand-filter-select`) into query parameters and mounts the Brand Report tab.
 - **Parity Gate**: `checkpoints/09-brand-scoping-sale-purchase/parity.test.ts` (6 tests) is `gated` in `checkpoints/parity-gate.ts`, and all 5 acceptance test cases are implemented and passing.
 
-## 10–12 — Domain features · Spec only
+## 10 — Bulk Import, Wired for Real · Implemented
+
+Real CSV bulk import engine and UI for inventory management:
+- **Schemas**: `packages/shared/src/schemas/inventory.ts` defines `inventoryBulkImportRowSchema` and `inventoryBulkImportSchema`, validating product codes, positive whole integers for quantities, and threshold constraints.
+- **CSV Engine**: `apps/web/src/lib/csv.ts` implements `parseInventoryCSV` (using `papaparse` with header normalization), `validateInventoryRow`, `transformRowToInventoryInput`, `generateInventoryCSVTemplate`, and browser download trigger `downloadInventoryCSVTemplate`.
+- **Backend Services**: `apps/server/src/services/inventory.ts` implements `bulkImportInventory`, resolving organization products, validating line items, collecting row-specific error reporting, and executing atomic upserts in `prisma.$transaction`.
+- **Express Routes**: `POST /api/inventory/bulk-import` mounted before `/:id` in `apps/server/src/routes/inventory.ts`, supporting JSON rows, JSON envelope, and raw CSV string payloads.
+- **React UI**: `AddInventoryForm.tsx` provides manual single-item entry and a full bulk CSV import flow with drag-and-drop file picker, CSV template download, parsed row preview table, row-level validation status badges, and execution progress. `AddInventoryDialog.tsx` embeds both manual entry and bulk CSV import modes.
+- **Parity Gate**: `checkpoints/10-bulk-import-wired-for-real/parity.test.ts` is `gated` in `checkpoints/parity-gate.ts`, and all 7 acceptance test cases in `acceptance.test.ts` are implemented and passing.
+
+## 11–12 — Domain features · Spec only
 
 Plans exist. **Every acceptance test is an empty stub** — test names with `{}` bodies:
 
 | ID | Checkpoint | Empty stubs |
 |---|---|---|
-| 10 | Bulk Import, Wired for Real | 7 |
 | 11 | Return Policy, Credit Terms, Customer GST | 6 |
 | 12 | Client's Invoice Layout Swap-In | 6 |
 

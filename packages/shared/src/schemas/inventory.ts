@@ -87,6 +87,18 @@ export const stockBatchCreateSchema = z.object({
   unitCost: z.number().min(0, "Unit cost must be zero or more").optional(),
 });
 
+export const inventoryBulkImportRowSchema = z.object({
+  productCode: z.string().trim().min(1, "Product code is required"),
+  productName: z.string().trim().optional(),
+  quantityOnHand: z.coerce.number().int().min(0, "Quantity on hand must be zero or more"),
+  reorderLevel: z.coerce.number().int().min(0, "Reorder level must be zero or more").optional(),
+  maxStockLevel: z.coerce.number().int().min(0, "Maximum stock level must be zero or more").optional(),
+});
+
+export const inventoryBulkImportSchema = z.object({
+  rows: z.array(inventoryBulkImportRowSchema).min(1, "At least one row is required"),
+});
+
 export type InventoryCreateInput = z.output<typeof InventoryCreateSchema>;
 export type InventoryAdjustInput = z.output<typeof InventoryAdjustSchema>;
 export type InventorySettingsInput = z.output<typeof InventorySettingsSchema>;
@@ -95,4 +107,6 @@ export type InventoryLogsQuery = z.output<typeof inventoryLogsQuerySchema>;
 export type LowStockQuery = z.output<typeof lowStockQuerySchema>;
 export type BatchListQuery = z.output<typeof batchListQuerySchema>;
 export type StockBatchCreateInput = z.output<typeof stockBatchCreateSchema>;
+export type InventoryBulkImportRow = z.output<typeof inventoryBulkImportRowSchema>;
+export type InventoryBulkImportInput = z.output<typeof inventoryBulkImportSchema>;
 

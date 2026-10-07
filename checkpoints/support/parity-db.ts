@@ -367,4 +367,11 @@ export const errorBody = {
   categoryNotInOrganization: { code: "CATEGORY_NOT_IN_ORGANIZATION" },
 } as const;
 
-export { request, expect, prisma };
+export {
+  request,
+  expect,
+  prisma,
+  ORGANIZATION_HEADER,
+  USER_HEADER,
+  SESSION_HEADER,
+};
