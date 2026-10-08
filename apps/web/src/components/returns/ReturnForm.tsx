@@ -7,8 +7,6 @@ import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   ReturnCreateSchema,
-  ReturnTypes,
-  type ReturnCreateInput,
   type ReturnTypeValue,
 } from "@dms/shared";
 import {
@@ -36,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, fetcher, shortfallLine, toFailure } from "../../lib/api";
 import { generateReturnCode } from "../../lib/code";
 import { formatMoney } from "../../lib/format";
 
@@ -47,24 +45,25 @@ export const RETURN_TYPE_OPTIONS: { value: ReturnTypeValue; label: string }[] = 
   { value: "EXPIRED", label: "Expired Stock (Write-off)" },
 ];
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export function ReturnForm() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
 
   // Load products for line items
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
+
   const products: { id: string; name: string; productCode: string; unitPrice: number; unitCost: number }[] =
     productsData?.data ?? [];
 
   // Load sales for SALE returns
   const { data: salesData } = useSWR("/sales?page=1&pageSize=100", fetcher);
+
   const sales: { id: string; saleCode: string; totalAmount: number; customer?: { name: string } }[] =
     salesData?.data ?? [];
 
   // Load purchases for PURCHASE returns
   const { data: purchasesData } = useSWR("/purchases?page=1&pageSize=100", fetcher);
+
   const purchases: { id: string; purchaseCode: string; totalAmount: number; supplier?: { companyName: string } }[] =
     purchasesData?.data ?? [];
 
@@ -101,6 +100,7 @@ export function ReturnForm() {
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
     const prod = products.find((p) => p.id === productId);
+
     if (prod) {
       const price = watchedReturnType === "PURCHASE" ? prod.unitCost : prod.unitPrice;
       form.setValue(`items.${index}.unitPrice`, price);
@@ -113,12 +113,14 @@ export function ReturnForm() {
       const price = Number(it?.unitPrice) || 0;
       const tax = Number(it?.taxAmount) || 0;
       const disc = Number(it?.discount) || 0;
+
       return sum + qty * price + tax - disc;
     }, 0);
   }, [watchedItems]);
 
   const onSubmit = async (values: any) => {
     setSubmitting(true);
+
     try {
       const payload: any = {
         returnCode: values.returnCode.trim(),
@@ -145,7 +147,11 @@ export function ReturnForm() {
       toast.success("Return processed successfully");
       navigate("/returns");
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to process return");
+      // The refusal carries { shortages }: one line per product, in the caller's words.
+      const failure = toFailure(err, "Failed to process return");
+      const label = (id: string) => products.find((p) => p.id === id)?.name ?? id;
+
+      toast.error(`${failure.message}${shortfallLine(failure, label)}`);
     } finally {
       setSubmitting(false);
     }
@@ -186,7 +192,9 @@ export function ReturnForm() {
                     <Select
                       onValueChange={(val) => {
                         field.onChange(val);
+
                         if (val !== "SALE") form.setValue("saleId", "");
+
                         if (val !== "PURCHASE") form.setValue("purchaseId", "");
                       }}
                       value={field.value}

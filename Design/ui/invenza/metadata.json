@@ -1,6 +1,0 @@
-{
-  "name": "Invenza - Inventory Management Dashboard",
-  "description": "Invenza inventory management dashboard with real-time sales, inventory, and purchase overview.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

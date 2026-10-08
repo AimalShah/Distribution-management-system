@@ -12,12 +12,18 @@ interface TopProduct {
 interface TopProductsProps {
   data: TopProduct[] | undefined;
   loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  rangeLabel?: string;
   className?: string;
 }
 
 export function TopProducts({
   data,
   loading = false,
+  error = null,
+  onRetry,
+  rangeLabel = "this window",
   className,
 }: TopProductsProps) {
   // `by-product` is the report endpoint, so it hands back every product with a
@@ -29,9 +35,11 @@ export function TopProducts({
   return (
     <Panel
       title="Top products"
-      description="Ranked by revenue, last 30 days"
+      description={`Ranked by revenue, ${rangeLabel}`}
       loading={loading}
-      empty={!loading && rows.length === 0}
+      error={error}
+      onRetry={onRetry}
+      empty={!loading && !error && rows.length === 0}
       emptyMessage="No product has sold in this window"
       skeletonHeight="h-64"
       className={className}

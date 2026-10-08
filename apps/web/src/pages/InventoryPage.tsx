@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -10,23 +10,19 @@ import {
   History,
   Plus,
   RefreshCw,
-  Search,
   SlidersHorizontal,
 } from "lucide-react";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
-  Input,
   Skeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { fetcher } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { AdjustStockDialog, type InventoryItemSummary } from "../components/inventory/AdjustStockDialog";
 import { AddInventoryDialog } from "../components/inventory/AddInventoryDialog";
@@ -76,15 +72,14 @@ export interface InventoryLogRow {
   } | null;
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export default function InventoryPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") || "inventory";
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
+
     if (tabParam && (tabParam === "inventory" || tabParam === "logs" || tabParam === "batches")) {
       setActiveTab(tabParam);
     }
@@ -125,6 +120,7 @@ export default function InventoryPage() {
 
   const inventoryItems: InventoryRow[] = useMemo(() => {
     let items: InventoryRow[] = inventoryData?.data ?? [];
+
     if (inventorySearch.trim()) {
       const q = inventorySearch.toLowerCase();
       items = items.filter(
@@ -133,6 +129,7 @@ export default function InventoryPage() {
           it.product?.productCode.toLowerCase().includes(q)
       );
     }
+
     return items;
   }, [inventoryData?.data, inventorySearch]);
 
@@ -141,6 +138,7 @@ export default function InventoryPage() {
   }, [logsData?.data]);
 
   const totalStockItems = inventoryData?.total ?? 0;
+
   const lowStockCount = useMemo(() => {
     return (inventoryData?.data ?? []).filter(
       (it: InventoryRow) => it.quantityOnHand <= it.reorderLevel
@@ -210,18 +208,21 @@ export default function InventoryPage() {
         header: "Status",
         cell: ({ row }) => {
           const item = row.original;
+
           if (item.quantityOnHand <= 0) {
-            return <Badge variant="destructive" className="badge badge-danger">Out of Stock</Badge>;
+            return <Badge variant="destructive">Out of Stock</Badge>;
           }
+
           if (item.quantityOnHand <= item.reorderLevel) {
             return (
-              <Badge className="badge badge-warning">
+              <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
                 Low Stock
               </Badge>
             );
           }
+
           return (
-            <Badge className="badge badge-success">
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
               In Stock
             </Badge>
           );
@@ -273,11 +274,13 @@ export default function InventoryPage() {
         header: "Movement",
         cell: ({ row }) => {
           const type = row.original.movementType;
-          let badgeClass = "badge badge-gray";
-          if (type === "IN" || type === "RETURN") badgeClass = "badge badge-success";
-          if (type === "DAMAGED" || type === "EXPIRED") badgeClass = "badge badge-danger";
-
-          return <Badge variant="secondary" className={badgeClass}>{type}</Badge>;
+          if (type === "IN" || type === "RETURN") {
+            return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">{type}</Badge>;
+          }
+          if (type === "DAMAGED" || type === "EXPIRED") {
+            return <Badge variant="destructive">{type}</Badge>;
+          }
+          return <Badge variant="secondary">{type}</Badge>;
         },
       },
       {
@@ -327,20 +330,20 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
-            <span className="hover:text-primary transition-colors cursor-pointer">
+            <Link to="/" className="hover:text-primary transition-colors cursor-pointer">
               Dashboard
-            </span>
+            </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Inventory</span>
+            <span className="text-muted-foreground">Stock &amp; Catalog</span>
             <span>/</span>
-            <span className="text-foreground font-semibold">Stock Control</span>
+            <span className="text-foreground font-semibold">Stock Adjustments</span>
           </>
         }
-        title="Stock Management"
+        title="Stock &amp; Inventory"
         subtitle="Monitor product availability, adjust stock levels, and review movement audits"
         actions={
           <>

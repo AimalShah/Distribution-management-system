@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api } from "../../lib/api";
+import { fetcher } from "../../lib/api";
 import { formatDate, formatDay, formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -18,8 +18,6 @@ import {
   ReportSectionCard,
   ReportTabsSkeleton,
 } from "./ReportPrimitives";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 interface PurchaseReportTabProps {
   queryString: string;

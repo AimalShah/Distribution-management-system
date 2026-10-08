@@ -7,7 +7,6 @@ import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PurchaseFormSchema, type PurchaseFormInput } from "@dms/shared";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -20,7 +19,6 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -28,7 +26,7 @@ import {
   SelectValue,
   Separator,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage, fetcher } from "../../lib/api";
 import { generateCode } from "../../lib/code";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
@@ -46,8 +44,6 @@ export interface PurchaseFormProps {
   isEditing?: boolean;
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export function PurchaseForm({
   purchaseId,
   initialData,
@@ -61,6 +57,7 @@ export function PurchaseForm({
   const suppliers: { id: string; companyName: string }[] = suppliersData?.data ?? [];
 
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
+
   const products: { id: string; name: string; productCode: string; unitCost: number; unit: string }[] =
     productsData?.data ?? [];
 
@@ -168,6 +165,7 @@ export function PurchaseForm({
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
     const selectedProd = products.find((p) => p.id === productId);
+
     if (selectedProd) {
       form.setValue(`items.${index}.unitCost`, selectedProd.unitCost);
     }
@@ -175,6 +173,7 @@ export function PurchaseForm({
 
   const onSubmit = async (values: PurchaseFormInput) => {
     setSubmitting(true);
+
     try {
       if (isEditing && purchaseId) {
         const updatePayload = {
@@ -185,6 +184,7 @@ export function PurchaseForm({
           discount: Number(values.discount) || 0,
           taxAmount: Number(values.taxAmount) || 0,
         };
+
         await api.put(`/purchases/${purchaseId}`, updatePayload);
         toast.success("Purchase order updated successfully");
       } else {
@@ -205,12 +205,14 @@ export function PurchaseForm({
             itemDiscount: Number(it.itemDiscount) || 0,
           })),
         };
+
         await api.post("/purchases", createPayload);
         toast.success("Purchase order created successfully");
       }
+
       navigate("/purchases");
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save purchase order");
+      toast.error(failureMessage(err, "Failed to save purchase order"));
     } finally {
       setSubmitting(false);
     }
@@ -220,7 +222,7 @@ export function PurchaseForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Header Details Card */}
-        <Card>
+        <Card className="rounded-md border border-border shadow-none">
           <CardHeader>
             <CardTitle>{isEditing ? "Edit Purchase Order" : "Purchase Order Details"}</CardTitle>
           </CardHeader>
@@ -339,9 +341,11 @@ export function PurchaseForm({
             const cost = Number(itemValues.unitCost) || 0;
             const gross = qty * cost;
             const itmDisc = Number(itemValues.itemDiscount) || 0;
+
             const tax =
               ((Number(itemValues.taxPercent) || 0) / 100) *
               Math.max(0, gross - itmDisc);
+
             const lineTotal = Math.max(0, gross - itmDisc + tax);
 
             return [
@@ -503,7 +507,7 @@ export function PurchaseForm({
 
         {/* Totals & Discounts Card */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
+          <Card className="rounded-md border border-border shadow-none">
             <CardHeader>
               <CardTitle>Adjustments</CardTitle>
             </CardHeader>
@@ -552,35 +556,35 @@ export function PurchaseForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-md border border-border shadow-none">
             <CardHeader>
               <CardTitle>Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Items Subtotal:</span>
-                <span className="font-medium">{formatMoney(subtotal)}</span>
+                <span className="font-medium font-mono tabular-nums">{formatMoney(subtotal)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Items Total (with tax & line discount):</span>
-                <span className="font-medium">{formatMoney(itemsTotal)}</span>
+                <span className="font-medium font-mono tabular-nums">{formatMoney(itemsTotal)}</span>
               </div>
               {Number(watchedDiscount) > 0 && (
                 <div className="flex justify-between text-sm text-green-700">
                   <span>Order Discount:</span>
-                  <span>-{formatMoney(Number(watchedDiscount))}</span>
+                  <span className="font-mono tabular-nums">-{formatMoney(Number(watchedDiscount))}</span>
                 </div>
               )}
               {Number(watchedTaxAmount) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Order Tax:</span>
-                  <span>+{formatMoney(Number(watchedTaxAmount))}</span>
+                  <span className="font-mono tabular-nums">+{formatMoney(Number(watchedTaxAmount))}</span>
                 </div>
               )}
               <Separator className="my-2" />
               <div className="flex justify-between text-base font-bold">
                 <span>Grand Total:</span>
-                <span className="text-primary">{formatMoney(grandTotal)}</span>
+                <span className="text-primary font-mono tabular-nums">{formatMoney(grandTotal)}</span>
               </div>
             </CardContent>
           </Card>

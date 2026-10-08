@@ -19,23 +19,24 @@ import { PurchaseReportTab } from "../components/reports/PurchaseReportTab";
 import { InventoryReportTab } from "../components/reports/InventoryReportTab";
 import { BrandReportTab } from "../components/reports/BrandReportTab";
 import { ListPageHeader } from "../components/list/ListPageHeader";
-import { api } from "../lib/api";
+import { fetcher } from "../lib/api";
 import useSWR from "swr";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<string>("monthly");
   const [selectedBrandId, setSelectedBrandId] = useState<string>("");
+
   const { data: brandsData } = useSWR<{ data: Array<{ id: string; name: string }> }>(
     "/brands?pageSize=100",
     fetcher
   );
+
   const brands = brandsData?.data ?? [];
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const end = new Date();
     const start = new Date(end.getFullYear(), end.getMonth(), 1);
+
     return { from: start, to: end };
   });
 
@@ -63,20 +64,25 @@ export default function ReportsPage() {
       default:
         start = new Date(now.getFullYear(), now.getMonth(), 1);
     }
+
     setDateRange({ from: start, to: end });
   }, [period]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
+
     if (dateRange?.from) {
       params.set("startDate", dateRange.from.toISOString());
     }
+
     if (dateRange?.to) {
       params.set("endDate", dateRange.to.toISOString());
     }
+
     if (selectedBrandId) {
       params.set("brandId", selectedBrandId);
     }
+
     return params.toString();
   }, [dateRange, selectedBrandId]);
 
@@ -140,6 +146,7 @@ export default function ReportsPage() {
             value={dateRange}
             onChange={(newRange) => {
               setDateRange(newRange);
+
               if (period !== "custom") {
                 setPeriod("custom");
               }

@@ -3,21 +3,16 @@ import { Link } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  Filter,
   Plus,
   RefreshCw,
   RotateCw,
-  Search,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -25,7 +20,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, fetcher, shortfallLine, toFailure } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -47,8 +42,6 @@ export interface ReturnRow {
   items?: any[];
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export default function ReturnList() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
@@ -65,15 +58,19 @@ export default function ReturnList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     if (typeFilter !== "all") {
       params.set("returnType", typeFilter);
     }
+
     if (view === "deleted") {
       params.set("deleted", "true");
     }
+
     return params.toString();
   }, [page, pageSize, search, typeFilter, view]);
 
@@ -92,13 +89,17 @@ export default function ReturnList() {
   // and neither should be dismissable mid-flight.
   const handleDelete = async (row: ReturnRow) => {
     setConfirmBusy(true);
+
     try {
       await api.delete(`/returns/${row.id}`);
       toast.success("Return deleted and stock reversed successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete return");
+      // The refusal carries { available, requested }: name the gap.
+      const failure = toFailure(err, "Failed to delete return");
+
+      toast.error(`${failure.message}${shortfallLine(failure)}`);
     } finally {
       setConfirmBusy(false);
     }
@@ -106,13 +107,17 @@ export default function ReturnList() {
 
   const handleRestore = async (row: ReturnRow) => {
     setConfirmBusy(true);
+
     try {
       await api.post(`/returns/${row.id}/restore`);
       toast.success(`Return "${row.returnCode}" restored and stock re-applied`);
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to restore return");
+      // The refusal carries { available, requested }: name the gap.
+      const failure = toFailure(err, "Failed to restore return");
+
+      toast.error(`${failure.message}${shortfallLine(failure)}`);
     } finally {
       setConfirmBusy(false);
     }
@@ -121,15 +126,15 @@ export default function ReturnList() {
   const getTypeBadge = (type: string) => {
     switch (type) {
       case "SALE":
-        return <Badge className="badge badge-info">Sale Return</Badge>;
+        return <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">Sale Return</Badge>;
       case "PURCHASE":
-        return <Badge className="badge badge-purple">Purchase Return</Badge>;
+        return <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30">Purchase Return</Badge>;
       case "DAMAGED":
-        return <Badge variant="destructive" className="badge badge-danger">Damaged</Badge>;
+        return <Badge variant="destructive">Damaged</Badge>;
       case "EXPIRED":
-        return <Badge variant="destructive" className="badge badge-danger">Expired</Badge>;
+        return <Badge variant="destructive">Expired</Badge>;
       default:
-        return <Badge variant="secondary" className="badge badge-gray">{type}</Badge>;
+        return <Badge variant="secondary">{type}</Badge>;
     }
   };
 
@@ -161,6 +166,7 @@ export default function ReturnList() {
         header: "Reference",
         cell: ({ row }) => {
           const r = row.original;
+
           if (r.sale?.saleCode) {
             return (
               <span className="font-mono text-xs text-muted-foreground">
@@ -168,6 +174,7 @@ export default function ReturnList() {
               </span>
             );
           }
+
           if (r.purchase?.purchaseCode) {
             return (
               <span className="font-mono text-xs text-muted-foreground">
@@ -175,6 +182,7 @@ export default function ReturnList() {
               </span>
             );
           }
+
           return <span className="text-xs text-muted-foreground">Direct Write-off</span>;
         },
       },
@@ -210,6 +218,7 @@ export default function ReturnList() {
         header: "Actions",
         cell: ({ row }) => {
           const ret = row.original;
+
           return view === "deleted" ? (
             <Button
               variant="ghost"
@@ -246,7 +255,7 @@ export default function ReturnList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
@@ -254,13 +263,13 @@ export default function ReturnList() {
               Dashboard
             </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Inventory</span>
+            <span className="text-muted-foreground">Daily Operations</span>
             <span>/</span>
-            <span className="text-foreground font-semibold">Returns &amp; Write-offs</span>
+            <span className="text-foreground font-semibold">Returns &amp; Credits</span>
           </>
         }
-        title="Returns &amp; Write-offs"
-        subtitle="Manage customer handbacks, vendor returns, and stock disposal write-offs"
+        title="Returns &amp; Credits"
+        subtitle="Manage customer handbacks, vendor credits, and damaged stock write-offs"
         actions={
           <>
             <Button
@@ -431,6 +440,7 @@ export default function ReturnList() {
         busy={confirmBusy}
         onConfirm={() => {
           if (!confirmTarget) return;
+
           if (view === "deleted") {
             void handleRestore(confirmTarget);
           } else {

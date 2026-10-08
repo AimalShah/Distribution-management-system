@@ -21,15 +21,13 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { generateCode } from "../lib/code";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import type { PaymentMethodValue } from "@dms/shared";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 const METHODS: readonly PaymentMethodValue[] = [
   "Cash",
@@ -68,6 +66,20 @@ interface SaleOption {
   amountPaid: number;
 }
 
+/** The wire body for POST /payments; optional fields are only sent when set. */
+interface PaymentBody {
+  paymentCode: string;
+  customerId: string;
+  saleId?: string;
+  amount: number;
+  method: PaymentMethodValue;
+  reference?: string;
+  note?: string;
+  paidAt?: string;
+}
+
+// SAFETY: "Cash" is the first member of the PaymentMethods allowlist below,
+// which PaymentMethodValue is derived from.
 const emptyDraft = () => ({
   customerId: "",
   saleId: "", // "" means on account (no invoice).
@@ -110,8 +122,12 @@ export default function PaymentsPage() {
     fetcher
   );
 
+  // SAFETY: the fetcher hands back this endpoint's list envelope; the rows are
+  // the records the table renders (`any` only because fetcher is not generic).
   const rows = (data?.data ?? []) as PaymentRow[];
+  // SAFETY: the fetcher hands back the customers list envelope the dialog reads.
   const customers = ((customerData?.data ?? []) as CustomerOption[]).filter((c) => c.isActive);
+  // SAFETY: the fetcher hands back this customer's sales list envelope.
   const sales = ((saleData?.data ?? []) as SaleOption[]).filter((s) => s.amountPaid < s.totalAmount);
 
   const collected = rows.reduce((sum, row) => sum + row.amount, 0);
@@ -126,32 +142,44 @@ export default function PaymentsPage() {
   const amountValid = Number.isFinite(amountNumber) && amountNumber > 0;
   const maxPayment = selectedSale ? selectedSale.totalAmount - selectedSale.amountPaid : null;
   const overPayment = maxPayment !== null && amountValid && amountNumber > maxPayment;
+
   const canSubmit =
     draft.customerId !== "" && amountValid && !overPayment && !saving;
 
   const handleCreate = async () => {
     setSaving(true);
+
     try {
-      await api.post("/payments", {
+      const payload: PaymentBody = {
         paymentCode: generateCode("PMT"),
         customerId: draft.customerId,
-        ...(draft.saleId ? { saleId: draft.saleId } : {}),
         amount: amountNumber,
         method: draft.method,
-        ...(draft.reference ? { reference: draft.reference } : {}),
-        ...(draft.note ? { note: draft.note } : {}),
-        ...(draft.paidAt ? { paidAt: draft.paidAt } : {}),
-      });
+      };
+
+      if (draft.saleId) {
+        payload.saleId = draft.saleId;
+      }
+
+      if (draft.reference) {
+        payload.reference = draft.reference;
+      }
+
+      if (draft.note) {
+        payload.note = draft.note;
+      }
+
+      if (draft.paidAt) {
+        payload.paidAt = draft.paidAt;
+      }
+
+      await api.post("/payments", payload);
       toast.success("Payment recorded");
       setDialogOpen(false);
       setDraft(emptyDraft());
       await mutate();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Failed to record payment"
-      );
+      toast.error(failureMessage(err, "Failed to record payment"));
     } finally {
       setSaving(false);
     }
@@ -160,15 +188,14 @@ export default function PaymentsPage() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/payments/${confirmTarget.id}`);
       toast.success("Payment reversed — the invoice balance was moved back");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error || err?.response?.data?.message || "Failed to delete payment"
-      );
+      toast.error(failureMessage(err, "Failed to delete payment"));
     } finally {
       setConfirmBusy(false);
     }
@@ -302,13 +329,13 @@ export default function PaymentsPage() {
                       {row.sale ? (
                         <span className="font-mono text-primary">{row.sale.saleCode}</span>
                       ) : (
-                        <Badge variant="secondary" className="badge badge-gray">
+                        <Badge variant="outline" className="text-muted-foreground border-border">
                           On account
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="badge badge-info">
+                      <Badge variant="secondary">
                         {row.method}
                       </Badge>
                     </TableCell>
@@ -427,7 +454,11 @@ export default function PaymentsPage() {
                 <Label htmlFor="payment-method">Method</Label>
                 <Select
                   value={draft.method}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, method: v as PaymentMethodValue }))}
+                  onValueChange={(v) =>
+                    // SAFETY: this Select renders exactly the METHODS allowlist
+                    // above, so `v` is one of those values.
+                    setDraft((d) => ({ ...d, method: v as PaymentMethodValue }))
+                  }
                 >
                   <SelectTrigger id="payment-method" className="h-9 text-xs rounded-lg">
                     <SelectValue />

@@ -2,12 +2,8 @@ import { useState, useMemo } from "react";
 import useSWR from "swr";
 import {
   Boxes,
-  Clock,
   Search,
   RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
-  Filter,
 } from "lucide-react";
 import {
   Badge,
@@ -30,10 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { fetcher } from "../../lib/api";
 import { formatDate } from "../../lib/format";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export interface BatchItem {
   id: string;
@@ -66,10 +60,13 @@ export function Batches() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) params.set("search", search.trim());
+
     if (filterExpiring !== "all") {
       params.set("expiringWithinDays", filterExpiring);
     }
+
     return params.toString();
   }, [page, pageSize, search, filterExpiring]);
 
@@ -83,6 +80,7 @@ export function Batches() {
     if (data?.data && Array.isArray(data.data)) {
       return data.data;
     }
+
     return [];
   }, [data?.data]);
 
@@ -140,7 +138,7 @@ export function Batches() {
       </div>
 
       {/* Batches Table Card */}
-      <Card>
+      <Card className="rounded-md border border-border shadow-none">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
@@ -181,6 +179,7 @@ export function Batches() {
                   <TableBody>
                     {batches.map((batch) => {
                       const isExpired = Boolean(batch.isExpired);
+
                       const isNear =
                         batch.daysUntilExpiry !== null &&
                         batch.daysUntilExpiry !== undefined &&

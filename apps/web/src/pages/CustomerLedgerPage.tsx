@@ -15,13 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { fetcher } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 interface LedgerEntry {
   date: string;
@@ -64,9 +62,12 @@ export default function CustomerLedgerPage() {
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
+
     if (from) params.set("from", from);
+
     if (to) params.set("to", to);
     const qs = params.toString();
+
     return qs ? `?${qs}` : "";
   }, [from, to]);
 
@@ -75,16 +76,18 @@ export default function CustomerLedgerPage() {
     fetcher
   );
 
+  // SAFETY: the fetcher hands back this endpoint's body — the ledger the page
+  // renders; it is `any` only because the shared fetcher is not generic.
   const ledger = data as CustomerLedger | undefined;
 
   const typeBadge = (type: LedgerEntry["type"]) => {
     switch (type) {
       case "invoice":
-        return <Badge variant="secondary" className="badge badge-info">Invoice</Badge>;
+        return <Badge variant="secondary" className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">Invoice</Badge>;
       case "credit":
-        return <Badge variant="secondary" className="badge badge-warning">Return</Badge>;
+        return <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">Return</Badge>;
       case "payment":
-        return <Badge className="badge badge-success">Payment</Badge>;
+        return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">Payment</Badge>;
       default:
         return null;
     }
@@ -93,6 +96,7 @@ export default function CustomerLedgerPage() {
   const handleShare = async () => {
     if (!ledger) return;
     setShareBusy(true);
+
     try {
       const period =
         ledger.from && ledger.to
@@ -116,6 +120,7 @@ export default function CustomerLedgerPage() {
       ].join("\n");
 
       const link = waLink(ledger.customer.phone, text);
+
       if (link) {
         window.open(link, "_blank", "noopener");
       } else {
@@ -131,6 +136,7 @@ export default function CustomerLedgerPage() {
 
   const handleCopy = async () => {
     if (!ledger) return;
+
     try {
       const text = ledger.entries
         .map(
@@ -138,6 +144,7 @@ export default function CustomerLedgerPage() {
             `${formatDate(e.date)}  ${e.description}  ${e.debit ? `debit ${formatMoney(e.debit)}` : `credit ${formatMoney(e.credit)}`}  balance ${formatMoney(e.balance)}`
         )
         .join("\n");
+
       await navigator.clipboard.writeText(text);
       toast.success("Ledger copied to the clipboard");
     } catch {

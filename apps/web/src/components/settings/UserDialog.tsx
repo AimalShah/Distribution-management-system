@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage } from "../../lib/api";
 
 export const userDialogSchema = z
   .object({
@@ -46,6 +46,7 @@ export const userDialogSchema = z
       if (data.password && data.password.length > 0) {
         return data.password === data.confirmPassword;
       }
+
       return true;
     },
     {
@@ -70,6 +71,15 @@ export interface UserDialogProps {
   onOpenChange: (open: boolean) => void;
   user: UserRow | null;
   onSuccess: () => void;
+}
+
+/** The wire body for PUT /users; `password` is only sent when changing it. */
+interface UserUpdateBody {
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  password?: string;
 }
 
 export function UserDialog({
@@ -117,15 +127,21 @@ export function UserDialog({
 
   const onSubmit = async (values: any) => {
     setSubmitting(true);
+
     try {
       if (isEditing && user) {
-        await api.put(`/users/${user.id}`, {
+        const updatePayload: UserUpdateBody = {
           name: values.name.trim(),
           email: values.email.trim(),
           role: values.role,
           isActive: values.isActive,
-          ...(values.password ? { password: values.password } : {}),
-        });
+        };
+
+        if (values.password) {
+          updatePayload.password = values.password;
+        }
+
+        await api.put(`/users/${user.id}`, updatePayload);
         toast.success("User updated successfully");
       } else {
         await api.post("/users", {
@@ -141,7 +157,7 @@ export function UserDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save user");
+      toast.error(failureMessage(err, "Failed to save user"));
     } finally {
       setSubmitting(false);
     }

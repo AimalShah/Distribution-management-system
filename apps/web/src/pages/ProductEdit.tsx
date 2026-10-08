@@ -2,10 +2,8 @@ import { useParams, Link } from "react-router-dom";
 import useSWR from "swr";
 import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@dms/ui";
-import { api } from "../lib/api";
+import { fetcher } from "../lib/api";
 import { ProductForm } from "../components/products/ProductForm";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function ProductEdit() {
   const { id } = useParams<{ id: string }>();

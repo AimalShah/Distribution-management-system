@@ -44,22 +44,22 @@ export function LineItemsTable({
   onRemove,
 }: LineItemsTableProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
+    <Card className="rounded-md border border-border shadow-none overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between p-3 sm:px-4 sm:py-3 border-b border-border bg-muted/20">
         <div>
-          <CardTitle>{title}</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
         </div>
         {!isEditing && onAdd && (
-          <Button type="button" variant="outline" size="sm" onClick={onAdd}>
-            <Plus className="size-4 mr-2" />
+          <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onAdd}>
+            <Plus className="size-3.5 mr-1.5" />
             {addLabel}
           </Button>
         )}
       </CardHeader>
-      <CardContent className="p-0 sm:p-6 sm:pt-0">
+      <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="[&_td]:py-2 [&_td]:px-3 [&_th]:py-2 [&_th]:px-3 text-xs sm:text-sm">
             <TableHeader>
               <TableRow>
                 {columns.map((column, columnIndex) => (

@@ -24,6 +24,7 @@ export function RequireAuth() {
 
   if (status === "anonymous") {
     const from = `${location.pathname}${location.search}`;
+
     return <Navigate to="/login" replace state={{ from }} />;
   }
 

@@ -1,7 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { NotificationItem, SaleItem, LowStockProduct } from "../../types/invenza";
+import type { NotificationItem } from "../../data/mockData";
 import { useAuth } from "../../lib/auth";
+import { ThemeSwitch } from "./ThemeSwitch";
+
+export interface TopbarSale {
+  id: string;
+  saleCode: string;
+  customerName: string;
+  total?: number;
+  amount?: number;
+  date?: string;
+  status?: string;
+}
+
+export interface TopbarProduct {
+  id: string;
+  name: string;
+  sku: string;
+  price?: number;
+  category?: string;
+  image?: string;
+  currentStock?: number;
+}
 
 interface TopbarProps {
   onToggleSidebar?: () => void;
@@ -10,8 +31,8 @@ interface TopbarProps {
   notifications?: NotificationItem[];
   onMarkNotificationsRead?: () => void;
   onSelectSearchResult?: (type: "invoice" | "product" | "page", id: string) => void;
-  sales?: SaleItem[];
-  lowStock?: LowStockProduct[];
+  sales?: TopbarSale[];
+  lowStock?: TopbarProduct[];
   onShowToast?: (title: string, message: string, type: "info" | "success") => void;
   onOpenQuickReport?: () => void;
 }
@@ -44,14 +65,18 @@ export function Topbar({
       if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
         setShowSearchDropdown(false);
       }
+
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
+
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
+
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
@@ -60,9 +85,10 @@ export function Topbar({
   // The signed-in account is the source of truth; the literals are what the
   // shell falls back to before a session resolves.
   const displayName = user?.name ?? "IJAZ";
+
   const initials = displayName
     .split(/\s+/)
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
@@ -140,20 +166,16 @@ export function Topbar({
         {showSearchDropdown && (
           <div
             id="search-results-dropdown"
-            className="search-dropdown"
+            className="search-dropdown rounded-md border border-border bg-popover shadow-md"
             style={{
               position: "absolute",
-              top: "calc(100% + 8px)",
+              top: "calc(100% + 6px)",
               left: 0,
               right: 0,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "14px",
-              boxShadow: "var(--shadow-lg)",
               zIndex: 100,
               maxHeight: "360px",
               overflowY: "auto",
-              padding: "8px",
+              padding: "6px",
             }}
           >
             {filteredProducts.length > 0 && (
@@ -168,6 +190,7 @@ export function Topbar({
                     onClick={() => {
                       setShowSearchDropdown(false);
                       setSearchQuery("");
+
                       if (onSelectSearchResult) onSelectSearchResult("product", p.id);
                       else navigate("/products");
                     }}
@@ -180,7 +203,7 @@ export function Topbar({
                         <div style={{ fontSize: "12px", color: "var(--muted)" }}>SKU: {p.sku}</div>
                       </div>
                     </div>
-                    <span className="badge badge-warning text-xs">{p.currentStock} left</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400">{p.currentStock} left</span>
                   </button>
                 ))}
               </div>
@@ -198,6 +221,7 @@ export function Topbar({
                     onClick={() => {
                       setShowSearchDropdown(false);
                       setSearchQuery("");
+
                       if (onSelectSearchResult) onSelectSearchResult("invoice", s.id);
                       else navigate("/sales");
                     }}
@@ -207,7 +231,7 @@ export function Topbar({
                       <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>{s.saleCode}</div>
                       <div style={{ fontSize: "12px", color: "var(--muted)" }}>{s.customerName} • {s.date}</div>
                     </div>
-                    <span className="font-bold text-sm text-primary-strong">Rs {s.amount.toFixed(2)}</span>
+                    <span className="font-bold text-sm text-primary-strong">Rs {(s.amount ?? s.total ?? 0).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -266,15 +290,12 @@ export function Topbar({
           {showNotifications && (
             <div
               id="notifications-dropdown"
+              className="rounded-md border border-border bg-popover shadow-md"
               style={{
                 position: "absolute",
-                top: "calc(100% + 10px)",
+                top: "calc(100% + 6px)",
                 right: 0,
                 width: "320px",
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "16px",
-                boxShadow: "var(--shadow-lg)",
                 zIndex: 100,
                 overflow: "hidden",
               }}
@@ -300,8 +321,8 @@ export function Topbar({
                     }`}
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <div className="mt-1">
-                      <span className={`badge badge-${n.type === "primary" ? "info" : n.type} text-xs`}>•</span>
+                    <div className="mt-1.5">
+                      <span className="size-2 rounded-full bg-primary inline-block" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)" }}>{n.title}</div>
@@ -316,31 +337,9 @@ export function Topbar({
         </div>
 
         {/* Theme Switch */}
-        <button
-          id="theme-toggle-btn"
-          type="button"
-          className="btn btn-ghost btn-icon cursor-pointer"
-          onClick={onToggleDarkMode}
-          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {isDark ? (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          ) : (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
-        </button>
+        <div id="theme-toggle-btn" className="flex items-center">
+          <ThemeSwitch />
+        </div>
 
         {/* User Menu */}
         <div className="relative" ref={userMenuRef}>
@@ -361,17 +360,14 @@ export function Topbar({
 
           {showUserMenu && (
             <div
+              className="rounded-md border border-border bg-popover shadow-md"
               style={{
                 position: "absolute",
-                top: "calc(100% + 10px)",
+                top: "calc(100% + 6px)",
                 right: 0,
                 width: "200px",
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "14px",
-                boxShadow: "var(--shadow-lg)",
                 zIndex: 100,
-                padding: "8px",
+                padding: "6px",
               }}
             >
               <div className="p-2 border-b mb-1" style={{ borderColor: "var(--border)" }}>

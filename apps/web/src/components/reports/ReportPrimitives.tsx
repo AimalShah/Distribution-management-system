@@ -28,6 +28,7 @@ export function KpiCardGrid({ cards }: { cards: ReportKpiCard[] }) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {cards.map((c) => {
         const Icon = c.icon;
+
         return (
           <Card key={c.title}>
             <CardContent className="p-5 flex items-center justify-between">

@@ -1,13 +1,12 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
   Edit,
-  Filter,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -15,10 +14,7 @@ import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -26,14 +22,12 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SupplierDialog, type SupplierRow } from "../components/suppliers/SupplierDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { ListTablePanel } from "../components/list/ListTablePanel";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function SupplierList() {
   const [page, setPage] = useState(1);
@@ -50,12 +44,15 @@ export default function SupplierList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     if (statusFilter !== "all") {
       params.set("isActive", statusFilter);
     }
+
     return params.toString();
   }, [page, pageSize, search, statusFilter]);
 
@@ -86,13 +83,14 @@ export default function SupplierList() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/suppliers/${confirmTarget.id}`);
       toast.success("Supplier removed successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete supplier");
+      toast.error(failureMessage(err, "Failed to delete supplier"));
     } finally {
       setConfirmBusy(false);
     }
@@ -152,11 +150,11 @@ export default function SupplierList() {
         header: "Status",
         cell: ({ row }) =>
           row.original.isActive ? (
-            <Badge className="badge badge-success">
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
               Active
             </Badge>
           ) : (
-            <Badge variant="secondary" className="badge badge-gray">Inactive</Badge>
+            <Badge variant="secondary" className="text-muted-foreground">Inactive</Badge>
           ),
       },
       {
@@ -164,6 +162,7 @@ export default function SupplierList() {
         header: "Actions",
         cell: ({ row }) => {
           const supplier = row.original;
+
           return (
             <div className="flex items-center gap-1">
               <Button
@@ -199,21 +198,21 @@ export default function SupplierList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
-            <span className="hover:text-primary transition-colors cursor-pointer">
+            <Link to="/" className="hover:text-primary transition-colors cursor-pointer">
               Dashboard
-            </span>
+            </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Purchases</span>
+            <span className="text-muted-foreground">Contacts & Business</span>
             <span>/</span>
             <span className="text-foreground font-semibold">Suppliers</span>
           </>
         }
-        title="Suppliers Network"
-        subtitle="Manage vendor network, supply chain contacts, and purchase origins"
+        title="Suppliers"
+        subtitle="Manage vendor partners, supply chain contacts, and purchase origins"
         actions={
           <>
             <Button

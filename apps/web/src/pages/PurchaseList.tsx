@@ -4,11 +4,9 @@ import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit,
-  Filter,
   MoreHorizontal,
   Plus,
   RefreshCw,
-  Search,
   ShoppingCart,
   Trash2,
 } from "lucide-react";
@@ -16,14 +14,11 @@ import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -31,7 +26,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -53,8 +48,6 @@ export interface PurchaseItemRow {
   purchaseItems?: any[];
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export default function PurchaseList() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -67,9 +60,11 @@ export default function PurchaseList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     return params.toString();
   }, [page, pageSize, search]);
 
@@ -80,11 +75,14 @@ export default function PurchaseList() {
 
   const purchaseList: PurchaseItemRow[] = useMemo(() => {
     const raw: PurchaseItemRow[] = data?.data ?? [];
+
     if (statusFilter === "all") return raw;
+
     return raw.filter((p) => p.status.toLowerCase() === statusFilter.toLowerCase());
   }, [data?.data, statusFilter]);
 
   const totalPurchases = data?.total ?? 0;
+
   const totalSpent = (data?.data ?? []).reduce(
     (sum: number, p: PurchaseItemRow) => sum + (p.totalAmount || 0),
     0
@@ -96,13 +94,14 @@ export default function PurchaseList() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/purchases/${confirmTarget.id}`);
       toast.success("Purchase order deleted successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete purchase order");
+      toast.error(failureMessage(err, "Failed to delete purchase order"));
     } finally {
       setConfirmBusy(false);
     }
@@ -112,21 +111,21 @@ export default function PurchaseList() {
     switch (status.toLowerCase()) {
       case "approved":
         return (
-          <Badge className="badge badge-info">
+          <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">
             Approved
           </Badge>
         );
       case "received":
       case "completed":
         return (
-          <Badge className="badge badge-success">
+          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
             {status}
           </Badge>
         );
       case "cancelled":
-        return <Badge variant="destructive" className="badge badge-danger">Cancelled</Badge>;
+        return <Badge variant="destructive">Cancelled</Badge>;
       default:
-        return <Badge variant="secondary" className="badge badge-warning">{status}</Badge>;
+        return <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">{status}</Badge>;
     }
   };
 
@@ -172,9 +171,9 @@ export default function PurchaseList() {
         accessorKey: "totalAmount",
         header: "Total",
         cell: ({ row }) => (
-          <span className="font-semibold text-foreground">
+          <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {formatMoney(row.original.totalAmount)}
-          </span>
+          </div>
         ),
       },
       {
@@ -187,6 +186,7 @@ export default function PurchaseList() {
         header: "Actions",
         cell: ({ row }) => {
           const purchase = row.original;
+
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -226,7 +226,7 @@ export default function PurchaseList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
@@ -234,13 +234,13 @@ export default function PurchaseList() {
               Dashboard
             </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Purchases</span>
+            <span className="text-muted-foreground">Daily Operations</span>
             <span>/</span>
-            <span className="text-foreground font-semibold">Orders</span>
+            <span className="text-foreground font-semibold">Incoming Stock / Purchases</span>
           </>
         }
-        title="Purchase Orders"
-        subtitle="Manage incoming inventory, purchase orders, and supplier receipts"
+        title="Incoming Stock / Purchases"
+        subtitle="Manage supplier purchase bills, stock receipts, and inventory replenishment"
         actions={
           <>
             <Button
@@ -248,7 +248,7 @@ export default function PurchaseList() {
               size="sm"
               onClick={() => mutate()}
               disabled={isLoading}
-              className="btn-secondary h-9 rounded-md cursor-pointer"
+              className="h-9 rounded-md cursor-pointer"
             >
               <RefreshCw className="size-3.5 mr-2" />
               Refresh
@@ -256,7 +256,7 @@ export default function PurchaseList() {
             <Link to="/purchases/new">
               <Button size="sm" className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
                 <Plus className="size-4 mr-2" />
-                New Purchase Order
+                Receive Stock
               </Button>
             </Link>
           </>

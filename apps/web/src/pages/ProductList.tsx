@@ -9,7 +9,6 @@ import {
   Package,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
   TrendingUp,
 } from "lucide-react";
@@ -17,14 +16,11 @@ import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -32,7 +28,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -53,8 +49,6 @@ export interface ProductItem {
   brand?: { id: string; name: string } | null;
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export default function ProductList() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -69,14 +63,17 @@ export default function ProductList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     if (statusFilter === "active") {
       params.set("isActive", "true");
     } else if (statusFilter === "inactive") {
       params.set("isActive", "false");
     }
+
     return params.toString();
   }, [page, pageSize, search, statusFilter]);
 
@@ -92,7 +89,9 @@ export default function ProductList() {
   // Filter client-side by category if category filter is active (server supports isActive & search)
   const productList: ProductItem[] = useMemo(() => {
     const raw: ProductItem[] = data?.data ?? [];
+
     if (categoryFilter === "all") return raw;
+
     return raw.filter(
       (p) => p.category?.id === categoryFilter || p.categoryId === categoryFilter
     );
@@ -107,13 +106,14 @@ export default function ProductList() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/products/${confirmTarget.id}`);
       toast.success("Product deleted successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete product");
+      toast.error(failureMessage(err, "Failed to delete product"));
     } finally {
       setConfirmBusy(false);
     }
@@ -135,6 +135,7 @@ export default function ProductList() {
         header: "Name",
         cell: ({ row }) => {
           const name = row.original.name;
+
           return (
             <div className="flex items-center gap-3">
               <div>
@@ -176,18 +177,18 @@ export default function ProductList() {
         accessorKey: "unitCost",
         header: "Cost",
         cell: ({ row }) => (
-          <span className="text-muted-foreground">
+          <div className="text-right font-mono text-xs tabular-nums text-muted-foreground">
             {formatMoney(row.original.unitCost)}
-          </span>
+          </div>
         ),
       },
       {
         accessorKey: "unitPrice",
         header: "Price",
         cell: ({ row }) => (
-          <span className="font-semibold text-foreground">
+          <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {formatMoney(row.original.unitPrice)}
-          </span>
+          </div>
         ),
       },
       {
@@ -198,8 +199,8 @@ export default function ProductList() {
             variant={row.original.isActive ? "default" : "secondary"}
             className={
               row.original.isActive
-                ? "badge badge-success"
-                : "badge badge-gray"
+                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                : "text-muted-foreground"
             }
           >
             {row.original.isActive ? "Active" : "Inactive"}
@@ -211,6 +212,7 @@ export default function ProductList() {
         header: "Actions",
         cell: ({ row }) => {
           const product = row.original;
+
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -250,7 +252,7 @@ export default function ProductList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
@@ -258,13 +260,13 @@ export default function ProductList() {
               Dashboard
             </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Inventory</span>
+            <span className="text-muted-foreground">Stock & Catalog</span>
             <span>/</span>
             <span className="text-foreground font-semibold">Products</span>
           </>
         }
-        title="Products Catalog"
-        subtitle="Manage your inventory items, pricing, SKUs, and stock visibility"
+        title="Product Catalog"
+        subtitle="Manage inventory catalog items, pricing, SKUs, and stock visibility"
         actions={
           <>
             <Button

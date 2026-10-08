@@ -20,21 +20,21 @@ export function ListTablePanel({ search, filters, isLoading, isEmpty, skeleton, 
   return (
     <div className="card p-0 overflow-hidden">
       {(search || filters) && (
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/20">
+        <div className="p-3 sm:px-4 sm:py-2.5 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-muted/30">
           {search && (
             <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
                 placeholder={search.placeholder}
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
-                className="pl-9 h-9 text-xs rounded-lg bg-background"
+                className="pl-8 h-8 text-xs rounded-md bg-background"
               />
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {filters && (
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mr-1">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mr-1">
                 <Filter className="size-3.5" />
                 <span>Filters:</span>
               </div>
@@ -43,8 +43,14 @@ export function ListTablePanel({ search, filters, isLoading, isEmpty, skeleton, 
           </div>
         </div>
       )}
-      <div className="p-4 sm:p-5">
-        {isLoading ? skeleton : !isEmpty ? table : empty}
+      <div className="p-0 overflow-x-auto">
+        {isLoading ? (
+          <div className="p-4">{skeleton}</div>
+        ) : !isEmpty ? (
+          table
+        ) : (
+          <div className="p-6 text-center">{empty}</div>
+        )}
       </div>
     </div>
   );

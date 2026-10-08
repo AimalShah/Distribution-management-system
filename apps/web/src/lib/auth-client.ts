@@ -32,6 +32,7 @@ export const authClient = createAuthClient({
     auth: { type: "Bearer", token: readToken },
     onSuccess(ctx) {
       const token = ctx.response.headers.get("set-auth-token");
+
       if (token && typeof localStorage !== "undefined") {
         try {
           localStorage.setItem(AUTH_TOKEN_KEY, token);

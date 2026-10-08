@@ -16,10 +16,13 @@
  */
 export function normalizePhone(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
+
   if (!digits) return null;
+
   if (digits.startsWith("0") && digits.length === 10) {
     return `92${digits.slice(1)}`;
   }
+
   return digits;
 }
 
@@ -30,6 +33,8 @@ export function normalizePhone(phone: string): string | null {
 export function waLink(phone: string | null | undefined, text: string): string | null {
   if (!phone) return null;
   const to = normalizePhone(phone);
+
   if (!to) return null;
+
   return `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
 }

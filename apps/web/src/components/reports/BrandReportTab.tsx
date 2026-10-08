@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import useSWR from "swr";
 import { Tag, TrendingUp, ShoppingBag, DollarSign } from "lucide-react";
-import { api } from "../../lib/api";
+import { fetcher } from "../../lib/api";
 import { formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -9,8 +9,6 @@ import {
   ReportSectionCard,
   ReportTabsSkeleton,
 } from "./ReportPrimitives";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 interface BrandReportTabProps {
   queryString: string;
@@ -61,6 +59,7 @@ export function BrandReportTab({ queryString }: BrandReportTabProps) {
     const ids = new Set<string>();
     salesBrands.forEach((b) => ids.add(b.brandId));
     purchaseBrands.forEach((b) => ids.add(b.brandId));
+
     return ids;
   }, [salesBrands, purchaseBrands]);
 
@@ -160,6 +159,7 @@ export function BrandReportTab({ queryString }: BrandReportTabProps) {
                   const pb = purchaseBrands.find((p) => p.brandId === sb.brandId);
                   const spend = pb?.totalCost ?? 0;
                   const balance = sb.totalAmount - spend;
+
                   return (
                     <tr key={sb.brandId} className="hover:bg-muted/30 transition-colors">
                       <td className="py-3 px-4 font-medium text-foreground">

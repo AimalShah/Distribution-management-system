@@ -39,6 +39,7 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export default function ProfilePage() {
   const { user: authUser } = useAuth();
+
   const [user, setUser] = useState({
     name: authUser?.name ?? "IJAZ",
     email: authUser?.username ?? "alex.morgan@inventioo.test",
@@ -61,6 +62,7 @@ export default function ProfilePage() {
 
   const onPasswordSubmit = async (values: ChangePasswordInput) => {
     setSubmittingPassword(true);
+
     try {
       // Simulate or call API to update password
       await new Promise((resolve) => setTimeout(resolve, 300));

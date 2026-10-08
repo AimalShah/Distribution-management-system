@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Edit, Filter, Plus, RefreshCw, Search, Shield, Trash2, Users } from "lucide-react";
@@ -8,8 +9,6 @@ import {
   AvatarFallback,
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
   Input,
   Select,
@@ -19,12 +18,10 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { UserDialog, type UserRow } from "../components/settings/UserDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 // The API is the source of truth; this is only what the table shows before the
 // first response lands, and it starts blank so a fresh install invents nobody.
@@ -44,8 +41,11 @@ export default function UsersPage() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) params.set("search", search.trim());
+
     if (roleFilter !== "all") params.set("role", roleFilter);
+
     return params.toString();
   }, [page, pageSize, search, roleFilter]);
 
@@ -65,6 +65,7 @@ export default function UsersPage() {
     if (data?.data && Array.isArray(data.data)) {
       return data.data;
     }
+
     return defaultUsers;
   }, [data?.data]);
 
@@ -75,7 +76,9 @@ export default function UsersPage() {
         !search.trim() ||
         u.name.toLowerCase().includes(search.toLowerCase()) ||
         u.email.toLowerCase().includes(search.toLowerCase());
+
       const matchesRole = roleFilter === "all" || u.role === roleFilter;
+
       return matchesSearch && matchesRole;
     });
   }, [rawUsers, search, roleFilter]);
@@ -96,13 +99,14 @@ export default function UsersPage() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/users/${confirmTarget.id}`);
       toast.success("User removed successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to remove user");
+      toast.error(failureMessage(err, "Failed to remove user"));
     } finally {
       setConfirmBusy(false);
     }
@@ -115,11 +119,13 @@ export default function UsersPage() {
         header: "User",
         cell: ({ row }) => {
           const u = row.original;
+
           const initials = u.name
             .split(" ")
             .map((n) => n[0])
             .join("")
             .slice(0, 2);
+
           return (
             <div className="flex items-center gap-3">
               <Avatar className="size-8">
@@ -150,10 +156,11 @@ export default function UsersPage() {
             row.original.role === "adminRole" ||
             row.original.role === "admin" ||
             row.original.role === "owner";
+
           return (
             <Badge
               variant={isElevated ? "default" : "secondary"}
-              className={`flex items-center gap-1 w-fit text-xs ${isElevated ? "badge badge-info" : "badge badge-gray"}`}
+              className={`flex items-center gap-1 w-fit text-xs ${isElevated ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
             >
               {isElevated && <Shield className="size-3" />}
               <span>{isElevated ? "Admin" : "Employee"}</span>
@@ -166,11 +173,11 @@ export default function UsersPage() {
         header: "Status",
         cell: ({ row }) =>
           row.original.isActive ? (
-            <Badge className="badge badge-success">
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
               Active
             </Badge>
           ) : (
-            <Badge variant="secondary" className="badge badge-gray">Inactive</Badge>
+            <Badge variant="secondary" className="text-muted-foreground">Inactive</Badge>
           ),
       },
       {
@@ -178,6 +185,7 @@ export default function UsersPage() {
         header: "Actions",
         cell: ({ row }) => {
           const u = row.original;
+
           return (
             <div className="flex items-center gap-1">
               <Button
@@ -208,21 +216,21 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
-            <span className="hover:text-primary transition-colors cursor-pointer">
+            <Link to="/" className="hover:text-primary transition-colors cursor-pointer">
               Dashboard
-            </span>
+            </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Admin</span>
+            <span className="text-muted-foreground">Contacts & Business</span>
             <span>/</span>
-            <span className="text-foreground font-semibold">Users</span>
+            <span className="text-foreground font-semibold">Team &amp; Permissions</span>
           </>
         }
-        title="User Management"
-        subtitle="Manage organization members, assign roles, and handle credentials"
+        title="Team &amp; Permissions"
+        subtitle="Manage organization members, assign operational roles, and access credentials"
         actions={
           <>
             <Button

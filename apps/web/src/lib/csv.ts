@@ -27,12 +27,15 @@ export interface ValidatedInventoryRow {
  */
 function normalizeHeader(header: string): string {
   const clean = header.trim().toLowerCase().replace(/[\s_-]+/g, "");
+
   if (clean === "productcode" || clean === "code" || clean === "sku" || clean === "itemcode") {
     return "productCode";
   }
+
   if (clean === "productname" || clean === "name" || clean === "itemname" || clean === "description") {
     return "productName";
   }
+
   if (
     clean === "quantityonhand" ||
     clean === "quantity" ||
@@ -42,12 +45,15 @@ function normalizeHeader(header: string): string {
   ) {
     return "quantityOnHand";
   }
+
   if (clean === "reorderlevel" || clean === "minstock" || clean === "minstocklevel" || clean === "reorder") {
     return "reorderLevel";
   }
+
   if (clean === "maxstocklevel" || clean === "maxstock" || clean === "maxlevel" || clean === "maximumstock") {
     return "maxStockLevel";
   }
+
   return header.trim();
 }
 
@@ -84,9 +90,11 @@ export async function parseInventoryCSV(input: File | string): Promise<ParsedInv
 
       const rows = (results.data || []).map((row) => {
         const cleanRow: ParsedInventoryRow = {};
+
         for (const [k, v] of Object.entries(row)) {
           cleanRow[k] = typeof v === "string" ? v.trim() : v;
         }
+
         return cleanRow;
       });
 
@@ -113,6 +121,7 @@ export function validateInventoryRow(row: ParsedInventoryRow): ValidationResult 
     errors.push("Quantity On Hand is required");
   } else {
     const qty = Number(row.quantityOnHand);
+
     if (!Number.isInteger(qty) || isNaN(qty)) {
       errors.push("Quantity On Hand must be a whole integer");
     } else if (qty < 0) {
@@ -127,6 +136,7 @@ export function validateInventoryRow(row: ParsedInventoryRow): ValidationResult 
     String(row.reorderLevel).trim() !== ""
   ) {
     const reorder = Number(row.reorderLevel);
+
     if (!Number.isInteger(reorder) || isNaN(reorder)) {
       errors.push("Reorder Level must be a whole integer");
     } else if (reorder < 0) {
@@ -141,6 +151,7 @@ export function validateInventoryRow(row: ParsedInventoryRow): ValidationResult 
     String(row.maxStockLevel).trim() !== ""
   ) {
     const max = Number(row.maxStockLevel);
+
     if (!Number.isInteger(max) || isNaN(max)) {
       errors.push("Maximum Stock Level must be a whole integer");
     } else if (max < 0) {
@@ -159,6 +170,7 @@ export function validateInventoryRow(row: ParsedInventoryRow): ValidationResult 
   ) {
     const reorder = Number(row.reorderLevel);
     const max = Number(row.maxStockLevel);
+
     if (!isNaN(reorder) && !isNaN(max) && max < reorder) {
       errors.push("Maximum Stock Level should not be less than Reorder Level");
     }
@@ -213,6 +225,7 @@ export function generateInventoryCSVTemplate(): string {
 
   const headerLine = CSV_TEMPLATE_HEADERS.join(",");
   const dataLines = sampleRows.map((cols) => cols.join(",")).join("\n");
+
   return `${headerLine}\n${dataLines}\n`;
 }
 
@@ -221,6 +234,7 @@ export function generateInventoryCSVTemplate(): string {
  */
 export function downloadInventoryCSVTemplate(filename = "inventory-bulk-import-template.csv"): void {
   const content = generateInventoryCSVTemplate();
+
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }

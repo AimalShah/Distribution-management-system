@@ -42,6 +42,7 @@ export function ThemeSwitch() {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyTheme("system");
     media.addEventListener("change", onChange);
+
     return () => media.removeEventListener("change", onChange);
   }, [theme]);
 

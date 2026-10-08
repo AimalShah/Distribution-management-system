@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { isAxiosError } from "axios";
 import { Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
-import { DEFAULT_CREDENTIALS, useAuth } from "../lib/auth";
+import { useAuth } from "../lib/auth";
+import { toFailure } from "../lib/api";
 
 interface LocationState {
   from?: string;
@@ -12,6 +12,8 @@ export default function LoginPage() {
   const { login, status } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // SAFETY: router state here comes only from our own guard navigation, which
+  // passes `{ from }` or nothing at all; `?.from` tolerates the rest.
   const from = (location.state as LocationState | null)?.from || "/";
 
   const [username, setUsername] = useState("");
@@ -33,15 +35,11 @@ export default function LoginPage() {
     try {
       await login(username, password);
       navigate(from, { replace: true });
-    } catch (err) {
-      if (isAxiosError(err)) {
-        setError(
-          err.response?.data?.error ||
-            (err.response ? "Sign in failed" : "Cannot reach the server")
-        );
-      } else {
-        setError("Sign in failed");
-      }
+    } catch (err: any) {
+      const failure = toFailure(err, "Sign in failed");
+
+      setError(failure.origin === "network" ? "Cannot reach the server" : failure.message);
+
       setSubmitting(false);
     }
   };

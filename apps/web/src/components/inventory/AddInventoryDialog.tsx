@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage, fetcher } from "../../lib/api";
 import { AddInventoryForm } from "./AddInventoryForm";
 
 export interface AddInventoryDialogProps {
@@ -37,8 +37,6 @@ export interface AddInventoryDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export function AddInventoryDialog({
   open,
@@ -50,6 +48,7 @@ export function AddInventoryDialog({
 
   // Load products to select
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
+
   const products: { id: string; name: string; productCode: string }[] =
     productsData?.data ?? [];
 
@@ -66,6 +65,7 @@ export function AddInventoryDialog({
 
   const onSubmit = async (values: InventoryCreateInput) => {
     setSubmitting(true);
+
     try {
       await api.post("/inventory", {
         productId: values.productId,
@@ -79,7 +79,7 @@ export function AddInventoryDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to create inventory record");
+      toast.error(failureMessage(err, "Failed to create inventory record"));
     } finally {
       setSubmitting(false);
     }

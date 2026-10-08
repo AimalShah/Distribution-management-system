@@ -63,6 +63,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(readToken);
   const [user, setUser] = useState<AuthUser | null>(null);
+
   const [status, setStatus] = useState<AuthStatus>(() =>
     readToken() ? "loading" : "anonymous"
   );
@@ -74,15 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) {
       setUser(null);
       setStatus("anonymous");
+
       return;
     }
 
     let cancelled = false;
     api
       .get("/auth/me")
-      .then((res) => {
+      .then((body) => {
         if (cancelled) return;
-        setUser(res.data.user);
+        setUser(body.user);
         setStatus("authenticated");
       })
       .catch(() => {
@@ -97,12 +99,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await api.post("/auth/login", { username, password });
-    const nextUser: AuthUser = res.data.user;
+    const body = await api.post("/auth/login", { username, password });
+    const nextUser: AuthUser = body.user;
 
-    writeToken(res.data.token);
+    writeToken(body.token);
     setUser(nextUser);
-    setToken(res.data.token);
+    setToken(body.token);
     setStatus("authenticated");
 
     return nextUser;
@@ -131,8 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error("useAuth must be used inside <AuthProvider>");
   }
+
   return context;
 }

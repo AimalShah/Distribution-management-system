@@ -26,21 +26,18 @@ const iconTone: Record<StatTileTone, string> = {
 
 export function StatTileRow({ tiles }: { tiles: StatTile[] }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="rounded-md border border-border bg-card p-0 divide-y sm:divide-y-0 sm:divide-x divide-border flex flex-col sm:flex-row items-stretch overflow-hidden">
       {tiles.map((tile, index) => (
         <div
           key={index}
-          className={cn(
-            "card p-4 flex items-center justify-between",
-            index === 2 && tiles.length === 3 && "sm:col-span-2 lg:col-span-1"
-          )}
+          className="flex-1 p-3.5 sm:p-4 flex items-center justify-between min-w-0"
         >
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tile.label}</p>
-            <p className={cn("text-2xl font-bold mt-1", valueTone[tile.tone ?? "neutral"])}>{tile.value}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">{tile.label}</p>
+            <p className={cn("text-2xl font-semibold tabular-nums mt-0.5 tracking-tight", valueTone[tile.tone ?? "neutral"])}>{tile.value}</p>
             <span
               className={cn(
-                "text-xs",
+                "text-xs truncate block mt-0.5",
                 tile.sublabelTone === "success"
                   ? "text-emerald-700 dark:text-emerald-400 font-medium"
                   : "text-muted-foreground"
@@ -49,7 +46,7 @@ export function StatTileRow({ tiles }: { tiles: StatTile[] }) {
               {tile.sublabel}
             </span>
           </div>
-          <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center", iconTone[tile.tone ?? "neutral"])}>
+          <div className="text-muted-foreground/60 shrink-0 ml-3 [&_svg]:size-5">
             {tile.icon}
           </div>
         </div>

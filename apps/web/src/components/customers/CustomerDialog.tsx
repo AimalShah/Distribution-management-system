@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage } from "../../lib/api";
 import { generateCustomerCode } from "../../lib/code";
 
 export interface CustomerRow {
@@ -102,6 +102,7 @@ export function CustomerDialog({
 
   const onSubmit = async (values: CustomerInput) => {
     setSubmitting(true);
+
     try {
       const payload = {
         customerCode: values.customerCode.trim(),
@@ -128,7 +129,7 @@ export function CustomerDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save customer");
+      toast.error(failureMessage(err, "Failed to save customer"));
     } finally {
       setSubmitting(false);
     }

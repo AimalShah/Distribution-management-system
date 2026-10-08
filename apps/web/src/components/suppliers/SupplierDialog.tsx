@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { SupplierSchema, type SupplierInput } from "@dms/shared";
+import { SupplierSchema } from "@dms/shared";
 import {
   Button,
   Dialog,
@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage } from "../../lib/api";
 import { generateSupplierCode } from "../../lib/code";
 
 export interface SupplierRow {
@@ -102,6 +102,7 @@ export function SupplierDialog({
 
   const onSubmit = async (values: any) => {
     setSubmitting(true);
+
     try {
       const payload = {
         supplierCode: values.supplierCode.trim(),
@@ -125,7 +126,7 @@ export function SupplierDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save supplier");
+      toast.error(failureMessage(err, "Failed to save supplier"));
     } finally {
       setSubmitting(false);
     }

@@ -6,10 +6,8 @@ import {
   BookOpen,
   CreditCard,
   Edit,
-  Filter,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
   Users,
 } from "lucide-react";
@@ -17,10 +15,7 @@ import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -28,15 +23,13 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatMoney } from "../lib/format";
 import { CustomerDialog, type CustomerRow } from "../components/customers/CustomerDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { ListTablePanel } from "../components/list/ListTablePanel";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 export default function CustomerList() {
   const [page, setPage] = useState(1);
@@ -53,12 +46,15 @@ export default function CustomerList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     if (statusFilter !== "all") {
       params.set("isActive", statusFilter);
     }
+
     return params.toString();
   }, [page, pageSize, search, statusFilter]);
 
@@ -89,13 +85,14 @@ export default function CustomerList() {
   const handleDelete = async () => {
     if (!confirmTarget) return;
     setConfirmBusy(true);
+
     try {
       await api.delete(`/customers/${confirmTarget.id}`);
       toast.success("Customer removed successfully");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete customer");
+      toast.error(failureMessage(err, "Failed to delete customer"));
     } finally {
       setConfirmBusy(false);
     }
@@ -117,6 +114,7 @@ export default function CustomerList() {
         header: "Name",
         cell: ({ row }) => {
           const name = row.original.name;
+
           return (
             <div className="flex items-center gap-3">
               <div>
@@ -152,11 +150,11 @@ export default function CustomerList() {
         accessorKey: "creditLimit",
         header: "Credit Limit",
         cell: ({ row }) => (
-          <span className="text-xs font-semibold text-primary">
+          <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {row.original.creditLimit !== null && row.original.creditLimit !== undefined
               ? formatMoney(row.original.creditLimit)
               : "—"}
-          </span>
+          </div>
         ),
       },
       {
@@ -164,11 +162,11 @@ export default function CustomerList() {
         header: "Status",
         cell: ({ row }) =>
           row.original.isActive ? (
-            <Badge className="badge badge-success">
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
               Active
             </Badge>
           ) : (
-            <Badge variant="secondary" className="badge badge-gray">Inactive</Badge>
+            <Badge variant="secondary" className="text-muted-foreground">Inactive</Badge>
           ),
       },
       {
@@ -176,14 +174,16 @@ export default function CustomerList() {
         header: "Actions",
         cell: ({ row }) => {
           const customer = row.original;
+
           return (
             <div className="flex items-center gap-1">
               <Link
                 to={`/customers/${customer.id}/ledger`}
                 className="inline-flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                aria-label={`Open ledger for ${customer.name}`}
+                aria-label={`Open statement for ${customer.name}`}
+                title="Customer Statement"
               >
-                <BookOpen className="size-3.5 text-emerald-600" />
+                <BookOpen className="size-3.5 text-primary" />
               </Link>
               <Button
                 variant="ghost"
@@ -218,21 +218,21 @@ export default function CustomerList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
-            <span className="hover:text-primary transition-colors cursor-pointer">
+            <Link to="/" className="hover:text-primary transition-colors cursor-pointer">
               Dashboard
-            </span>
+            </Link>
             <span>/</span>
-            <span className="text-muted-foreground">CRM</span>
+            <span className="text-muted-foreground">Contacts & Business</span>
             <span>/</span>
             <span className="text-foreground font-semibold">Customers</span>
           </>
         }
-        title="Customer Directory"
-        subtitle="Manage distribution client directory, contact records, and credit parameters"
+        title="Customers & Balances"
+        subtitle="Manage client directory, credit limits, and account statements"
         actions={
           <>
             <Button

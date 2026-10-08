@@ -1,34 +1,29 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import useSWR from "swr";
+import { Toaster, toast } from "sonner";
 import { api } from "../../lib/api";
 import { AppSidebar } from "./AppSidebar";
-import { Topbar } from "./Topbar";
-import { InvoiceDetailModal } from "../invenza/InvoiceDetailModal";
-import { ReorderModal } from "../invenza/ReorderModal";
-import { AddProductModal } from "../invenza/AddProductModal";
-import { QuickReportModal } from "../invenza/QuickReportModal";
-import { ToastContainer } from "../invenza/ToastContainer";
-import { initialSales, initialLowStock, initialNotifications } from "../../data/mockData";
-import { SaleItem, LowStockProduct, NotificationItem, ToastMessage } from "../../types/invenza";
-import { generateInvoicePdf } from "../../utils/generateInvoicePdf";
+import { Topbar, type TopbarSale, type TopbarProduct } from "./Topbar";
+import { initialNotifications, type NotificationItem } from "../../data/mockData";
 
 export function AppShell() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("sf_theme") === "dark";
+      return localStorage.getItem("dms-theme") === "dark" || localStorage.getItem("sf_theme") === "dark";
     } catch {
       return false;
     }
   });
 
-  const { data: statsData } = useSWR("/dashboard/stats", (url) => api.get(url).then((r) => r.data));
-  const { data: lowStockApiData } = useSWR("/inventory/low-stock?page=1&pageSize=5", (url) => api.get(url).then((r) => r.data));
+  useSWR("/dashboard/stats", (url) => api.get(url));
+  const { data: lowStockApiData } = useSWR("/inventory/low-stock?page=1&pageSize=5", (url) => api.get(url));
 
-  const [sales, setSales] = useState<SaleItem[]>(initialSales);
-  const [lowStock, setLowStock] = useState<LowStockProduct[]>(initialLowStock);
+  const [sales] = useState<TopbarSale[]>([]);
+  const [lowStock] = useState<TopbarProduct[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
 
   useEffect(() => {
@@ -41,30 +36,25 @@ export function AppShell() {
         type: "warning",
         unread: true,
       }));
+
       setNotifications((prev) => {
         const existingIds = new Set(prev.map((n) => n.id));
         const toAdd = realAlerts.filter((a) => !existingIds.has(a.id));
+
         return toAdd.length > 0 ? [...toAdd, ...prev] : prev;
       });
     }
   }, [lowStockApiData]);
-
-  const [selectedInvoice, setSelectedInvoice] = useState<SaleItem | null>(null);
-  const [reorderProduct, setReorderProduct] = useState<LowStockProduct | null>(null);
-  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
-  const [isQuickReportOpen, setIsQuickReportOpen] = useState(false);
-
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Apply dark mode to documentElement
   useEffect(() => {
     try {
       if (isDark) {
         document.documentElement.classList.add("dark");
-        localStorage.setItem("sf_theme", "dark");
+        localStorage.setItem("dms-theme", "dark");
       } else {
         document.documentElement.classList.remove("dark");
-        localStorage.setItem("sf_theme", "light");
+        localStorage.setItem("dms-theme", "light");
       }
     } catch (e) {
       console.error(e);
@@ -73,11 +63,7 @@ export function AppShell() {
 
   const toggleDarkMode = () => {
     setIsDark((prev) => !prev);
-    showToast(
-      "Theme Updated",
-      !isDark ? "Switched to Dark Mode" : "Switched to Light Mode",
-      "info"
-    );
+    toast.info(!isDark ? "Switched to Dark Mode" : "Switched to Light Mode");
   };
 
   const toggleSidebar = () => {
@@ -93,109 +79,51 @@ export function AppShell() {
     message: string,
     type: "success" | "error" | "warning" | "info" = "info"
   ) => {
-    const id = Date.now().toString() + Math.random().toString();
-    const newToast: ToastMessage = { id, title, message, type };
-    setToasts((prev) => [...prev, newToast]);
-
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  };
-
-  const handleDismissToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const handleConfirmReorder = (productId: string, reorderQty: number) => {
-    setLowStock((prev) =>
-      prev.map((item) => {
-        if (item.id === productId) {
-          const newStock = item.currentStock + reorderQty;
-          return {
-            ...item,
-            currentStock: newStock,
-            status: newStock > item.minStock ? "Low Stock" : item.status,
-          };
-        }
-        return item;
-      })
-    );
-
-    const product = lowStock.find((p) => p.id === productId);
-    showToast(
-      "Reorder Placed",
-      `PO confirmed: +${reorderQty} units for ${product ? product.name : "product"}`,
-      "success"
-    );
-  };
-
-  const handleAddProduct = (newProd: Partial<LowStockProduct>) => {
-    const id = (lowStock.length + 1).toString();
-    const product: LowStockProduct = {
-      id,
-      name: newProd.name || "New Product",
-      image: "/assets/img/products/mouse.jpg",
-      sku: newProd.sku || `SKU-${Date.now()}`,
-      currentStock: newProd.currentStock || 10,
-      minStock: newProd.minStock || 5,
-      status: (newProd.status as LowStockProduct["status"]) || "Low Stock",
-      price: newProd.price || 39.99,
-      category: newProd.category || "Peripherals",
-    };
-
-    setLowStock((prev) => [product, ...prev]);
-    showToast("Product Added", `Added "${product.name}" to inventory catalog`, "success");
+    if (type === "success") toast.success(title, { description: message });
+    else if (type === "error") toast.error(title, { description: message });
+    else if (type === "warning") toast.warning(title, { description: message });
+    else toast.info(title, { description: message });
   };
 
   const handleMarkNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
-  const handleSearchResult = (type: "invoice" | "product" | "page", id: string) => {
-    if (type === "invoice") {
-      const sale = sales.find((s) => s.id === id);
-      if (sale) {
-        setSelectedInvoice(sale);
-      }
-    } else if (type === "product") {
-      const prod = lowStock.find((p) => p.id === id);
-      if (prod) {
-        setReorderProduct(prod);
-      }
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
-      {/* Invenza Sidebar Component */}
+    <div className="min-h-screen bg-background text-foreground flex">
+      {/* Sidebar Navigation */}
       <AppSidebar
         isCollapsed={isCollapsed}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
-        onOpenQuickReport={() => setIsQuickReportOpen(true)}
       />
 
       {/* Mobile Backdrop Overlay */}
-      <div
-        id="mobile-overlay"
-        className={isMobileOpen ? "show" : ""}
-        onClick={() => setIsMobileOpen(false)}
-      />
+      {isMobileOpen && (
+        <div
+          id="mobile-overlay"
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
 
       {/* Main Content Wrapper */}
-      <div id="main-wrapper" className={isCollapsed ? "sidebar-collapsed" : ""}>
-        {/* Invenza Header / Topbar Component */}
+      <div
+        id="main-wrapper"
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
+          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[260px]"
+        }`}
+      >
+        {/* Topbar Header */}
         <Topbar
           onToggleSidebar={toggleSidebar}
           isDark={isDark}
           onToggleDarkMode={toggleDarkMode}
           notifications={notifications}
           onMarkNotificationsRead={handleMarkNotificationsRead}
-          onSelectSearchResult={handleSearchResult}
           sales={sales}
           lowStock={lowStock}
           onShowToast={showToast}
-          onOpenQuickReport={() => setIsQuickReportOpen(true)}
         />
 
         {/* Main Content Area */}
@@ -204,69 +132,21 @@ export function AppShell() {
             context={{
               sales,
               lowStock,
-              onOpenInvoice: setSelectedInvoice,
-              onOpenReorder: setReorderProduct,
-              onOpenAddProduct: () => setIsAddProductOpen(true),
-              onOpenQuickReport: () => setIsQuickReportOpen(true),
               showToast,
             }}
           />
         </main>
 
         {/* Footer */}
-        <footer className="app-footer">
+        <footer className="app-footer border-t border-border py-4 px-6 text-center text-xs text-muted-foreground">
           <div className="app-footer-text">
-            Copyright &copy; 2026 DMS All rights reserved.
+            Copyright &copy; 2026 DMS - Distribution Management System. All rights reserved.
           </div>
         </footer>
       </div>
 
-      {/* Invoice Detail Modal */}
-      {selectedInvoice && (
-        <InvoiceDetailModal
-          sale={selectedInvoice}
-          onClose={() => setSelectedInvoice(null)}
-          onPrint={(saleCode) => {
-            try {
-              const doc = generateInvoicePdf(selectedInvoice);
-              doc.save(`invoice-${saleCode}.pdf`);
-              showToast("Invoice Exported", `Generated and downloaded PDF for ${saleCode}`, "success");
-            } catch (err) {
-              console.error(err);
-              showToast("Print Error", `Could not generate PDF for ${saleCode}`, "info");
-            }
-          }}
-        />
-      )}
-
-      {/* Reorder Modal */}
-      {reorderProduct && (
-        <ReorderModal
-          product={reorderProduct}
-          onClose={() => setReorderProduct(null)}
-          onConfirmReorder={handleConfirmReorder}
-        />
-      )}
-
-      {/* Add Product Modal */}
-      <AddProductModal
-        isOpen={isAddProductOpen}
-        onClose={() => setIsAddProductOpen(false)}
-        onAddProduct={handleAddProduct}
-      />
-
-      {/* Quick Report Modal */}
-      <QuickReportModal
-        isOpen={isQuickReportOpen}
-        onClose={() => setIsQuickReportOpen(false)}
-        sales={sales}
-        lowStock={lowStock}
-        currentDateFilter="mtd"
-        onShowToast={showToast}
-      />
-
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+      {/* Accessible Toast Notifications via Sonner */}
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

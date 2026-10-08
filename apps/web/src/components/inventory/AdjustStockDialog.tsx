@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, shortfallLine, toFailure } from "../../lib/api";
 
 export interface InventoryItemSummary {
   id: string;
@@ -79,6 +79,7 @@ export function AdjustStockDialog({
 
   const onSubmit = async (values: InventoryAdjustInput) => {
     setSubmitting(true);
+
     try {
       await api.post("/inventory/adjust", {
         inventoryId: values.inventoryId,
@@ -90,7 +91,10 @@ export function AdjustStockDialog({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to adjust inventory");
+      // The refusal carries { available, requested }: name the gap.
+      const failure = toFailure(err, "Failed to adjust inventory");
+
+      toast.error(`${failure.message}${shortfallLine(failure)}`);
     } finally {
       setSubmitting(false);
     }

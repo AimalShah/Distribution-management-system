@@ -21,8 +21,6 @@ import {
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   Form,
   FormControl,
   FormField,
@@ -40,7 +38,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage, fetcher } from "../../lib/api";
 import {
   parseInventoryCSV,
   validateInventoryRow,
@@ -54,8 +52,6 @@ export interface AddInventoryFormProps {
   onCancel?: () => void;
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps) {
   const [activeTab, setActiveTab] = useState<"manual" | "csv">("manual");
   const [submittingManual, setSubmittingManual] = useState(false);
@@ -65,6 +61,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
   const [fileName, setFileName] = useState<string>("");
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
+
   const [parsedRows, setParsedRows] = useState<
     {
       rowNumber: number;
@@ -74,6 +71,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
       transformed?: InventoryBulkImportRow;
     }[]
   >([]);
+
   const [importResult, setImportResult] = useState<{
     success: number;
     created: number;
@@ -83,6 +81,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
 
   // Products lookup for manual entry
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
+
   const products: { id: string; name: string; productCode: string }[] =
     productsData?.data ?? [];
 
@@ -100,6 +99,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
 
   const onManualSubmit = async (values: InventoryCreateInput) => {
     setSubmittingManual(true);
+
     try {
       await api.post("/inventory", {
         productId: values.productId,
@@ -117,11 +117,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
       form.reset();
       onSuccess?.();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Failed to create inventory record"
-      );
+      toast.error(failureMessage(err, "Failed to create inventory record"));
     } finally {
       setSubmittingManual(false);
     }
@@ -130,6 +126,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
   // CSV File Handler
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
     setFileName(file.name);
@@ -138,14 +135,17 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
 
     try {
       const rows = await parseInventoryCSV(file);
+
       if (rows.length === 0) {
         toast.error("CSV file is empty or contains no data rows");
         setParsedRows([]);
+
         return;
       }
 
       const analyzed = rows.map((raw, idx) => {
         const validation = validateInventoryRow(raw);
+
         return {
           rowNumber: idx + 1,
           raw,
@@ -162,6 +162,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
       setParsedRows([]);
     } finally {
       setParsing(false);
+
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -180,14 +181,15 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
   const handleBulkImport = async () => {
     if (validRows.length === 0) {
       toast.error("No valid rows to import");
+
       return;
     }
 
     setImporting(true);
+
     try {
       const payload = validRows.map((r) => r.transformed!);
-      const res = await api.post("/inventory/bulk-import", { rows: payload });
-      const result = res.data;
+      const result = await api.post("/inventory/bulk-import", { rows: payload });
       setImportResult(result);
 
       if (result.success > 0) {
@@ -201,11 +203,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
         toast.warning(`${result.errors.length} rows had errors during import`);
       }
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Bulk import failed"
-      );
+      toast.error(failureMessage(err, "Bulk import failed"));
     } finally {
       setImporting(false);
     }
@@ -215,7 +213,11 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
     <div className="space-y-6" data-testid="add-inventory-form">
       <Tabs
         value={activeTab}
-        onValueChange={(val) => setActiveTab(val as "manual" | "csv")}
+        onValueChange={(val) => {
+          // SAFETY: this Tabs element declares exactly the two tabs below, so
+          // the value it emits is one of them.
+          setActiveTab(val as "manual" | "csv");
+        }}
         className="w-full"
       >
         <TabsList className="grid w-full grid-cols-2">

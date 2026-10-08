@@ -36,7 +36,7 @@ import {
   Separator,
   Textarea,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage, fetcher } from "../../lib/api";
 import { generateCode } from "../../lib/code";
 
 interface CategoryOption {
@@ -66,8 +66,6 @@ export interface ProductFormProps {
   isEditing?: boolean;
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export function ProductForm({ productId, initialData, isEditing = false }: ProductFormProps) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -77,12 +75,14 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
     "/categories?page=1&pageSize=100",
     fetcher
   );
+
   const categories: CategoryOption[] = categoriesData?.data ?? [];
 
   const { data: brandsData, mutate: mutateBrands } = useSWR(
     "/brands?page=1&pageSize=100",
     fetcher
   );
+
   const brands: BrandOption[] = brandsData?.data ?? [];
 
   // Quick Category creation modal state
@@ -145,31 +145,37 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
   const calculateMargin = (cost: string | number, price: string | number) => {
     const costNum = Number(cost);
     const priceNum = Number(price);
+
     if (costNum >= 0 && priceNum > 0) {
       return (((priceNum - costNum) / priceNum) * 100).toFixed(1);
     }
+
     return "0.0";
   };
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) {
       toast.error("Please enter a category name");
+
       return;
     }
+
     setCreatingCategory(true);
+
     try {
-      const res = await api.post("/categories", {
+      const created = await api.post("/categories", {
         name: newCategoryName.trim(),
         description: newCategoryDesc.trim() || undefined,
       });
+
       toast.success("Category created successfully");
       await mutateCategories();
-      form.setValue("category", res.data.id);
+      form.setValue("category", created.id);
       setNewCategoryName("");
       setNewCategoryDesc("");
       setCategoryModalOpen(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to create category");
+      toast.error(failureMessage(err, "Failed to create category"));
     } finally {
       setCreatingCategory(false);
     }
@@ -177,30 +183,37 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
 
   const handleCreateBrand = async () => {
     const targetCategory = newBrandCategory || selectedCategory;
+
     if (!newBrandName.trim()) {
       toast.error("Please enter a brand name");
+
       return;
     }
+
     if (!targetCategory) {
       toast.error("Please select a category for this brand");
+
       return;
     }
+
     setCreatingBrand(true);
+
     try {
-      const res = await api.post("/brands", {
+      const created = await api.post("/brands", {
         name: newBrandName.trim(),
         categoryId: targetCategory,
         description: newBrandDesc.trim() || undefined,
       });
+
       toast.success("Brand created successfully");
       await mutateBrands();
-      form.setValue("brand", res.data.id);
+      form.setValue("brand", created.id);
       setNewBrandName("");
       setNewBrandCategory("");
       setNewBrandDesc("");
       setBrandModalOpen(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to create brand");
+      toast.error(failureMessage(err, "Failed to create brand"));
     } finally {
       setCreatingBrand(false);
     }
@@ -208,6 +221,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
 
   const onSubmit = async (values: ProductFormData) => {
     setSubmitting(true);
+
     try {
       const payload = {
         name: values.name,
@@ -228,22 +242,34 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
         await api.post("/products", payload);
         toast.success("Product created successfully");
       }
+
       navigate("/products");
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to save product");
+      toast.error(failureMessage(err, "Failed to save product"));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleGenerateSku = () => {
+    const brandId = form.getValues("brand");
+    const catId = form.getValues("category");
+    const brandObj = brands.find((b) => b.id === brandId);
+    const catObj = categories.find((c) => c.id === catId);
+    const brandPrefix = brandObj ? brandObj.name.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, "") || "BRD" : "DMS";
+    const catPrefix = catObj ? catObj.name.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, "") || "CAT" : "PRD";
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    form.setValue("productCode", `${brandPrefix}-${catPrefix}-${rand}`, { shouldValidate: true });
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{isEditing ? "Edit Product" : "Product Details"}</CardTitle>
+        <Card className="max-w-4xl mx-auto rounded-md border border-border shadow-none">
+          <CardHeader className="p-4 sm:px-6 sm:py-4 border-b border-border bg-muted/10">
+            <CardTitle className="text-base font-semibold">{isEditing ? "Edit Product" : "Product Details"}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="p-4 sm:p-6 space-y-6">
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-muted-foreground">Basic Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -266,9 +292,18 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
                   name="productCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Code / SKU *</FormLabel>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Product Code / SKU *</FormLabel>
+                        <button
+                          type="button"
+                          onClick={handleGenerateSku}
+                          className="text-xs text-primary font-medium hover:underline cursor-pointer"
+                        >
+                          Auto SKU
+                        </button>
+                      </div>
                       <FormControl>
-                        <Input placeholder="PRO-XXXXX" {...field} />
+                        <Input placeholder="PRO-XXXXX" className="font-mono text-xs" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -596,6 +631,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
                           min="0"
                           max="100"
                           placeholder="e.g. 18"
+                          disabled={!form.watch("gstApplicable")}
                           {...field}
                         />
                       </FormControl>

@@ -11,7 +11,6 @@ import {
   Users,
   RefreshCw,
   Lock,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -47,10 +46,8 @@ import {
   type PermissionResource,
   type PermissionItem,
 } from "@dms/shared";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 interface RoleData {
   id: string;
@@ -71,6 +68,8 @@ const initialSystemRoles: RoleData[] = Object.values(DEFAULT_ROLES).map((role, i
   _count: { members: idx === 0 ? 1 : 0 },
 }));
 
+// SAFETY: PermissionResource is `keyof typeof PERMISSION_STATEMENT`, and that
+// literal defines exactly these keys, so Object.keys returns the members.
 const RESOURCES = Object.keys(PERMISSION_STATEMENT) as PermissionResource[];
 
 export default function PermissionPage() {
@@ -95,6 +94,7 @@ export default function PermissionPage() {
     if (data?.roles && Array.isArray(data.roles) && data.roles.length > 0) {
       return data.roles;
     }
+
     return initialSystemRoles;
   }, [data?.roles]);
 
@@ -113,6 +113,8 @@ export default function PermissionPage() {
     setEditingRole(role);
     setRoleName(role.name);
     setRoleDescription(role.description || "");
+    // SAFETY: every role this UI writes is assembled from PERMISSION_STATEMENT
+    // keys (DEFAULT_ROLES and this page's matrix), so `resource` is one of them.
     setSelectedPermissions(
       role.permissions.map((p) => ({
         resource: p.resource as PermissionResource,
@@ -125,6 +127,7 @@ export default function PermissionPage() {
   const togglePermission = (resource: PermissionResource, action: string) => {
     setSelectedPermissions((prev) => {
       const exists = prev.some((p) => p.resource === resource && p.action === action);
+
       if (exists) {
         return prev.filter((p) => !(p.resource === resource && p.action === action));
       } else {
@@ -135,11 +138,15 @@ export default function PermissionPage() {
 
   const selectAll = () => {
     const all: PermissionItem[] = [];
+
     for (const [res, actions] of Object.entries(PERMISSION_STATEMENT)) {
       for (const act of actions) {
+        // SAFETY: `res` is a key of PERMISSION_STATEMENT itself — the object
+        // PermissionResource is defined from — so it is one of its members.
         all.push({ resource: res as PermissionResource, action: act });
       }
     }
+
     setSelectedPermissions(all);
   };
 
@@ -150,10 +157,12 @@ export default function PermissionPage() {
   const handleSaveRole = async () => {
     if (!roleName.trim()) {
       toast.error("Role name is required");
+
       return;
     }
 
     setSaving(true);
+
     try {
       if (editingRole) {
         await api.put(`/roles/${editingRole.id}`, {
@@ -170,14 +179,11 @@ export default function PermissionPage() {
         });
         toast.success(`Custom role "${roleName}" created successfully`);
       }
+
       setDialogOpen(false);
       mutate();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Failed to save role"
-      );
+      toast.error(failureMessage(err, "Failed to save role"));
     } finally {
       setSaving(false);
     }
@@ -186,17 +192,14 @@ export default function PermissionPage() {
   const handleDeleteRole = async () => {
     if (!deleteTarget) return;
     setDeleteBusy(true);
+
     try {
       await api.delete(`/roles/${deleteTarget.id}`);
       toast.success(`Role "${deleteTarget.name}" deleted successfully`);
       setDeleteTarget(null);
       mutate();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "Failed to delete role"
-      );
+      toast.error(failureMessage(err, "Failed to delete role"));
     } finally {
       setDeleteBusy(false);
     }
@@ -338,6 +341,7 @@ export default function PermissionPage() {
                   <TableBody>
                     {RESOURCES.map((resource) => {
                       const actions = PERMISSION_STATEMENT[resource];
+
                       return (
                         <TableRow key={resource}>
                           <TableCell className="font-medium capitalize">
@@ -363,6 +367,7 @@ export default function PermissionPage() {
                                   (p.action === act || p.action === "*")
                               )
                             );
+
                             const hasSome = actions.some((act) =>
                               role.permissions.some(
                                 (p) =>
@@ -579,6 +584,7 @@ export default function PermissionPage() {
               <div className="border border-border rounded-lg divide-y divide-border max-h-[360px] overflow-y-auto">
                 {RESOURCES.map((resource) => {
                   const actions = PERMISSION_STATEMENT[resource];
+
                   return (
                     <div key={resource} className="p-3 space-y-1.5">
                       <div className="text-xs font-semibold capitalize text-foreground">
@@ -589,6 +595,7 @@ export default function PermissionPage() {
                           const isChecked = selectedPermissions.some(
                             (p) => p.resource === resource && p.action === action
                           );
+
                           return (
                             <button
                               key={action}

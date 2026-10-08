@@ -12,32 +12,46 @@ interface LowStockItem {
 }
 
 interface LowStockAlertProps {
+  /** Rows at or below zero — the out-of-stock slice of `/inventory/low-stock`. */
   items: LowStockItem[] | undefined;
-  /** The endpoint's `total`, which counts every row and not just this page. */
+  /** The endpoint's `total`, which counts every low-stock row on the page. */
   total?: number;
   loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   className?: string;
 }
 
+/**
+ * Out-of-stock products only: `quantityOnHand <= 0`, including negatives, so a
+ * product that still has units on hand never appears under this heading. The
+ * count beside the title is this slice, not the endpoint total.
+ */
 export function LowStockAlert({
   items,
   total,
   loading = false,
+  error = null,
+  onRetry,
   className,
 }: LowStockAlertProps) {
   const rows = items ?? [];
-  const count = total ?? rows.length;
+  const count = rows.length;
 
   return (
     <Panel
-      title="Low stock"
-      description="At or below their reorder level"
+      title="Out of stock"
+      description="Nothing left on hand"
       loading={loading}
-      empty={!loading && rows.length === 0}
-      emptyMessage="Every product is above its reorder level"
+      error={error}
+      onRetry={onRetry}
+      empty={!loading && !error && rows.length === 0}
+      emptyMessage="Nothing is out of stock"
       className={className}
       action={
-        <Badge variant={count > 0 ? "destructive" : "secondary"}>{count}</Badge>
+        <Badge variant={count > 0 ? "destructive" : "secondary"}>
+          {total !== undefined ? `${count} of ${total}` : count}
+        </Badge>
       }
     >
       <ul className="divide-y">

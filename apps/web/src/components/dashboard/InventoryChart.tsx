@@ -13,6 +13,8 @@ import { Panel } from "./Panel";
 interface InventoryChartProps {
   data: StockRow[] | undefined;
   loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   className?: string;
 }
 
@@ -41,9 +43,12 @@ const legend = [
 export function InventoryChart({
   data,
   loading = false,
+  error = null,
+  onRetry,
   className,
 }: InventoryChartProps) {
   const rows = data ?? [];
+
   const points = rows.map((row) => ({
     name: row.product.name,
     quantity: row.quantityOnHand,
@@ -55,6 +60,8 @@ export function InventoryChart({
       title="Stock levels"
       description="Ten products holding the most stock"
       loading={loading}
+      error={error}
+      onRetry={onRetry}
       empty={points.length === 0}
       emptyMessage="No inventory yet"
       skeletonHeight="h-72"

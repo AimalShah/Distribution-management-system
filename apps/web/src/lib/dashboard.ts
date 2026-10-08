@@ -38,7 +38,67 @@ export interface DashboardStats {
   totalSalesAmount: number;
   totalPurchasesAmount: number;
   lowStockCount: number;
+  /** Batches with stock expiring inside the next 30 days. */
+  expiringSoonCount: number;
   recentSales: RecentSale[];
   recentPurchases: RecentPurchase[];
   topInventory: StockRow[];
+}
+
+/**
+ * `GET /api/reports/sales/basic` for a `startDate`/`endDate` window.
+ * Every number is aggregated server side over the window; nothing on the page
+ * extrapolates or fakes a value when a field is missing.
+ */
+export interface SalesBasicReport {
+  totalSales: number;
+  totalOrders: number;
+  uniqueCustomers: number;
+  totalQuantity: number;
+  dailyTotals: { date: string; total: number }[];
+  byStatus: StatusBucket[];
+}
+
+/** `GET /api/reports/purchase/basic` for a `startDate`/`endDate` window. */
+export interface PurchaseBasicReport {
+  totalPurchaseAmount: number;
+  totalOrders: number;
+  totalQuantity: number;
+  dailyTotals: { date: string; total: number }[];
+  byStatus: StatusBucket[];
+}
+
+/** One invoice-status slice of a window report: `Completed`, `Pending`, … */
+export interface StatusBucket {
+  status: string;
+  orders: number;
+  totalAmount: number;
+}
+
+/** One row of `GET /api/reports/sales/by-product`, already revenue-ranked. */
+export interface ProductSalesRow {
+  productId: string;
+  name: string;
+  productCode: string;
+  unit?: string;
+  quantity: number;
+  totalPrice: number;
+}
+
+/** One row of `GET /api/reports/sales/by-customer`, revenue-ranked. */
+export interface CustomerSalesRow {
+  customerId: string;
+  name: string;
+  customerCode?: string;
+  isActive?: boolean;
+  orders: number;
+  totalAmount: number;
+}
+
+/** One row of `GET /api/inventory/low-stock` (server-ordered qty asc). */
+export interface LowStockRow {
+  id: string;
+  quantityOnHand: number;
+  reorderLevel: number;
+  product: { name: string; productCode: string };
 }

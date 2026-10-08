@@ -7,7 +7,6 @@ import {
   Download,
   Edit,
   FileText,
-  Filter,
   MessageCircle,
   MoreHorizontal,
   Plus,
@@ -15,21 +14,17 @@ import {
   Receipt,
   RefreshCw,
   RotateCw,
-  Search,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   DataTable,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -37,7 +32,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api } from "../lib/api";
+import { api, failureMessage, fetcher, shortfallLine, toFailure } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -61,8 +56,6 @@ export interface SaleInvoiceItemRow {
   items?: any[];
 }
 
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
-
 export default function SaleInvoiceList() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -71,10 +64,12 @@ export default function SaleInvoiceList() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   // The Deleted tab: stamped invoices, out of circulation but still on record.
   const [view, setView] = useState<"active" | "deleted">("active");
+
   const [confirmTarget, setConfirmTarget] = useState<{
     row: SaleInvoiceItemRow;
     action: "delete" | "restore" | "cancel" | "uncancel";
   } | null>(null);
+
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   const queryString = useMemo(() => {
@@ -82,15 +77,19 @@ export default function SaleInvoiceList() {
       page: String(page),
       pageSize: String(pageSize),
     });
+
     if (search.trim()) {
       params.set("search", search.trim());
     }
+
     if (statusFilter !== "all") {
       params.set("status", statusFilter);
     }
+
     if (view === "deleted") {
       params.set("deleted", "true");
     }
+
     return params.toString();
   }, [page, pageSize, search, statusFilter, view]);
 
@@ -104,6 +103,7 @@ export default function SaleInvoiceList() {
   }, [data?.data]);
 
   const totalInvoices = data?.total ?? 0;
+
   const totalVolume = (data?.data ?? []).reduce(
     (sum: number, s: SaleInvoiceItemRow) => sum + (s.totalAmount || 0),
     0
@@ -114,13 +114,14 @@ export default function SaleInvoiceList() {
   // ConfirmDialog with a busy state that no second click can get past.
   const handleDelete = async (row: SaleInvoiceItemRow) => {
     setConfirmBusy(true);
+
     try {
       await api.delete(`/sales/${row.id}`);
       toast.success("Invoice deleted, stock returned, and moved to the Deleted tab");
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to delete sale invoice");
+      toast.error(failureMessage(err, "Failed to delete sale invoice"));
     } finally {
       setConfirmBusy(false);
     }
@@ -128,13 +129,17 @@ export default function SaleInvoiceList() {
 
   const handleRestore = async (row: SaleInvoiceItemRow) => {
     setConfirmBusy(true);
+
     try {
       await api.post(`/sales/${row.id}/restore`);
       toast.success(`Invoice "${row.saleCode}" restored and stock re-applied`);
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to restore sale invoice");
+      // The refusal carries { productId, available, requested }: name the gap.
+      const failure = toFailure(err, "Failed to restore sale invoice");
+
+      toast.error(`${failure.message}${shortfallLine(failure)}`);
     } finally {
       setConfirmBusy(false);
     }
@@ -142,13 +147,14 @@ export default function SaleInvoiceList() {
 
   const handleCancel = async (sale: SaleInvoiceItemRow) => {
     setConfirmBusy(true);
+
     try {
       await api.post(`/sales/${sale.id}/cancel`);
       toast.success(`Invoice "${sale.saleCode}" cancelled`);
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to cancel invoice");
+      toast.error(failureMessage(err, "Failed to cancel invoice"));
     } finally {
       setConfirmBusy(false);
     }
@@ -156,13 +162,14 @@ export default function SaleInvoiceList() {
 
   const handleUncancel = async (sale: SaleInvoiceItemRow) => {
     setConfirmBusy(true);
+
     try {
       await api.post(`/sales/${sale.id}/uncancel`);
       toast.success(`Invoice "${sale.saleCode}" restored to its previous status`);
       setConfirmTarget(null);
       await mutate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to un-cancel invoice");
+      toast.error(failureMessage(err, "Failed to un-cancel invoice"));
     } finally {
       setConfirmBusy(false);
     }
@@ -176,9 +183,10 @@ export default function SaleInvoiceList() {
    */
   const handleShare = async (sale: SaleInvoiceItemRow) => {
     try {
-      const detail = await api.get(`/sales/${sale.id}`).then((r) => r.data);
+      const detail = await api.get(`/sales/${sale.id}`);
       const total = detail.totalAmount ?? sale.totalAmount;
       const paid = detail.amountPaid ?? sale.amountPaid ?? 0;
+
       const text = [
         `Invoice ${detail.saleCode ?? sale.saleCode}`,
         `Customer: ${detail.customer?.name || "Walk-in Customer"}`,
@@ -192,6 +200,7 @@ export default function SaleInvoiceList() {
       ].join("\n");
 
       const link = waLink(detail.customer?.phone, text);
+
       if (link) {
         window.open(link, "_blank", "noopener");
       } else {
@@ -199,7 +208,7 @@ export default function SaleInvoiceList() {
         toast.info("No WhatsApp number on file — the invoice summary was copied instead");
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to prepare the invoice message");
+      toast.error(failureMessage(err, "Failed to prepare the invoice message"));
     }
   };
 
@@ -220,31 +229,35 @@ export default function SaleInvoiceList() {
     if (sale.status === "Cancelled") {
       return <span className="text-xs text-muted-foreground">—</span>;
     }
+
     const paid = sale.amountPaid ?? 0;
     const total = sale.totalAmount || 0;
+
     if (paid <= 0) {
-      return <Badge variant="secondary" className="badge badge-gray">Unpaid</Badge>;
+      return <Badge variant="outline" className="text-muted-foreground border-border">Unpaid</Badge>;
     }
+
     if (paid >= total) {
-      return <Badge className="badge badge-success">Paid</Badge>;
+      return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">Paid</Badge>;
     }
-    return <Badge variant="secondary" className="badge badge-warning">Partial</Badge>;
+
+    return <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">Partial</Badge>;
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Completed":
         return (
-          <Badge className="badge badge-success">
+          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
             Completed
           </Badge>
         );
       case "Pending":
-        return <Badge variant="secondary" className="badge badge-warning">Pending</Badge>;
+        return <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">Pending</Badge>;
       case "Cancelled":
-        return <Badge variant="destructive" className="badge badge-danger">Cancelled</Badge>;
+        return <Badge variant="destructive">Cancelled</Badge>;
       default:
-        return <Badge variant="secondary" className="badge badge-gray">{status}</Badge>;
+        return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
@@ -264,6 +277,7 @@ export default function SaleInvoiceList() {
         header: "Customer",
         cell: ({ row }) => {
           const name = row.original.customer?.name || "Walk-in Customer";
+
           return (
             <div className="flex items-center gap-2">
               <div>
@@ -300,9 +314,9 @@ export default function SaleInvoiceList() {
         accessorKey: "totalAmount",
         header: "Total",
         cell: ({ row }) => (
-          <span className="font-semibold text-foreground text-xs">
+          <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {formatMoney(row.original.totalAmount)}
-          </span>
+          </div>
         ),
       },
       {
@@ -311,12 +325,13 @@ export default function SaleInvoiceList() {
         cell: ({ row }) => {
           const sale = row.original;
           const paid = sale.amountPaid ?? 0;
+
           return (
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
+            <div className="text-right space-y-0.5">
+              <div className="text-xs font-mono tabular-nums text-muted-foreground">
                 {paid > 0 ? formatMoney(paid) : formatMoney(0)}
-              </span>
-              {getPaymentBadge(sale)}
+              </div>
+              <div className="flex justify-end">{getPaymentBadge(sale)}</div>
             </div>
           );
         },
@@ -426,7 +441,7 @@ export default function SaleInvoiceList() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      {/* Invenza Breadcrumb & Action Header */}
+      {/* Operational Breadcrumb & Action Header */}
       <ListPageHeader
         breadcrumb={
           <>
@@ -434,13 +449,13 @@ export default function SaleInvoiceList() {
               Dashboard
             </Link>
             <span>/</span>
-            <span className="text-muted-foreground">Sales</span>
+            <span className="text-muted-foreground">Daily Operations</span>
             <span>/</span>
-            <span className="text-foreground font-semibold">Invoices</span>
+            <span className="text-foreground font-semibold">Sales & Invoices</span>
           </>
         }
-        title="Sale Invoices"
-        subtitle="Manage customer invoices, order fulfillment, and billing receipts"
+        title="Sales & Invoices"
+        subtitle="Manage customer orders, billing receipts, and balance collection"
         actions={
           <>
             <Button
@@ -623,6 +638,7 @@ export default function SaleInvoiceList() {
         onConfirm={() => {
           if (!confirmTarget) return;
           const { row, action } = confirmTarget;
+
           if (action === "restore") void handleRestore(row);
           else if (action === "cancel") void handleCancel(row);
           else if (action === "uncancel") void handleUncancel(row);

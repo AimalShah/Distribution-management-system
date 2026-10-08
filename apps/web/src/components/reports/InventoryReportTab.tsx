@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { AlertTriangle, DollarSign, Layers, Package } from "lucide-react";
 import { Badge } from "@dms/ui";
-import { api } from "../../lib/api";
+import { fetcher } from "../../lib/api";
 import { formatDate, formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -10,8 +10,6 @@ import {
   ReportSectionCard,
   ReportTabsSkeleton,
 } from "./ReportPrimitives";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
 interface InventoryReportTabProps {
   queryString: string;
@@ -30,10 +28,12 @@ export function InventoryReportTab({ queryString }: InventoryReportTabProps) {
   const valuationItems = stockValuation?.items ?? [];
 
   const totalInventoryValue = stockValuation?.totalValue ?? 0;
+
   const totalItemsInStock = useMemo(
     () => basic.reduce((sum: number, item: any) => sum + (item.quantityOnHand || 0), 0),
     [basic]
   );
+
   const lowStockCount = lowStock.length;
   const uniqueProducts = basic.length;
 
@@ -104,6 +104,7 @@ export function InventoryReportTab({ queryString }: InventoryReportTabProps) {
               {movements.slice(0, 6).map((mov: any) => {
                 const isIn = mov.movementType === "IN";
                 const isOut = mov.movementType === "OUT" || mov.movementType === "DAMAGED";
+
                 return (
                   <div
                     key={mov.id}

@@ -1,7 +1,13 @@
 import { useMemo } from "react";
 import useSWR from "swr";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Clock, CheckCircle2, ArrowRight } from "lucide-react";
+import {
+  Clock,
+  CheckCircle2,
+  ArrowRight,
+  RefreshCw,
+  TriangleAlert,
+} from "lucide-react";
 import {
   Badge,
   Button,
@@ -17,9 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api } from "../../lib/api";
-
-const fetcher = (url: string) => api.get(url).then((r) => r.data);
+import { fetcher } from "../../lib/api";
 
 export interface ExpiringBatchItem {
   id: string;
@@ -36,10 +40,15 @@ export interface ExpiringBatchItem {
 
 export function ExpiringSoonCard() {
   const navigate = useNavigate();
-  const { data, isLoading } = useSWR<ExpiringBatchItem[]>(
+
+  const {
+    data,
+    isLoading,
+    error,
+    mutate,
+  } = useSWR<ExpiringBatchItem[]>(
     "/inventory/batches/expiring?days=30&limit=5",
-    fetcher,
-    { fallbackData: [] }
+    fetcher
   );
 
   const batches = useMemo(() => (Array.isArray(data) ? data : []), [data]);
@@ -67,12 +76,38 @@ export function ExpiringSoonCard() {
                 : "text-xs"
             }
           >
-            {batches.length} {batches.length === 1 ? "Batch" : "Batches"}
+            {isLoading || error
+              ? "—"
+              : `${batches.length} ${batches.length === 1 ? "Batch" : "Batches"}`}
           </Badge>
         </div>
       </CardHeader>
       <CardContent>
-        {batches.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-2 py-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-9 animate-pulse rounded-md bg-muted" />
+            ))}
+          </div>
+        ) : error ? (
+          <div
+            role="alert"
+            className="flex flex-col items-center justify-center gap-2 py-6 text-center"
+          >
+            <TriangleAlert className="size-6 text-destructive" />
+            <p className="text-xs text-muted-foreground">
+              Expiry data unavailable
+            </p>
+            <button
+              type="button"
+              onClick={() => void mutate()}
+              className="btn btn-outline btn-sm cursor-pointer inline-flex items-center gap-2"
+            >
+              <RefreshCw className="size-3.5" />
+              Retry
+            </button>
+          </div>
+        ) : batches.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
             <CheckCircle2 className="size-8 text-emerald-500/80 mb-2" />
             <p className="text-xs font-medium text-foreground">All batches in good standing</p>
