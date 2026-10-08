@@ -2,6 +2,15 @@ import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { CustomerInput, CustomerLedgerQuery, CustomerUpdateInput } from "@dms/shared";
 import { conflict, notFound } from "../http";
+import {
+  beforeWindow,
+  notSoftDeleted,
+  paymentScope,
+  returnScope,
+  saleScope,
+  statementWindow,
+  type DateBound,
+} from "./scope";
 
 // The legacy `getCustomers` embedded every sale a customer had in each list row.
 // That collection is unbounded, so it becomes a count here and the history
@@ -10,7 +19,7 @@ import { conflict, notFound } from "../http";
 // circulation, and a badge that still counted it would disagree with the
 // history the row links to.
 const customerInclude = {
-  _count: { select: { sale: { where: { deletedAt: null } } } },
+  _count: { select: { sale: { where: notSoftDeleted } } },
 } satisfies Prisma.CustomerInclude;
 
 export type CustomerListArgs = {
@@ -28,20 +37,20 @@ export async function getCustomers({
   search,
   isActive,
 }: CustomerListArgs) {
-  const where: Prisma.CustomerWhereInput = {
-    organizationId,
-    // Absent means "both", so a list can show archived customers without a
-    // second request.
-    ...(isActive === undefined ? {} : { isActive }),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { customerCode: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : {}),
-  };
+  const where: Prisma.CustomerWhereInput = { organizationId };
+
+  // Absent means "both", so a list can show archived customers without a
+  // second request.
+  if (isActive !== undefined) {
+    where.isActive = isActive;
+  }
+
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { customerCode: { contains: search, mode: "insensitive" } },
+    ];
+  }
 
   const [data, total] = await Promise.all([
     prisma.customer.findMany({
@@ -172,17 +181,6 @@ export interface CustomerLedger {
 }
 
 /**
- * A `to` bound is inclusive of its whole calendar day: a statement "as of
- * 6 October" has to include the invoices and receipts of the 6th, and a date
- * that arrives as UTC midnight would otherwise cut the day off at 00:00.
- * A bound with a time of day already is taken at face value.
- */
-const upperExclusive = (to: Date): Date =>
-  to.getTime() % 86_400_000 === 0
-    ? new Date(to.getTime() + 86_400_000)
-    : new Date(to.getTime() + 1);
-
-/**
  * The customer's account: invoices, returns as credit entries, payments.
  *
  * The ledger is *derived*, never stored — there is no `LedgerEntry` table to
@@ -219,74 +217,72 @@ export async function getCustomerLedger({
   // inside the window and the opening balance is zero. No dates at all means
   // the window is the entire history — the queries still run, just without a
   // date filter attached.
-  const openingBound = from ? { lt: from } : null;
-  const windowBound = {
-    ...(from ? { gte: from } : {}),
-    ...(to ? { lt: upperExclusive(to) } : {}),
-  };
+  const openingBound = from ? beforeWindow(from) : null;
+
+  const windowBound = statementWindow(from, to);
 
   type SaleLine = { saleCode: string; saleDate: Date; totalAmount: number };
+
   type CreditLine = {
     returnCode: string;
     returnDate: Date;
     items: { quantity: number; unitPrice: number; taxAmount: number; discount: number }[];
   };
+
   type PaymentLine = { paymentCode: string; paidAt: Date; amount: number; method: string };
 
   const saleSelect = { saleCode: true, saleDate: true, totalAmount: true } as const;
+
   const returnSelect = {
     returnCode: true,
     returnDate: true,
     items: { select: { quantity: true, unitPrice: true, taxAmount: true, discount: true } },
   } as const;
+
   const paymentSelect = { paymentCode: true, paidAt: true, amount: true, method: true } as const;
 
-  // The date bound is only attached when it carries a comparison — `{}` is
-  // truthy but is not a valid filter on a scalar column, and an unbounded
-  // window arrives as exactly that. Taken as `unknown` because Prisma's
-  // filter union includes scalar shorthand (`string | Date`), which is not
-  // assignable to `object` even though every bound built here is a comparison
-  // object or `null`.
-  const hasBound = (bound: unknown) =>
-    Boolean(bound && typeof bound === "object" && Object.keys(bound).length > 0);
-
-  const saleScope = (saleDate?: Prisma.SaleWhereInput["saleDate"]) => ({
-    organizationId,
+  // The statement's own filters on top of the scope's: *this* customer, and
+  // the conditions that mean the customer still owes. What "active, in-tenant,
+  // in-window" is belongs to the scope module; what counts as owed is this
+  // statement's business.
+  const saleWhere = (window: DateBound): Prisma.SaleWhereInput => ({
+    ...saleScope({ organizationId, window }),
     customerId,
-    deletedAt: null,
     status: { not: "Cancelled" },
-    ...(hasBound(saleDate) ? { saleDate } : {}),
   });
 
-  const creditScope = (returnDate?: Prisma.ReturnWhereInput["returnDate"]) => ({
-    organizationId,
-    returnType: "SALE" as const,
-    deletedAt: null,
+  const creditWhere = (window: DateBound): Prisma.ReturnWhereInput => ({
+    ...returnScope({ organizationId, window }),
+    returnType: "SALE",
     sale: { customerId },
-    ...(hasBound(returnDate) ? { returnDate } : {}),
   });
 
-  const paymentScope = (paidAt?: Prisma.PaymentWhereInput["paidAt"]) => ({
-    organizationId,
+  const paymentWhere = (window: DateBound): Prisma.PaymentWhereInput => ({
+    ...paymentScope({ organizationId, window }),
     customerId,
-    deletedAt: null,
-    ...(hasBound(paidAt) ? { paidAt } : {}),
   });
+
+  // Typed empty arrays rather than a cast: the ternary below picks between a
+  // query's rows and "no opening period was asked about", and both arms have
+  // to be the same list type for the sums that follow.
+  const noSales: SaleLine[] = [];
+  const noCredits: CreditLine[] = [];
+  const noPayments: PaymentLine[] = [];
 
   const [openingSales, openingCredits, openingPayments, windowSales, windowCredits, windowPayments] =
     await Promise.all([
       openingBound
-        ? prisma.sale.findMany({ where: saleScope(openingBound), select: saleSelect })
-        : ([] as SaleLine[]),
+        ? prisma.sale.findMany({ where: saleWhere(openingBound), select: saleSelect })
+        : noSales,
       openingBound
-        ? prisma.return.findMany({ where: creditScope(openingBound), select: returnSelect })
-        : ([] as CreditLine[]),
+        ? prisma.return.findMany({ where: creditWhere(openingBound), select: returnSelect })
+        : noCredits,
       openingBound
-        ? prisma.payment.findMany({ where: paymentScope(openingBound), select: paymentSelect })
-        : ([] as PaymentLine[]),
-      prisma.sale.findMany({ where: saleScope(windowBound), select: saleSelect }),
-      prisma.return.findMany({ where: creditScope(windowBound), select: returnSelect }),
-      prisma.payment.findMany({ where: paymentScope(windowBound), select: paymentSelect }),
+        ? prisma.payment.findMany({ where: paymentWhere(openingBound), select: paymentSelect })
+        : noPayments,
+      prisma.sale.findMany({ where: saleWhere(windowBound), select: saleSelect }),
+      prisma.return.findMany({ where: creditWhere(windowBound), select: returnSelect }),
+      prisma.payment.findMany({ where: paymentWhere(windowBound), select: paymentSelect }),
     ]);
 
   // A return's credit is what the customer paid for the goods coming back —
@@ -336,8 +332,10 @@ export async function getCustomerLedger({
   ].sort((a, b) => a.date.localeCompare(b.date) || typeRank[a.type] - typeRank[b.type]);
 
   let running = openingBalance;
+
   const entries: LedgerEntry[] = drafts.map((draft) => {
     running += draft.debit - draft.credit;
+
     return { ...draft, balance: running };
   });
 

@@ -36,6 +36,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -117,6 +118,7 @@ describe("Checkpoint 4b — Product Pages", () => {
       unitCost: "10.00",
       unitPrice: "20.00",
     });
+
     expect(shortNameResult.success).toBe(false);
 
     // Schema validation test: negative cost fails
@@ -129,6 +131,7 @@ describe("Checkpoint 4b — Product Pages", () => {
       unitCost: "-5.00",
       unitPrice: "20.00",
     });
+
     expect(negativeCostResult.success).toBe(false);
 
     // Valid object passes and coerces numbers
@@ -142,7 +145,9 @@ describe("Checkpoint 4b — Product Pages", () => {
       unitPrice: "20.00",
       isActive: true,
     });
+
     expect(validResult.success).toBe(true);
+
     if (validResult.success) {
       expect(validResult.data.unitCost).toBe(10.5);
       expect(validResult.data.unitPrice).toBe(20);
@@ -162,6 +167,7 @@ describe("Checkpoint 4b — Product Pages", () => {
 
     if (hasDatabase && t) {
       const code = unique("PRD");
+
       const res = await request(app)
         .post("/api/products")
         .set(asOrg(t.organizationId))
@@ -235,6 +241,7 @@ describe("Checkpoint 4b — Product Pages", () => {
     if (hasDatabase && t) {
       // Create a product to edit
       const code = unique("EDT");
+
       const created = await request(app)
         .post("/api/products")
         .set(asOrg(t.organizationId))
@@ -294,18 +301,22 @@ describe("Checkpoint 4b — Product Pages", () => {
     // Legacy field checks across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -316,6 +327,7 @@ describe("Checkpoint 4b — Product Pages", () => {
     if (hasDatabase && t) {
       // Create and delete a product
       const code = unique("DEL");
+
       const created = await request(app)
         .post("/api/products")
         .set(asOrg(t.organizationId))
@@ -335,12 +347,14 @@ describe("Checkpoint 4b — Product Pages", () => {
       const delRes = await request(app)
         .delete(`/api/products/${prodId}`)
         .set(asOrg(t.organizationId));
+
       expect(delRes.status).toBe(204);
 
       // Verify it's gone
       const getRes = await request(app)
         .get(`/api/products/${prodId}`)
         .set(asOrg(t.organizationId));
+
       expect(getRes.status).toBe(404);
     }
   });

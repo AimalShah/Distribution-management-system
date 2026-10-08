@@ -1,7 +1,7 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { USER_HEADER } from "../middleware/auth-context";
+import { USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { memberModel, userModel, dbStub } = vi.hoisted(() => {
   const member = {
@@ -12,6 +12,7 @@ const { memberModel, userModel, dbStub } = vi.hoisted(() => {
     update: vi.fn(),
     delete: vi.fn(),
   };
+
   const user = {
     findMany: vi.fn(),
     findFirst: vi.fn(),
@@ -29,8 +30,11 @@ vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 const app = createApp();
 
 const OWNER = "user_owner";
+
 const STRANGER = "user_stranger";
+
 const TARGET = "user_target";
+
 const ORG = "org_1";
 
 const asCaller = (req: request.Test) => req.set(USER_HEADER, OWNER);
@@ -60,6 +64,7 @@ beforeEach(() => {
     if (where.id) {
       return memberFixture(where);
     }
+
     return where.userId === OWNER ? memberFixture({ userId: where.userId }) : null;
   });
   memberModel.findMany.mockResolvedValue([memberFixture()]);
@@ -127,6 +132,7 @@ describe("GET /api/organizations/:id/members", () => {
     // organization in the path rather than "is a member of something".
     memberModel.findFirst.mockImplementation(async ({ where }) => {
       if (where.id) return memberFixture(where);
+
       return where.userId === OWNER && where.organizationId === ORG
         ? memberFixture({ userId: where.userId, organizationId: where.organizationId })
         : null;
@@ -142,6 +148,8 @@ describe("GET /api/organizations/:id/members", () => {
   });
 
   it("400s without a user context", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).get(`/api/organizations/${ORG}/members`);
 
     expect(res.status).toBe(400);
@@ -203,6 +211,8 @@ describe("GET /api/organizations/:id/available-users", () => {
   });
 
   it("400s without a user context", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).get(`/api/organizations/${ORG}/available-users`);
 
     expect(res.status).toBe(400);
@@ -460,6 +470,8 @@ describe("DELETE /api/members/:id", () => {
   });
 
   it("400s without a user context", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).delete("/api/members/mem_2");
 
     expect(res.status).toBe(400);

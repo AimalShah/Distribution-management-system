@@ -41,6 +41,9 @@ export const brandListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type BrandInput = z.output<typeof BrandSchema>;
+
 export type BrandUpdateInput = z.output<typeof BrandUpdateSchema>;
+
 export type BrandListQuery = z.output<typeof brandListQuerySchema>;
+
 export type BrandFormData = BrandInput;

@@ -1,10 +1,11 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { ORGANIZATION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     sale: {
       findMany: vi.fn(),
       count: vi.fn(),
@@ -23,6 +24,7 @@ const { models, transaction } = vi.hoisted(() => {
       updateMany: vi.fn(),
     },
     inventoryLog: { create: vi.fn() },
+    stockBatch: { findMany: vi.fn(), update: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -43,6 +45,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const USER = "user_1";
 
 const auth = () => ({
@@ -115,6 +118,8 @@ beforeEach(() => {
   models.inventory.update.mockResolvedValue({ quantityOnHand: 8 });
   models.inventory.updateMany.mockResolvedValue({ count: 1 });
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
+  // No batches are tracked for this product, so FEFO has nothing to touch.
+  models.stockBatch.findMany.mockResolvedValue([]);
 });
 
 describe("organization context", () => {
@@ -183,6 +188,7 @@ describe("GET /api/sales", () => {
     const arg = models.sale.findMany.mock.calls[0][0] as {
       include: Record<string, unknown>;
     };
+
     expect(arg.include).toHaveProperty("_count");
     expect(arg.include).not.toHaveProperty("items");
   });
@@ -281,9 +287,11 @@ describe("POST /api/sales", () => {
       })
     );
 
+    // The stock-movement module resolves the row for the product, then
+    // addresses the guard by that row's id within the tenant.
     expect(models.inventory.updateMany).toHaveBeenCalledWith({
       where: {
-        productId: "prod_1",
+        id: "inv_1",
         organizationId: ORG,
         quantityOnHand: { gte: 2 },
       },
@@ -372,10 +380,13 @@ describe("POST /api/sales", () => {
   });
 
   it("deducts repeated lines in sequence", async () => {
-    // One availability read, then one read back after each line's decrement:
-    // 10 -> 8 -> 6.
+    // One availability read, one resolve per line, then one read back after
+    // each line's decrement: 10 -> 8 -> 6.
     models.inventory.findFirst
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 6 });
+    models.inventory.findFirstOrThrow
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 })
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 6 });
 
@@ -409,6 +420,7 @@ describe("POST /api/sales", () => {
     const arg = models.inventoryLog.create.mock.calls[0][0] as {
       data: { previousQty: number; quantity: number; newQty: number };
     };
+
     expect(arg.data.previousQty - arg.data.quantity).toBe(arg.data.newQty);
   });
 
@@ -424,15 +436,18 @@ describe("POST /api/sales", () => {
       where: { quantityOnHand: { gte: number } };
       data: { quantityOnHand: { decrement: number } };
     };
+
     expect(arg.where.quantityOnHand.gte).toBe(2);
     expect(arg.data.quantityOnHand).toEqual({ decrement: 2 });
   });
 
   it("refuses the sale when the atomic decrement finds nothing to claim", async () => {
     // The availability pass saw 10, but a concurrent transaction took 8 first,
-    // so the guarded update matched zero rows and only 2 remain.
+    // so the guarded update matched zero rows and only 2 remain: the resolve
+    // read and the follow-up read both see 2.
     models.inventory.findFirst
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 2 })
       .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 2 });
     models.inventory.updateMany.mockResolvedValue({ count: 0 });
 
@@ -483,6 +498,8 @@ describe("POST /api/sales", () => {
   });
 
   it("requires a user id to attribute the inventory log", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .post("/api/sales")
       .set({ [ORGANIZATION_HEADER]: ORG })
@@ -554,6 +571,7 @@ describe("POST /api/sales", () => {
     const arg = models.sale.create.mock.calls[0][0] as {
       data: { totalAmount: number; items: { create: { totalPrice: number }[] } };
     };
+
     expect(arg.data.totalAmount).toBe(50);
     expect(arg.data.items.create[0].totalPrice).toBe(50);
   });
@@ -567,6 +585,7 @@ describe("POST /api/sales", () => {
     const arg = models.sale.create.mock.calls[0][0] as {
       data: { items: { create: Record<string, unknown>[] } };
     };
+
     expect(arg.data.items.create[0].discount).toBeUndefined();
   });
 
@@ -769,6 +788,8 @@ describe("DELETE /api/sales/:id", () => {
   });
 
   it("refuses without a user to attribute the reversal to", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .delete("/api/sales/sal_1")
       .set(ORGANIZATION_HEADER, ORG);
@@ -781,6 +802,8 @@ describe("DELETE /api/sales/:id", () => {
 
 describe("POST /api/sales/:id/restore", () => {
   it("refuses without a user to attribute the restoration to", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .post("/api/sales/sal_1/restore")
       .set(ORGANIZATION_HEADER, ORG);

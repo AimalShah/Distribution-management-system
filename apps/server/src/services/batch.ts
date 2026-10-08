@@ -64,6 +64,7 @@ export async function listStockBatches(
     const daysUntilExpiry = b.expiryDate
       ? Math.ceil((b.expiryDate.getTime() - now.getTime()) / MS_PER_DAY)
       : null;
+
     const isExpired = b.expiryDate ? b.expiryDate < now : false;
 
     return {
@@ -100,6 +101,7 @@ export async function getStockBatchById(id: string, organizationId: string) {
   }
 
   const now = new Date();
+
   const daysUntilExpiry = batch.expiryDate
     ? Math.ceil((batch.expiryDate.getTime() - now.getTime()) / MS_PER_DAY)
     : null;
@@ -144,9 +146,11 @@ export async function getExpiringSoonBatches(
 
   return batches.map((b) => {
     const expiryDate = b.expiryDate!;
+
     const daysUntilExpiry = Math.ceil(
       (expiryDate.getTime() - now.getTime()) / MS_PER_DAY
     );
+
     return {
       id: b.id,
       batchNumber: b.batchNumber,

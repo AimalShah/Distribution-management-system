@@ -22,11 +22,13 @@ const { categoryModel, productModel, brandModel } = vi.hoisted(() => ({
 
 vi.mock("@dms/db", () => ({
   default: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     category: categoryModel,
     product: productModel,
     brand: brandModel,
   },
   prisma: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     category: categoryModel,
     product: productModel,
     brand: brandModel,
@@ -36,6 +38,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
 
 const categoryFixture = (overrides: Record<string, unknown> = {}) => ({

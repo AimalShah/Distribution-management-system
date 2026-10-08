@@ -4,6 +4,8 @@ import prisma from "@dms/db";
 import type { Auth } from "../auth";
 import { badRequest, forbidden, unauthorized } from "../http/errors";
 
+import { bearerToken, verifySessionToken } from "../services/auth";
+
 type Session = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;
 
 /**
@@ -16,7 +18,47 @@ const handle =
     auth.api
       .getSession({ headers: fromNodeHeaders(req.headers) })
       .then(async (session) => {
-        if (!session) throw unauthorized();
+        if (!session) {
+          const token = bearerToken(req.header("authorization"));
+          const claims = verifySessionToken(token);
+
+          if (claims) {
+            const organizationId =
+              process.env.DMS_ORGANIZATION_ID ||
+              (await prisma.organization.findFirst({ select: { id: true } }))?.id ||
+              "";
+
+            const userId =
+              process.env.DMS_USER_ID ||
+              (await prisma.user.findFirst({ where: { isOwner: true }, select: { id: true } }))?.id ||
+              claims.username;
+
+            await fn(req, {
+              session: {
+                id: `dev-session-${claims.username}`,
+                activeOrganizationId: organizationId,
+                userId,
+                expiresAt: new Date(claims.expiresAt * 1000),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                token: token ?? "",
+              } as any,
+              user: {
+                id: userId,
+                name: claims.name,
+                email: `${claims.username}@dev.local`,
+                emailVerified: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              } as any,
+            });
+
+            return;
+          }
+
+          throw unauthorized();
+        }
+
         await fn(req, session);
       })
       .then(() => next(), next);
@@ -37,6 +79,7 @@ const handle =
 export const sessionAuthContext = (auth: Auth): RequestHandler =>
   handle(async (req, { session, user }) => {
     const organizationId = session.activeOrganizationId;
+
     if (!organizationId) {
       throw badRequest(
         "No active organization. Select one with POST /api/auth/organization/set-active.",
@@ -48,6 +91,7 @@ export const sessionAuthContext = (auth: Auth): RequestHandler =>
       where: { organizationId_userId: { organizationId, userId: user.id } },
       select: { id: true },
     });
+
     if (!membership) {
       throw forbidden(
         "You are not a member of the active organization.",

@@ -45,7 +45,9 @@ import {
 const serverRequire = createRequire(
   new URL("../../../apps/server/package.json", import.meta.url)
 );
+
 const express = serverRequire("express");
+
 type TestApp = ReturnType<typeof express>;
 
 describe.skipIf(!hasDatabase)("Checkpoint 2l — Permissions API", () => {
@@ -61,9 +63,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 2l — Permissions API", () => {
     if (madeMembers.length) {
       await prisma.member.deleteMany({ where: { id: { in: madeMembers } } });
     }
+
     if (madeUsers.length) {
       await prisma.user.deleteMany({ where: { id: { in: madeUsers } } });
     }
+
     if (t) await teardownTenants(t);
   });
 
@@ -89,6 +93,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2l — Permissions API", () => {
         updatedAt: new Date(),
       },
     });
+
     return id;
   };
 
@@ -98,6 +103,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2l — Permissions API", () => {
     await prisma.member.create({
       data: { id, organizationId: orgId, userId, role, createdAt: new Date() },
     });
+
     return id;
   };
 
@@ -107,6 +113,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2l — Permissions API", () => {
       res.json({ ok: true });
     });
     app.use(errorHandler);
+
     return app;
   };
 

@@ -59,6 +59,9 @@ export const supplierListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type SupplierInput = z.output<typeof SupplierSchema>;
+
 export type SupplierUpdateInput = z.output<typeof SupplierUpdateSchema>;
+
 export type SupplierListQuery = z.output<typeof supplierListQuerySchema>;
+
 export type SupplierFormData = SupplierInput;

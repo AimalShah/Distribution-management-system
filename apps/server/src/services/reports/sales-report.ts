@@ -1,33 +1,6 @@
 import prisma from "@dms/db";
-import type { Prisma } from "@dms/db";
 import type { SalesReportQuery } from "@dms/shared";
-
-const saleWindow = (
-  organizationId: string,
-  { startDate, endDate, brandId }: SalesReportQuery
-): Prisma.SaleWhereInput => ({
-  organizationId,
-  // A soft-deleted invoice gave its stock back and is out of circulation, so
-  // it never counts toward a report's revenue or quantity.
-  deletedAt: null,
-  ...(startDate || endDate
-    ? {
-        saleDate: {
-          ...(startDate ? { gte: startDate } : {}),
-          ...(endDate ? { lte: endDate } : {}),
-        },
-      }
-    : {}),
-  ...(brandId
-    ? {
-        items: {
-          some: {
-            product: { brandId },
-          },
-        },
-      }
-    : {}),
-});
+import { customerScope, productScope, reportWindow, saleItemScope, saleScope, type ScopeInput } from "../scope";
 
 /**
  * Window totals.
@@ -43,9 +16,17 @@ export async function getBasicSalesReport(
   organizationId: string,
   query: SalesReportQuery
 ) {
+  // What "active, in-tenant, in-window, in-brand" means is `scope`'s to decide;
+  // only the columns summed and grouped on are this report's.
+  const scope: ScopeInput = {
+    organizationId,
+    window: reportWindow(query),
+    brandId: query.brandId,
+  };
+
   const [sales, quantities, lines] = await Promise.all([
     prisma.sale.findMany({
-      where: saleWindow(organizationId, query),
+      where: saleScope(scope),
       select: {
         id: true,
         saleDate: true,
@@ -59,12 +40,12 @@ export async function getBasicSalesReport(
       by: ["saleId"],
       _count: { _all: true },
       _sum: { quantity: true },
-      where: { sale: saleWindow(organizationId, query) },
+      where: { sale: saleScope(scope) },
     }),
     prisma.saleItem.groupBy({
       by: ["saleId"],
       _sum: { totalPrice: true },
-      where: { sale: saleWindow(organizationId, query) },
+      where: { sale: saleScope(scope) },
     }),
   ]);
 
@@ -82,9 +63,11 @@ export async function getBasicSalesReport(
   // The line subtotal per sale, so a header that disagrees with its own lines
   // can be found. See the note on `unreconciledOrders` below.
   const subtotalBySale = new Map<string, number>();
+
   for (const group of lines) {
     subtotalBySale.set(group.saleId, group._sum.totalPrice ?? 0);
   }
+
   const totalLineSubtotal = [...subtotalBySale.values()].reduce(
     (sum, value) => sum + value,
     0
@@ -113,6 +96,7 @@ export async function getBasicSalesReport(
     // deciding which figure is right is not ours to do here, so both are
     // reported and the count says how far apart they are.
     const subtotal = subtotalBySale.get(sale.id);
+
     if (subtotal !== undefined && Math.abs(subtotal - sale.totalAmount) > 0.005) {
       unreconciledOrders += 1;
     }
@@ -167,7 +151,7 @@ export async function getSalesByCustomer(
   // per customer, but the query had one row per sale.
   const groups = await prisma.sale.groupBy({
     by: ["customerId"],
-    where: saleWindow(organizationId, query),
+    where: saleScope({ organizationId, window: reportWindow(query), brandId: query.brandId }),
     _count: { _all: true },
     _sum: { totalAmount: true },
     orderBy: { _sum: { totalAmount: "desc" } },
@@ -175,11 +159,12 @@ export async function getSalesByCustomer(
 
   const customers = await prisma.customer.findMany({
     where: {
-      organizationId,
+      ...customerScope({ organizationId }),
       id: { in: groups.map((group) => group.customerId) },
     },
     select: { id: true, name: true, customerCode: true, isActive: true },
   });
+
   const byId = new Map(customers.map((customer) => [customer.id, customer]));
 
   // A group whose customer row has since been deleted has no name to report.
@@ -187,6 +172,7 @@ export async function getSalesByCustomer(
   // filter is here so a dangling row drops one line rather than throwing.
   return groups.flatMap((group) => {
     const customer = byId.get(group.customerId);
+
     if (!customer) return [];
 
     return [
@@ -224,10 +210,12 @@ export async function getSalesByProduct(
   // different number and a different question.
   const groups = await prisma.saleItem.groupBy({
     by: ["productId"],
-    where: {
-      sale: saleWindow(organizationId, query),
-      ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
-    },
+    where: saleItemScope({
+      organizationId,
+      window: reportWindow(query),
+      brandId: query.brandId,
+      brandOnLine: true,
+    }),
     _count: { _all: true },
     _sum: { quantity: true, totalPrice: true, unitPrice: true },
     orderBy: { _sum: { totalPrice: "desc" } },
@@ -235,18 +223,19 @@ export async function getSalesByProduct(
 
   const products = await prisma.product.findMany({
     where: {
-      organizationId,
+      ...productScope({ organizationId, brandId: query.brandId }),
       id: { in: groups.map((group) => group.productId) },
-      ...(query.brandId ? { brandId: query.brandId } : {}),
     },
     select: { id: true, name: true, productCode: true, unit: true },
   });
+
   const byId = new Map(products.map((product) => [product.id, product]));
 
   // `SaleItem.productId` is a required relation, so a group always resolves. The
   // filter is here so a dangling row drops one line rather than throwing.
   return groups.flatMap((group) => {
     const product = byId.get(group.productId);
+
     if (!product) return [];
 
     const lineCount = group._count._all;
@@ -273,10 +262,15 @@ export async function getSalesByBrand(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  const where: Prisma.SaleItemWhereInput = {
-    sale: saleWindow(organizationId, query),
-    ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
-  };
+  // The line's own product must carry the brand as well as the invoice
+  // containing it — a mixed-brand invoice contributes only its matching lines
+  // to this grouping, while still being admitted by the invoice-grain filter.
+  const where = saleItemScope({
+    organizationId,
+    window: reportWindow(query),
+    brandId: query.brandId,
+    brandOnLine: true,
+  });
 
   const groups = await prisma.saleItem.groupBy({
     by: ["productId"],
@@ -289,7 +283,7 @@ export async function getSalesByBrand(
 
   const products = await prisma.product.findMany({
     where: {
-      organizationId,
+      ...productScope({ organizationId }),
       id: { in: groups.map((g) => g.productId) },
     },
     select: {
@@ -301,6 +295,7 @@ export async function getSalesByBrand(
   });
 
   const productMap = new Map(products.map((p) => [p.id, p]));
+
   const brandMap = new Map<
     string,
     {
@@ -315,9 +310,11 @@ export async function getSalesByBrand(
 
   for (const group of groups) {
     const prod = productMap.get(group.productId);
+
     if (!prod || !prod.brand) continue;
 
     const bId = prod.brand.id;
+
     const existing = brandMap.get(bId) || {
       brandId: bId,
       brandName: prod.brand.name,

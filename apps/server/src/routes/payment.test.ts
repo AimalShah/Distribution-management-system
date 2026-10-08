@@ -1,10 +1,11 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { ORGANIZATION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     payment: {
       findMany: vi.fn(),
       count: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const USER = "user_1";
 
 const auth = () => ({
@@ -144,6 +146,8 @@ describe("GET /api/payments", () => {
 
 describe("POST /api/payments", () => {
   it("refuses without a user to attribute the money to", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .post("/api/payments")
       .set(ORGANIZATION_HEADER, ORG)
@@ -185,6 +189,25 @@ describe("POST /api/payments", () => {
           amount: 25,
           userId: USER,
         }),
+      })
+    );
+  });
+
+  it("allows the payment that settles a partially paid invoice", async () => {
+    // The guard threshold is `totalAmount - amount` (what the row may reach),
+    // not `remaining - amount`, which would double-subtract the paid portion
+    // and refuse to ever settle an invoice paid past half.
+    models.sale.findFirst.mockResolvedValue(saleFixture({ amountPaid: 60 }));
+
+    const res = await request(app)
+      .post("/api/payments")
+      .set(auth())
+      .send({ ...validBody, amount: 40 });
+
+    expect(res.status).toBe(201);
+    expect(models.sale.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ amountPaid: { lte: 60 } }),
       })
     );
   });

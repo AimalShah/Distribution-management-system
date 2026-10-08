@@ -31,6 +31,7 @@ import {
   asUser,
   errorBody,
   hasDatabase,
+  orgOnly,
   prisma,
   request,
   seedTenants,
@@ -62,9 +63,10 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
 
   const post = (body: Record<string, unknown>, userId: string | null = t.userId) => {
     const req = request(app).post("/api/purchases");
-    return (userId ? req.set(asUser(t.organizationId, userId)) : req.set(asOrg(t.organizationId))).send(
-      body
-    );
+
+    return (
+      userId ? req.set(asUser(t.organizationId, userId)) : req.set(orgOnly(t.organizationId))
+    ).send(body);
   };
 
   it("creates the purchase, its lines, the stock row and the ledger together", async () => {
@@ -83,6 +85,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
     const inventory = await prisma.inventory.findUniqueOrThrow({
       where: { productId: t.productId },
     });
+
     expect(inventory.quantityOnHand).toBe(5);
     expect(inventory.organizationId).toBe(t.organizationId);
 
@@ -98,33 +101,59 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
   });
 
   it("rolls back every write when a late step fails", async () => {
-    // The centre of gravity. `InventoryLog.userId` is a real foreign key to User,
-    // and the route only checks that the header is *present*, not that the user
-    // exists. So a well-formed but unknown x-user-id sails past the route check
-    // and every product check, and then the ledger insert fails on the constraint
-    // -- after the purchase and the stock increment have already been written.
+    // The centre of gravity. `createPurchase` writes the receipt first and the
+    // stock movement second, so a document can be on file and the increment that
+    // follows it refused. A quantity past what `Inventory.quantityOnHand` can hold
+    // is that refusal: the receipt row is in, the upsert overflows, and only the
+    // transaction decides whether the receipt stays.
     //
     // Legacy `addPurchase` ran those as independent statements, so it would leave
     // a purchase receipt for stock that never arrived. The assertion that matters
     // is the second half: the rollback is observable in the tables, not just in
-    // the status code. A response of 400 with rows still present would be the bug
-    // this checkpoint is about, and only a real database can tell the difference.
+    // the status code. A response with rows still present would be the bug this
+    // checkpoint is about, and only a real database can tell the difference.
     const code = unique("PO");
-    const before = await prisma.inventory.findUnique({
-      where: { productId: t.productId },
+    const product = await prisma.product.create({
+      data: {
+        productCode: unique("SKU"),
+        organizationId: t.organizationId,
+        name: "Oversized receipt",
+        categoryId: t.categoryId,
+        brandId: t.brandId,
+        unit: "pcs",
+        unitCost: 1,
+        unitPrice: 1,
+      },
     });
 
-    const res = await post(form({ purchaseCode: code }), "usr_does_not_exist");
+    await prisma.inventory.create({
+      data: {
+        productId: product.id,
+        organizationId: t.organizationId,
+        quantityOnHand: 10,
+        reorderLevel: 10,
+      },
+    });
 
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject(errorBody.foreignKey);
+    const res = await post(
+      form({
+        purchaseCode: code,
+        items: [{ productId: product.id, quantity: 2147483647, unitCost: 1 }],
+      })
+    );
+
+    // The overflow is a raw column-range failure, which the error handler has no
+    // Prisma code to translate. What this checkpoint cares about is not the
+    // status -- it is that the receipt did not survive it.
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ code: "INTERNAL_ERROR" });
 
     // Nothing committed.
     expect(await prisma.purchase.findFirst({ where: { purchaseCode: code } })).toBeNull();
     expect(await prisma.purchaseItem.count({ where: { purchase: { purchaseCode: code } } })).toBe(0);
 
-    const after = await prisma.inventory.findUnique({ where: { productId: t.productId } });
-    expect(after?.quantityOnHand).toBe(before?.quantityOnHand ?? 0);
+    const after = await prisma.inventory.findUnique({ where: { productId: product.id } });
+    expect(after?.quantityOnHand).toBe(10);
 
     const logs = await prisma.inventoryLog.findMany({ where: { reference: code } });
     expect(logs).toEqual([]);
@@ -165,11 +194,13 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
         unitPrice: 4,
       },
     });
+
     expect(await prisma.inventory.findUnique({ where: { productId: fresh.id } })).toBeNull();
 
     const res = await post(
       form({ items: [{ productId: fresh.id, quantity: 3, unitCost: 2 }] })
     );
+
     expect(res.status).toBe(201);
 
     const inventory = await prisma.inventory.findUniqueOrThrow({ where: { productId: fresh.id } });
@@ -202,6 +233,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
         ],
       })
     );
+
     expect(res.status).toBe(201);
     expect(res.body.purchaseItems).toHaveLength(2);
 
@@ -215,6 +247,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
       where: { productId: fresh.id },
       orderBy: { createdAt: "asc" },
     });
+
     expect(logs).toHaveLength(2);
     expect(logs.map((l) => [l.previousQty, l.quantity, l.newQty])).toEqual([
       [0, 4, 4],
@@ -229,6 +262,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
         taxAmount: 5,
       })
     );
+
     // (10 x 10 - 20) + 10% of (100 - 20) = 80 + 8 = 88, + 5 tax = 93.
     expect(withTax.status).toBe(201);
     expect(withTax.body.totalAmount).toBe(93);
@@ -255,10 +289,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
     // multi-tenant constraint, not a validation rule, and it only exists in the
     // database.
     const code = unique("PO");
+
     const first = await request(app)
       .post("/api/purchases")
       .set(asUser(t.organizationId, t.userId))
       .send(form({ purchaseCode: code }));
+
     expect(first.status).toBe(201);
 
     const second = await request(app)
@@ -289,6 +325,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
     const detail = await request(app)
       .get(`/api/purchases/${row.id}`)
       .set(asOrg(t.organizationId));
+
     expect(detail.body.purchaseItems).toHaveLength(1);
     expect(detail.body.purchaseItems[0].product).toBeTruthy();
   });
@@ -297,6 +334,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
     const read = await request(app)
       .get(`/api/purchases/${await otherPurchaseId()}`)
       .set(asOrg(t.organizationId));
+
     expect(read.status).toBe(404);
     expect(read.body).toMatchObject({ code: "PURCHASE_NOT_FOUND" });
 
@@ -304,6 +342,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
       .post("/api/purchases")
       .set(asUser(t.organizationId, t.userId))
       .send(form());
+
     expect(mine.status).toBe(201);
 
     const rehome = await request(app)
@@ -326,6 +365,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
       .post("/api/purchases")
       .set(asUser(t.organizationId, t.userId))
       .send(form());
+
     const id = created.body.id;
 
     const res = await request(app)
@@ -361,11 +401,13 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
       .post("/api/purchases")
       .set(asUser(t.organizationId, t.userId))
       .send(form({ items: [{ productId: fresh.id, quantity: 9, unitCost: 1 }] }));
+
     const id = created.body.id;
 
     const res = await request(app)
       .delete(`/api/purchases/${id}`)
       .set(asOrg(t.organizationId));
+
     expect(res.status).toBe(204);
 
     expect(await prisma.purchase.findUnique({ where: { id } })).toBeNull();
@@ -405,7 +447,9 @@ describe.skipIf(!hasDatabase)("Checkpoint 2b — Purchase API", () => {
         status: "Pending",
         items: [{ productId: t.otherProductId, quantity: 1, unitCost: 1 }],
       });
+
     expect(res.status).toBe(201);
+
     return res.body.id as string;
   }
 });

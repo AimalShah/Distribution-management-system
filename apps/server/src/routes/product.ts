@@ -4,7 +4,7 @@ import {
   ProductUpdateSchema,
   productListQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, notFound } from "../http";
+import { asyncHandler } from "../http";
 import {
   addProduct,
   getProductById,
@@ -19,10 +19,12 @@ productRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = productListQuerySchema.parse(req.query);
+
     const result = await getProducts({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -31,7 +33,7 @@ productRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const product = await getProductById(req.params.id, req.auth.organizationId);
-    if (!product) throw notFound("Product not found", "PRODUCT_NOT_FOUND");
+
     res.json(product);
   })
 );
@@ -49,11 +51,13 @@ productRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = ProductUpdateSchema.parse(req.body);
+
     const product = await updateProduct(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(product);
   })
 );

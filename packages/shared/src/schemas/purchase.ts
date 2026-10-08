@@ -46,7 +46,11 @@ export const purchaseListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type PurchaseItemInput = z.output<typeof PurchaseItemInputSchema>;
+
 export type PurchaseFormInput = z.output<typeof PurchaseFormSchema>;
+
 export type PurchaseUpdateInput = z.output<typeof PurchaseUpdateSchema>;
+
 export type PurchaseListQuery = z.output<typeof purchaseListQuerySchema>;
+
 export type PurchaseFormData = PurchaseFormInput;

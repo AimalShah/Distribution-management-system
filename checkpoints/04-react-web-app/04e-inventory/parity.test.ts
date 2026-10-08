@@ -39,6 +39,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -83,6 +84,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       "Status",
       "Actions",
     ];
+
     for (const header of expectedHeaders) {
       expect(pageSrc, `InventoryPage must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -124,6 +126,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       "Reason",
       "User",
     ];
+
     for (const header of expectedHeaders) {
       expect(pageSrc, `Movement logs must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -172,6 +175,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       quantity: 5,
       reason: "",
     });
+
     expect(noReasonResult.success).toBe(false);
 
     const validResult = InventoryAdjustSchema.safeParse({
@@ -180,6 +184,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       quantity: 10,
       reason: "Stock arrival shipment",
     });
+
     expect(validResult.success).toBe(true);
 
     if (hasDatabase && t) {
@@ -242,6 +247,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
     const noProductResult = InventoryCreateSchema.safeParse({
       quantityOnHand: 10,
     });
+
     expect(noProductResult.success).toBe(false);
 
     // Schema validation: negative quantityOnHand fails
@@ -249,6 +255,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       productId: "prod-1",
       quantityOnHand: -5,
     });
+
     expect(negativeQtyResult.success).toBe(false);
 
     // Schema validation: valid payload passes
@@ -259,6 +266,7 @@ describe("Checkpoint 4e — Inventory Page", () => {
       maxStockLevel: 200,
       quantityReserved: 0,
     });
+
     expect(validResult.success).toBe(true);
   });
 
@@ -326,18 +334,22 @@ describe("Checkpoint 4e — Inventory Page", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(

@@ -1,10 +1,11 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { ORGANIZATION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     purchase: {
       findMany: vi.fn(),
       count: vi.fn(),
@@ -17,6 +18,7 @@ const { models, transaction } = vi.hoisted(() => {
     supplier: { findFirst: vi.fn() },
     inventory: { upsert: vi.fn() },
     inventoryLog: { create: vi.fn() },
+    stockBatch: { upsert: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -37,7 +39,9 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
+
 const USER = "user_1";
 
 const auth = () => ({
@@ -182,6 +186,7 @@ describe("GET /api/purchases", () => {
     const arg = models.purchase.findMany.mock.calls[0][0] as {
       include: Record<string, unknown>;
     };
+
     expect(arg.include).toHaveProperty("_count");
     expect(arg.include).not.toHaveProperty("purchaseItems");
   });
@@ -334,10 +339,12 @@ describe("POST /api/purchases", () => {
       });
 
     expect(res.status).toBe(201);
+
     // 10*5 = 50, less 2 item discount, plus 10% of 48, then -5 +10 header amounts.
     const arg = models.purchase.create.mock.calls[0][0] as {
       data: { totalAmount: number; purchaseItems: { create: { totalCost: number }[] } };
     };
+
     expect(arg.data.totalAmount).toBeCloseTo(57.8, 5);
     expect(arg.data.purchaseItems.create[0].totalCost).toBe(50);
   });
@@ -431,6 +438,7 @@ describe("POST /api/purchases", () => {
     const arg = models.inventory.upsert.mock.calls[0][0] as {
       update: { quantityOnHand: unknown };
     };
+
     expect(arg.update.quantityOnHand).toEqual({ increment: 10 });
   });
 
@@ -453,6 +461,8 @@ describe("POST /api/purchases", () => {
   });
 
   it("requires a user id to attribute the inventory log", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .post("/api/purchases")
       .set({ [ORGANIZATION_HEADER]: ORG })
@@ -486,6 +496,7 @@ describe("POST /api/purchases", () => {
     const arg = models.purchase.create.mock.calls[0][0] as {
       data: { purchaseItems: { create: Record<string, unknown>[] } };
     };
+
     expect(arg.data.purchaseItems.create[0]).toMatchObject({
       batchNumber: undefined,
       expiryDate: undefined,

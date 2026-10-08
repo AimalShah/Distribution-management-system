@@ -61,6 +61,9 @@ export const productListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type ProductInput = z.output<typeof ProductSchema>;
+
 export type ProductUpdateInput = z.output<typeof ProductUpdateSchema>;
+
 export type ProductListQuery = z.output<typeof productListQuerySchema>;
+
 export type ProductFormData = ProductInput;

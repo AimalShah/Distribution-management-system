@@ -37,6 +37,7 @@ async function firstOrganizationId(userId: string): Promise<string | undefined> 
     orderBy: { createdAt: "asc" },
     select: { organizationId: true },
   });
+
   return membership?.organizationId;
 }
 

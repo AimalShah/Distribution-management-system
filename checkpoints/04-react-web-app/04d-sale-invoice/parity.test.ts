@@ -19,8 +19,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
-import { SaleInvoiceSchema, type SaleInvoiceInput } from "@dms/shared";
-import { calculateSaleTotal } from "../../../apps/server/src/services/sale";
+import { SaleInvoiceSchema, calculateSaleBreakdown, type SaleInvoiceInput } from "@dms/shared";
 import {
   app,
   asOrg,
@@ -39,6 +38,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -70,6 +70,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
         unitPrice: 25,
       },
     });
+
     if (qty > 0) {
       await prisma.inventory.create({
         data: {
@@ -80,6 +81,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
         },
       });
     }
+
     return product;
   };
 
@@ -101,6 +103,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
 
     // Must define all required table columns
     const expectedHeaders = ["Code", "Customer", "Date", "Items", "Total", "Status", "Actions"];
+
     for (const header of expectedHeaders) {
       expect(listSrc, `SaleInvoiceList must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -118,8 +121,8 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
-      expect(typeof res.body.pageCount).toBe("number");
-      expect(typeof res.body.total).toBe("number");
+      expect(Number.isFinite(res.body.pageCount)).toBe(true);
+      expect(Number.isFinite(res.body.total)).toBe(true);
     }
   });
 
@@ -148,6 +151,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
       status: "Pending",
       items: [],
     });
+
     expect(noItemsResult.success).toBe(false);
 
     // Schema validation: invalid item quantity (< 1) fails
@@ -164,6 +168,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
         },
       ],
     });
+
     expect(badQtyResult.success).toBe(false);
 
     // Schema validation: valid sale invoice passes
@@ -183,6 +188,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
         },
       ],
     });
+
     expect(validResult.success).toBe(true);
   });
 
@@ -221,7 +227,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
     const grandTotal = subtotal + taxAmount - discount; // 125
     expect(grandTotal).toBe(125);
 
-    // Verify calculateSaleTotal matches
+    // Verify the shared sale-money module matches
     const salePayload: SaleInvoiceInput = {
       saleCode: "SALE-TEST",
       customerId: "c1",
@@ -230,7 +236,8 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
       taxAmount,
       items: [item1, item2],
     };
-    expect(calculateSaleTotal(salePayload)).toBe(125);
+
+    expect(calculateSaleBreakdown(salePayload).total).toBe(125);
   });
 
   it("sale invoice form submits correctly", async () => {
@@ -263,18 +270,22 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -285,6 +296,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
     if (hasDatabase && t) {
       const product = await stockedProduct(20);
       const code = unique("SALE");
+
       const res = await request(app)
         .post("/api/sales")
         .set(asUser(t.organizationId, t.userId))
@@ -310,6 +322,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
 
       // Test PUT update
       const saleId = res.body.id;
+
       const updateRes = await request(app)
         .put(`/api/sales/${saleId}`)
         .set(asOrg(t.organizationId))
@@ -337,6 +350,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
     if (hasDatabase && t) {
       const product = await stockedProduct(10);
       const code = unique("SALE_PDF");
+
       const created = await request(app)
         .post("/api/sales")
         .set(asUser(t.organizationId, t.userId))
@@ -383,6 +397,7 @@ describe("Checkpoint 4d — Sale Invoice Pages", () => {
     if (hasDatabase && t) {
       const product = await stockedProduct(10);
       const code = unique("SALE_PRT");
+
       const created = await request(app)
         .post("/api/sales")
         .set(asUser(t.organizationId, t.userId))

@@ -70,12 +70,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2h — Category API", () => {
       .post("/api/categories")
       .set(asOrg(t.organizationId))
       .send(form({ name }));
+
     expect(mine.status).toBe(201);
 
     const theirs = await request(app)
       .post("/api/categories")
       .set(asOrg(t.otherOrganizationId))
       .send(form({ name }));
+
     expect(theirs.status).toBe(201);
     expect(theirs.body.id).not.toBe(mine.body.id);
 
@@ -122,12 +124,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2h — Category API", () => {
       .put(`/api/categories/${created.body.id}`)
       .set(asOrg(t.organizationId))
       .send({ name: created.body.name });
+
     expect(same.status).toBe(200);
 
     const renamed = await request(app)
       .put(`/api/categories/${created.body.id}`)
       .set(asOrg(t.organizationId))
       .send({ name: "Renamed " + unique("") });
+
     expect(renamed.status).toBe(200);
     expect(renamed.body.name).toBe("Renamed " + renamed.body.name.split(" ")[1]);
   });
@@ -151,6 +155,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2h — Category API", () => {
       .post("/api/categories")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -178,6 +183,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2h — Category API", () => {
       const req = request(app)[verb](`/api/categories/${t.otherCategoryId}`).set(
         asOrg(t.organizationId)
       );
+
       const res = await (verb === "put" ? req.send({ name: "Hijacked" }) : req);
       expect(res.status).toBe(404);
     }

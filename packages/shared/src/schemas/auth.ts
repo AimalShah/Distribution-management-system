@@ -40,7 +40,11 @@ export const UpdatePasswordSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof LoginSchema>;
+
 export type SignupInput = z.infer<typeof SignupSchema>;
+
 export type RegisterCompanyInput = z.infer<typeof RegisterCompanySchema>;
+
 export type ProfileInput = z.infer<typeof ProfileSchema>;
+
 export type UpdatePasswordInput = z.infer<typeof UpdatePasswordSchema>;

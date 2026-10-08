@@ -36,16 +36,19 @@ describe("Checkpoint 5 — Electron Shell", () => {
       width: window.innerWidth,
       height: window.innerHeight,
     }));
+
     expect(bounds.width).toBeGreaterThanOrEqual(1400);
     expect(bounds.height).toBeGreaterThanOrEqual(900);
   });
 
   it("cold starts within 3 seconds", async () => {
     const start = Date.now();
+
     const app = await electron.launch({
       args: [path.join(__dirname, "../")],
       env: { ...process.env, NODE_ENV: "test" },
     });
+
     await app.firstWindow();
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(3000);

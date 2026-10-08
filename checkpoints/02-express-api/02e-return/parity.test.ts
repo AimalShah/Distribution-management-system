@@ -39,6 +39,7 @@ import {
   asUser,
   errorBody,
   hasDatabase,
+  orgOnly,
   prisma,
   request,
   seedTenants,
@@ -68,6 +69,19 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
         role: "member",
       },
     });
+
+    // The user row alone is no longer a caller: authorization reads `Member`.
+    // `sales` is the role that may take a return off circulation (`returns:delete`),
+    // which is what the attribution test below asks this operator to do.
+    await prisma.member.create({
+      data: {
+        id: `mem_${unique("mate")}`,
+        organizationId: t.organizationId,
+        userId: colleagueId,
+        role: "sales",
+        createdAt: new Date(),
+      },
+    });
   });
 
   afterAll(async () => {
@@ -75,6 +89,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       await prisma.inventoryLog.deleteMany({ where: { userId: colleagueId } });
       await prisma.user.deleteMany({ where: { id: colleagueId } });
     }
+
     if (t) await teardownTenants(t);
   });
 
@@ -101,6 +116,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
   const stockedProduct = async (quantityOnHand: number, org = t.organizationId) => {
     const p = await makeProduct(org);
     const row = await stock(p.id, quantityOnHand, org);
+
     return { product: p, row };
   };
 
@@ -125,6 +141,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
         },
       },
     });
+
     return sale;
   };
 
@@ -149,6 +166,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
         },
       },
     });
+
     return purchase;
   };
 
@@ -162,7 +180,8 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
 
   const post = (body: Record<string, unknown>, userId: string | null = t.userId) => {
     const req = request(app).post("/api/returns").send(body);
-    return userId ? req.set(asUser(t.organizationId, userId)) : req.set(asOrg(t.organizationId));
+
+    return userId ? req.set(asUser(t.organizationId, userId)) : req.set(orgOnly(t.organizationId));
   };
 
   const onHand = async (productId: string) =>
@@ -319,6 +338,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       saleId: sale.id,
       items: [line(product.id, 3)],
     });
+
     expect(first.status).toBe(201);
     expect(await onHand(product.id)).toBe(23);
 
@@ -476,6 +496,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       saleId: sale.id,
       items: [line(product.id, 2)],
     });
+
     expect(created.status).toBe(201);
     expect(await onHand(product.id)).toBe(7);
 
@@ -504,6 +525,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       returnType: "DAMAGED",
       items: [line(product.id, 3)],
     });
+
     expect(await onHand(product.id)).toBe(7);
 
     await request(app)
@@ -529,6 +551,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       saleId: sale.id,
       items: [line(product.id, 5)],
     });
+
     expect(await onHand(product.id)).toBe(10);
 
     // Someone sells the returned goods straight back out.
@@ -563,6 +586,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       saleId: sale.id,
       items: [line(product.id, 2)],
     });
+
     expect(created.body.userId).toBe(t.userId);
 
     await request(app)
@@ -575,6 +599,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
 
   it("stamps the return and keeps its lines, taking it out of circulation", async () => {
     const { product } = await stockedProduct(10);
+
     const created = await post({
       returnCode: unique("RTN"),
       returnType: "DAMAGED",
@@ -605,6 +630,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     const restored = await request(app)
       .post(`/api/returns/${created.body.id}/restore`)
       .set(asUser(t.organizationId, t.userId));
+
     expect(restored.status).toBe(200);
     expect(restored.body.deletedAt).toBeNull();
   });
@@ -618,6 +644,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       returnType: "DAMAGED",
       items: [line(product.id, 1)],
     });
+
     expect(first.status).toBe(201);
 
     // The other tenant needs a *stocked* product of its own. Without one the
@@ -642,6 +669,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
   it("reads a return by id or by code", async () => {
     const { product } = await stockedProduct(10);
     const code = unique("RTN");
+
     const created = await post({
       returnCode: code,
       returnType: "DAMAGED",
@@ -661,6 +689,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     // any tenant's return to anyone who could guess an id.
     const { product } = await stockedProduct(10, t.otherOrganizationId);
     const code = unique("RTN");
+
     const theirs = await prisma.return.create({
       data: {
         returnCode: code,
@@ -696,6 +725,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     // still recording the stock coming back in.
     const { product } = await stockedProduct(10);
     const sale = await makeSale([{ productId: product.id, quantity: 2 }]);
+
     const created = await post({
       returnCode: unique("RTN"),
       returnType: "SALE",
@@ -733,6 +763,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
 
   it("404s an update or delete against another tenant's return", async () => {
     const { product } = await stockedProduct(10, t.otherOrganizationId);
+
     const theirs = await prisma.return.create({
       data: {
         returnCode: unique("RTN"),
@@ -755,11 +786,13 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       .put(`/api/returns/${theirs.id}`)
       .set(asOrg(t.organizationId))
       .send({ reason: "mine now" });
+
     expect(update.status).toBe(404);
 
     const remove = await request(app)
       .delete(`/api/returns/${theirs.id}`)
       .set(asUser(t.organizationId, t.userId));
+
     expect(remove.status).toBe(404);
 
     // Their stock and their return both survive.
@@ -814,6 +847,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     const byType = await request(app)
       .get("/api/returns?returnType=EXPIRED")
       .set(asOrg(t.organizationId));
+
     const expired = byType.body.data as { returnCode: string; returnType: string }[];
     expect(expired.length).toBeGreaterThan(0);
     expect(expired.every((r) => r.returnType === "EXPIRED")).toBe(true);
@@ -823,6 +857,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
     const bySearch = await request(app)
       .get(`/api/returns?search=${mine}`)
       .set(asOrg(t.organizationId));
+
     expect(bySearch.body.data.map((r: { returnCode: string }) => r.returnCode)).toEqual([mine]);
   });
 
@@ -853,12 +888,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2e — Return API", () => {
       { returnCode: unique("RTN"), returnType: "DAMAGED", items: [line(product.id, 1)] },
       null
     );
+
     expect(postRes.status).toBe(400);
     expect(postRes.body).toMatchObject({ code: "USER_REQUIRED" });
 
     const deleteRes = await request(app)
       .delete(`/api/returns/${created.id}`)
-      .set(asOrg(t.organizationId));
+      .set(orgOnly(t.organizationId));
+
     expect(deleteRes.status).toBe(400);
     expect(deleteRes.body).toMatchObject({ code: "USER_REQUIRED" });
 

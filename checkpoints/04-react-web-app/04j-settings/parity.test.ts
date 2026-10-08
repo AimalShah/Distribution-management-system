@@ -25,6 +25,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -61,7 +62,9 @@ describe("Checkpoint 4j — Settings Pages", () => {
       newPassword: "NewPassword123!",
       confirmNewPassword: "DifferentPassword123!",
     });
+
     expect(mismatch.success).toBe(false);
+
     if (!mismatch.success) {
       expect(
         mismatch.error.issues.some((i) => i.message.includes("Passwords do not match"))
@@ -74,6 +77,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
       newPassword: "short",
       confirmNewPassword: "short",
     });
+
     expect(tooShort.success).toBe(false);
 
     // 3. Matching valid passwords should succeed
@@ -82,6 +86,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
       newPassword: "ValidNewPassword123!",
       confirmNewPassword: "ValidNewPassword123!",
     });
+
     expect(valid.success).toBe(true);
   });
 
@@ -105,6 +110,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
 
     // Must define all required user table columns
     const expectedHeaders = ["User", "Email", "Role", "Status", "Actions"];
+
     for (const header of expectedHeaders) {
       expect(usersSrc, `UsersPage must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -146,6 +152,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
       email: "not-an-email",
       role: "member",
     });
+
     expect(badEmailResult.success).toBe(false);
 
     const passwordMismatchResult = userDialogSchema.safeParse({
@@ -155,6 +162,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
       password: "Password123!",
       confirmPassword: "WrongPassword!",
     });
+
     expect(passwordMismatchResult.success).toBe(false);
 
     const validResult = userDialogSchema.safeParse({
@@ -165,6 +173,7 @@ describe("Checkpoint 4j — Settings Pages", () => {
       confirmPassword: "Password123!",
       isActive: true,
     });
+
     expect(validResult.success).toBe(true);
   });
 
@@ -196,18 +205,22 @@ describe("Checkpoint 4j — Settings Pages", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(

@@ -72,7 +72,11 @@ export const customerLedgerQuerySchema = z.object({
 });
 
 export type CustomerInput = z.output<typeof CustomerSchema>;
+
 export type CustomerUpdateInput = z.output<typeof CustomerUpdateSchema>;
+
 export type CustomerListQuery = z.output<typeof customerListQuerySchema>;
+
 export type CustomerLedgerQuery = z.output<typeof customerLedgerQuerySchema>;
+
 export type CustomerFormData = CustomerInput;

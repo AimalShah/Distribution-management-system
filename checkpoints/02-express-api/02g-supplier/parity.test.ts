@@ -84,10 +84,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
 
   it("treats supplierCode as globally unique, across tenants", async () => {
     const code = unique("SUP");
+
     const first = await request(app)
       .post("/api/suppliers")
       .set(asOrg(t.organizationId))
       .send(form({ supplierCode: code }));
+
     expect(first.status).toBe(201);
 
     const second = await request(app)
@@ -104,12 +106,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
       .post("/api/suppliers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const off = await request(app)
       .put(`/api/suppliers/${id}`)
       .set(asOrg(t.organizationId))
       .send({ isActive: false });
+
     expect(off.body.isActive).toBe(false);
 
     const renamed = await request(app)
@@ -127,6 +131,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
       .post("/api/suppliers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     await prisma.purchase.create({
@@ -154,6 +159,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
       .post("/api/suppliers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -176,6 +182,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
     const detail = await request(app)
       .get(`/api/suppliers/${t.supplierId}`)
       .set(asOrg(t.organizationId));
+
     expect(detail.status).toBe(200);
     expect(detail.body.purchase).toBeUndefined();
   });
@@ -190,11 +197,13 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
     const byCompany = await request(app)
       .get(`/api/suppliers?search=${needle}`)
       .set(asOrg(t.organizationId));
+
     expect(byCompany.body.total).toBe(1);
 
     const byContact = await request(app)
       .get("/api/suppliers?search=Zoë")
       .set(asOrg(t.organizationId));
+
     expect(byContact.body.data[0].contactPerson).toBe("Zoë Contact");
   });
 
@@ -203,6 +212,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2g — Supplier API", () => {
       const req = request(app)[verb](`/api/suppliers/${t.otherSupplierId}`).set(
         asOrg(t.organizationId)
       );
+
       const res = await (verb === "put" ? req.send({ companyName: "Hijacked" }) : req);
       expect(res.status).toBe(404);
     }

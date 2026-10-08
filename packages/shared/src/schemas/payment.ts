@@ -48,5 +48,7 @@ export const paymentListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type PaymentMethodValue = (typeof PaymentMethods)[number];
+
 export type PaymentCreateInput = z.output<typeof PaymentCreateSchema>;
+
 export type PaymentListQuery = z.output<typeof paymentListQuerySchema>;

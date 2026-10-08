@@ -1,7 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { CategoryInput, CategoryUpdateInput } from "@dms/shared";
-import { conflict } from "../http";
+import { conflict, notFound } from "../http";
 
 // The legacy list embedded every brand in a category. Nothing read it: the only
 // consumer of `fetchCategories` is the product and inventory category dropdown,
@@ -27,8 +27,11 @@ export async function getCategories({
 }: CategoryListArgs) {
   const where: Prisma.CategoryWhereInput = {
     organizationId,
-    ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
   };
+
+  if (search) {
+    where.name = { contains: search, mode: "insensitive" };
+  }
 
   const [data, total] = await Promise.all([
     prisma.category.findMany({
@@ -48,7 +51,15 @@ export async function getCategories({
 // filter, so any authenticated member could read another tenant's category by id.
 // Scoped here. Named without the legacy `getCatgoryById` typo, as the plan asks.
 export async function getCategoryById(id: string, organizationId: string) {
-  return prisma.category.findFirst({ where: { id, organizationId } });
+  const category = await prisma.category.findFirst({
+    where: { id, organizationId },
+  });
+
+  if (!category) {
+    throw notFound("Category not found", "CATEGORY_NOT_FOUND");
+  }
+
+  return category;
 }
 
 export async function addCategory(data: CategoryInput, organizationId: string) {

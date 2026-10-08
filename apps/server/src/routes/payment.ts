@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { PaymentCreateSchema, paymentListQuerySchema } from "@dms/shared";
-import { asyncHandler, badRequest, notFound } from "../http";
+import { asyncHandler } from "../http";
 import { createPayment, deletePayment, getPaymentById, getPayments } from "../services/payment";
+import { requireUserId } from "../middleware/auth-context";
 
 export const paymentRouter: Router = Router();
 
@@ -9,10 +10,12 @@ paymentRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = paymentListQuerySchema.parse(req.query);
+
     const result = await getPayments({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -21,7 +24,7 @@ paymentRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const payment = await getPaymentById(req.params.id, req.auth.organizationId);
-    if (!payment) throw notFound("Payment not found", "PAYMENT_NOT_FOUND");
+
     res.json(payment);
   })
 );
@@ -34,15 +37,9 @@ paymentRouter.post(
     // A payment moves money, and a payment against an invoice advances
     // `Sale.amountPaid`. Neither of those ledger effects has a `userId` of its
     // own to fall back on, so the caller has to say who they are.
-    if (!req.auth.userId) {
-      throw badRequest(
-        "Missing user context. Send the x-user-id header so the payment can be " +
-          "attributed to a member.",
-        "USER_REQUIRED"
-      );
-    }
+    const userId = requireUserId(req.auth.userId);
 
-    const created = await createPayment(data, req.auth.organizationId, req.auth.userId);
+    const created = await createPayment(data, req.auth.organizationId, userId);
     res.status(201).json(created);
   })
 );

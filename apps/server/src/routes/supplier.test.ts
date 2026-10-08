@@ -18,13 +18,14 @@ const { supplierModel, purchaseModel } = vi.hoisted(() => ({
 }));
 
 vi.mock("@dms/db", () => ({
-  default: { supplier: supplierModel, purchase: purchaseModel },
-  prisma: { supplier: supplierModel, purchase: purchaseModel },
+  default: { member: { findFirst: async () => ({ role: "owner" }) }, supplier: supplierModel, purchase: purchaseModel },
+  prisma: { member: { findFirst: async () => ({ role: "owner" }) }, supplier: supplierModel, purchase: purchaseModel },
 }));
 
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
 
 const supplierFixture = (overrides: Record<string, unknown> = {}) => ({

@@ -1,7 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { SupplierInput, SupplierUpdateInput } from "@dms/shared";
-import { conflict } from "../http";
+import { conflict, notFound } from "../http";
 
 // The legacy list embedded every purchase a supplier had ever been billed on.
 // That collection is unbounded, so the count goes on the list row and the
@@ -34,19 +34,21 @@ export async function getSuppliers({
 }: SupplierListArgs) {
   const where: Prisma.SupplierWhereInput = {
     organizationId,
-    // Absent means "both", so a list can show archived suppliers without a
-    // second request.
-    ...(isActive === undefined ? {} : { isActive }),
-    ...(search
-      ? {
-          OR: [
-            { companyName: { contains: search, mode: "insensitive" } },
-            { supplierCode: { contains: search, mode: "insensitive" } },
-            { contactPerson: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : {}),
   };
+
+  // Absent means "both", so a list can show archived suppliers without a
+  // second request.
+  if (isActive !== undefined) {
+    where.isActive = isActive;
+  }
+
+  if (search) {
+    where.OR = [
+      { companyName: { contains: search, mode: "insensitive" } },
+      { supplierCode: { contains: search, mode: "insensitive" } },
+      { contactPerson: { contains: search, mode: "insensitive" } },
+    ];
+  }
 
   const [data, total] = await Promise.all([
     prisma.supplier.findMany({
@@ -68,10 +70,16 @@ export async function getSuppliers({
 // routes were not, which is what the `updateMany`/`deleteMany` calls below are
 // fixing.
 export async function getSupplierById(id: string, organizationId: string) {
-  return prisma.supplier.findFirst({
+  const supplier = await prisma.supplier.findFirst({
     where: { id, organizationId },
     include: detailInclude,
   });
+
+  if (!supplier) {
+    throw notFound("Supplier not found", "SUPPLIER_NOT_FOUND");
+  }
+
+  return supplier;
 }
 
 export async function addSupplier(data: SupplierInput, organizationId: string) {

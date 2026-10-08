@@ -41,6 +41,7 @@ describe("Checkpoint 0 — Monorepo scaffold", () => {
       "packages/config-eslint",
       "packages/config-typescript",
     ];
+
     for (const dir of dirs) {
       expect(fs.existsSync(path.join(root, dir)), `${dir} should exist`).toBe(true);
     }
@@ -94,6 +95,7 @@ describe("Checkpoint 0 — Harness", () => {
       path.join(root, "apps/server/src/routes/__debug.ts"),
       "utf-8"
     );
+
     expect(source).toMatch(/export \{ harnessRouter as debugRouter \}/);
   });
 
@@ -101,6 +103,7 @@ describe("Checkpoint 0 — Harness", () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(root, "package.json"), "utf-8")
     );
+
     expect(pkg.scripts.debug).toContain("packages/devtools/src/cli.ts");
   });
 });

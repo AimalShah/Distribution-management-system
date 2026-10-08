@@ -59,11 +59,13 @@ describe("POST /api/auth/login", () => {
     const accepted = await request(app)
       .post("/api/auth/login")
       .send({ username: "operator", password: "s3cret-pass" });
+
     expect(accepted.status).toBe(200);
 
     const rejected = await request(app)
       .post("/api/auth/login")
       .send({ username: "admin", password: "admin123" });
+
     expect(rejected.status).toBe(401);
   });
 });

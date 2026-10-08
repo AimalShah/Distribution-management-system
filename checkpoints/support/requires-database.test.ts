@@ -58,6 +58,7 @@ describe("Checkpoint 2 — database requirement", () => {
 
       // Locally this is reported and tolerated. In CI it is the whole point.
       if (enforcing) throw new Error(message);
+
       return;
     }
 
@@ -75,7 +76,9 @@ describe("Checkpoint 2 — database requirement", () => {
         "The `postgres` service is probably not up yet, or is not reachable at " +
         "the host in DATABASE_URL. The service block uses a `pg_isready` health " +
         "check for exactly this; do not replace it with a sleep.";
+
       if (enforcing) throw new Error(`${message}\n\n${String(error)}`);
+
       return;
     }
 
@@ -96,7 +99,9 @@ describe("Checkpoint 2 — database requirement", () => {
         "The `Product` relation is not queryable, so the baseline migration has " +
         "not been applied to this database. Run `pnpm run db:migrate` locally, or " +
         "restore the `prisma migrate deploy` step in the checkpoint-parity job.";
+
       if (enforcing) throw new Error(`${message}\n\n${String(error)}`);
+
       return;
     }
 

@@ -10,6 +10,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const allowed = "http://localhost:5173";
+
 const hostile = "https://attacker.example";
 
 describe("CORS", () => {

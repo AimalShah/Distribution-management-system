@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DMS — System Features, App Flow & Comprehensive Page Review</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-hover: #1f2937;
+      --surface-border: #374151;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-sub: #6b7280;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-light: rgba(99, 102, 241, 0.15);
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --warning-light: rgba(245, 158, 11, 0.15);
+      --danger: #ef4444;
+      --danger-light: rgba(239, 68, 68, 0.15);
+      --info: #06b6d4;
+      --info-light: rgba(6, 182, 212, 0.15);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font);
+      line-height: 1.6;
+      overflow-x: hidden;
+      padding-bottom: 80px;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header & Hero */
+    header {
+      background: linear-gradient(180deg, #131c31 0%, #090d16 100%);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 48px 0 32px 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      height: 350px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0) 70%);
+      filter: blur(50px);
+      pointer-events: none;
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-light);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #a5b4fc;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 860px;
+      margin-bottom: 24px;
+    }
+
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+
+    .pill {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill strong {
+      color: var(--text-main);
+    }
+
+    /* KPI Highlights */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      border-color: #4b5563;
+    }
+
+    .kpi-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 30px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* Navigation Bar */
+    .nav-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(9, 13, 22, 0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 12px 0;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 2px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      background: var(--surface);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary-hover);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .search-input {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      min-width: 240px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--primary);
+    }
+
+    /* Sections */
+    section {
+      padding: 40px 0;
+      display: none;
+    }
+
+    section.active {
+      display: block;
+    }
+
+    .section-header {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Cards & Grids */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-header-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.3;
+    }
+
+    .card-route {
+      font-family: monospace;
+      font-size: 12px;
+      background: #0d131f;
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: #93c5fd;
+      border: 1px solid #1e293b;
+      margin-top: 4px;
+      display: inline-block;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+
+    .status-badge.working {
+      background: var(--success-light);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-badge.partial {
+      background: var(--warning-light);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-badge.missing {
+      background: var(--danger-light);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .card-desc {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin-bottom: 16px;
+      border-top: 1px solid #1f2937;
+      padding-top: 12px;
+    }
+
+    .feature-list li {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .feature-list li::before {
+      content: "✓";
+      color: var(--success);
+      font-weight: bold;
+    }
+
+    .feature-list li.missing-item {
+      color: #9ca3af;
+    }
+
+    .feature-list li.missing-item::before {
+      content: "✗";
+      color: var(--danger);
+    }
+
+    .api-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid #1f2937;
+    }
+
+    .api-tag {
+      font-size: 11px;
+      font-family: monospace;
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Architecture Flow Diagrams */
+    .flow-container {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 32px;
+    }
+
+    .flow-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .flow-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .flow-diagram {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .flow-step-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .flow-node {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      flex: 1;
+      min-width: 220px;
+      position: relative;
+    }
+
+    .flow-node.highlight {
+      border-color: var(--primary);
+      background: #1e1e38;
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+    }
+
+    .flow-node-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .flow-node-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .flow-arrow {
+      color: #64748b;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    /* Comparison Table */
+    .table-responsive {
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13.5px;
+    }
+
+    th {
+      background: #172033;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--surface-border);
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #1f2937;
+      color: #cbd5e1;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Roadmap Checklist */
+    .roadmap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .roadmap-item {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .roadmap-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .roadmap-icon.red {
+      background: var(--danger-light);
+      color: #f87171;
+    }
+
+    .roadmap-icon.yellow {
+      background: var(--warning-light);
+      color: #fbbf24;
+    }
+
+    .roadmap-icon.blue {
+      background: var(--info-light);
+      color: #38bdf8;
+    }
+
+    .roadmap-content h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .roadmap-content p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .roadmap-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* Interactive Details Box */
+    details {
+      background: #0d131f;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-sm);
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 12.5px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #93c5fd;
+      outline: none;
+    }
+
+    details[open] summary {
+      margin-bottom: 8px;
+    }
+
+    .detail-body {
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="container">
+      <div class="header-badge">
+        <span>⚡</span> Distribution Management System Architecture & Feature Audit
+      </div>
+      <h1>Distribution Management System (DMS)</h1>
+      <p class="hero-desc">
+        Complete interactive system review, module connectivity diagram, full page-by-page inspection, and missing capability gap analysis. Evaluated against the live PostgreSQL database, Express API server, and Invenza React SPA.
+      </p>
+
+      <div class="meta-pills">
+        <div class="pill">Stack: <strong>React 19 + Vite + Express + Prisma 6 + PostgreSQL</strong></div>
+        <div class="pill">Monorepo: <strong>Turborepo + pnpm workspaces</strong></div>
+        <div class="pill">Current Branch: <strong>main (NextJS app cleanly excised)</strong></div>
+        <div class="pill">Active Parity Gate: <strong>10/10 Gated Suites Passing</strong></div>
+        <div class="pill">Date: <strong>October 2026</strong></div>
+      </div>
+
+      <!-- Live Metric Counters -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Pages Implemented</div>
+          <div class="kpi-value">23 / 23</div>
+          <div class="kpi-sub">Wired to live server endpoints</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Express API Routers</div>
+          <div class="kpi-value">16 Routers</div>
+          <div class="kpi-sub">Full multi-tenant organization scoping</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Batch & FEFO Engine</div>
+          <div class="kpi-value">100% Active</div>
+          <div class="kpi-sub">StockBatch tracking & expiry KPIs</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">GST & Invoice Logic</div>
+          <div class="kpi-value">Intra / Inter-State</div>
+          <div class="kpi-sub">CGST, SGST, IGST calculation & PDF</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sticky Tab Navigation -->
+  <nav class="nav-bar">
+    <div class="container nav-inner">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('overview')">1. Architecture & Working Features</button>
+        <button class="tab-btn" onclick="switchTab('flow')">2. App Flow & Interconnection</button>
+        <button class="tab-btn" onclick="switchTab('pages')">3. Page-by-Page Audit (23 Pages)</button>
+        <button class="tab-btn" onclick="switchTab('gaps')">4. Missing Features & Roadmap</button>
+      </div>
+      <div>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search pages, features, or APIs..." onkeyup="filterContent()" />
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- ========================================== -->
+    <!-- SECTION 1: ARCHITECTURE & WORKING FEATURES -->
+    <!-- ========================================== -->
+    <section id="overview" class="active">
+      <div class="section-header">
+        <h2 class="section-title"><span>🏗️</span> Core System Architecture & Working Features</h2>
+        <p class="section-desc">
+          Overview of production capabilities currently functioning on the clean Turborepo monorepo.
+        </p>
+      </div>
+
+      <div class="card-grid">
+        <!-- Feature 1 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">Authentication & Multi-Tenancy</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              Stateless HMAC bearer tokens, session middleware, and database-level multi-tenancy. Organization isolation is enforced across every single model.
+            </div>
+            <ul class="feature-list">
+              <li>Better-Auth integration with session token verification</li>
+              <li>Fallback auth token for local dev & testing (admin / admin123)</li>
+              <li>Every query scoped strictly by <code>organizationId</code></li>
+              <li>User profile password update & active organization switching</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">POST /api/auth/login</span>
+            <span class="api-tag">GET /api/auth/me</span>
+            <span class="api-tag">GET /api/organizations</span>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">Batch/Lot & FEFO Expiry (CP 07)</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              First Expired, First Out inventory management. Batches are created automatically upon receiving purchases and deducted chronologically upon sales.
+            </div>
+            <ul class="feature-list">
+              <li><code>StockBatch</code> tracking with remaining and received quantities</li>
+              <li>Automated FEFO sale deduction using earliest expiry date</li>
+              <li>Expiring Soon KPI card (configurable threshold, default 30d)</li>
+              <li>Dedicated Batches tab on Inventory page with status badges</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">GET /api/inventory/batches</span>
+            <span class="api-tag">GET /api/inventory/batches/expiring</span>
+            <span class="api-tag">GET /api/reports/inventory/expiry</span>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">GST Engine & Tax Invoicing (CP 08)</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              Tax calculation engine compliant with GST rules. Distinguishes intra-state (CGST + SGST) from inter-state (IGST) sales.
+            </div>
+            <ul class="feature-list">
+              <li>Tax rate support on product catalog (0%, 5%, 12%, 18%, 28%)</li>
+              <li>Automated CGST/SGST vs IGST split based on state matching</li>
+              <li>Printable HTML Tax Invoice with itemized tax breakdowns</li>
+              <li>Client-side Vector PDF invoice generation using jsPDF</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">GET /api/sales/:id/invoice</span>
+            <span class="api-tag">POST /api/sales</span>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">Brand-Scoping on Sales & Purchases (CP 09)</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              Multi-brand analytics enabling distributors to assess velocity and profitability across manufacturer brands.
+            </div>
+            <ul class="feature-list">
+              <li>Filter sales and purchase reports by Brand ID</li>
+              <li>Brand-grouped revenue and cost summaries</li>
+              <li>BrandReportTab UI with charts and performance tables</li>
+              <li>Brand filter bar wired into main Reports view</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">GET /api/reports/sales/by-brand</span>
+            <span class="api-tag">GET /api/reports/purchase/by-brand</span>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">Real Bulk CSV Import (CP 10)</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              High-throughput PapaParse CSV ingestion allowing operators to batch-upload hundreds of product stock records in one click.
+            </div>
+            <ul class="feature-list">
+              <li>Browser-side PapaParse CSV parser with validation</li>
+              <li>Downloadable CSV template formatted to standard schema</li>
+              <li>Pre-flight validation modal showing preview & error list</li>
+              <li>Atomic database transaction upserting inventory records</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">POST /api/inventory/bulk-import</span>
+          </div>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="card">
+          <div>
+            <div class="card-header-flex">
+              <div class="card-title">Customer Ledger & WhatsApp (CP 16)</div>
+              <span class="status-badge working">Working</span>
+            </div>
+            <div class="card-desc">
+              Customer statement accounting. Tracks debits (sales invoices) and credits (payments, returns) with running balance and mobile sharing.
+            </div>
+            <ul class="feature-list">
+              <li>Chronological running ledger with transaction breakdown</li>
+              <li>Formatted WhatsApp statement share button via wa.me link</li>
+              <li>Credit limit tracking with balance warning flags</li>
+              <li>Statement date window filtering (MTD, YTD, Custom)</li>
+            </ul>
+          </div>
+          <div class="api-tags">
+            <span class="api-tag">GET /api/customers/:id/ledger</span>
+            <span class="api-tag">GET /api/customers/:id/ledger/share</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SECTION 2: APP FLOW & INTERCONNECTION      -->
+    <!-- ========================================== -->
+    <section id="flow">
+      <div class="section-header">
+        <h2 class="section-title"><span>🔄</span> System Flow & Entity Interconnection</h2>
+        <p class="section-desc">
+          How business transactions propagate across Suppliers, Inventory, Sales, FEFO deductions, Customer Ledgers, and Analytics.
+        </p>
+      </div>
+
+      <!-- Flow 1: Inbound Purchasing to Inventory -->
+      <div class="flow-container">
+        <div class="flow-title">1. Inbound Supply Chain & Batch Registration Flow</div>
+        <div class="flow-subtitle">How new stock enters the system and establishes lot traceability</div>
+        <div class="flow-diagram">
+          <div class="flow-step-row">
+            <div class="flow-node">
+              <div class="flow-node-title">🏢 Supplier Creation</div>
+              <div class="flow-node-desc">Create Supplier record with contact info, GSTIN, and credit terms.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node highlight">
+              <div class="flow-node-title">📦 Purchase Order Created</div>
+              <div class="flow-node-desc">Operator enters items, unit cost, batch number, and expiration date.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node highlight">
+              <div class="flow-node-title">🏷️ StockBatch Ingestion</div>
+              <div class="flow-node-desc">Creates <code>StockBatch</code> with received qty, remaining qty, and expiry.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node">
+              <div class="flow-node-title">📊 Aggregate Inventory</div>
+              <div class="flow-node-desc">Increments <code>quantityOnHand</code> and writes an <code>InventoryLog</code> audit row.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flow 2: Outbound Sales & FEFO Deduction -->
+      <div class="flow-container">
+        <div class="flow-title">2. Outbound Sales, FEFO Deduction & Ledger Updating</div>
+        <div class="flow-subtitle">The complete transaction loop from sale creation to financial balancing</div>
+        <div class="flow-diagram">
+          <div class="flow-step-row">
+            <div class="flow-node">
+              <div class="flow-node-title">👤 Customer Selection</div>
+              <div class="flow-node-desc">Select customer, check credit limit, verify delivery state for GST.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node highlight">
+              <div class="flow-node-title">⏳ FEFO Deduction</div>
+              <div class="flow-node-desc">System finds earliest expiring batch and decrements <code>quantityRemaining</code>.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node highlight">
+              <div class="flow-node-title">📑 Sale Invoice & GST</div>
+              <div class="flow-node-desc">Computes CGST/SGST/IGST, creates invoice, marks initial status "UNPAID".</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node">
+              <div class="flow-node-title">💳 Customer Ledger (Debit)</div>
+              <div class="flow-node-desc">Adds invoice total to customer's outstanding debit balance.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flow 3: Payments & Reconciliations -->
+      <div class="flow-container">
+        <div class="flow-title">3. Payment Settlement & Reconciliation Lifecycle</div>
+        <div class="flow-subtitle">Closing the transaction loop with payments or customer returns</div>
+        <div class="flow-diagram">
+          <div class="flow-step-row">
+            <div class="flow-node">
+              <div class="flow-node-title">💰 Payment Ingestion</div>
+              <div class="flow-node-desc">Record payment via Cash, Bank, or Online against a specific invoice.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node">
+              <div class="flow-node-title">🔄 Invoice Status Update</div>
+              <div class="flow-node-desc">Invoice shifts from UNPAID ➔ PARTIAL ➔ PAID based on balance.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node highlight">
+              <div class="flow-node-title">📉 Customer Ledger (Credit)</div>
+              <div class="flow-node-desc">Reduces outstanding balance; updates WhatsApp shareable statement.</div>
+            </div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-node">
+              <div class="flow-node-title">📈 Real-Time KPIs</div>
+              <div class="flow-node-desc">Dashboard revenue charts and cash collections update automatically.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Entity Relationship Diagram Table -->
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Entity A</th>
+              <th>Relationship</th>
+              <th>Entity B</th>
+              <th>Business Action & Data Propagation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Organization</strong></td>
+              <td>1 : Many</td>
+              <td>All Entities</td>
+              <td>Enforces tenant isolation. Every table contains <code>organizationId</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Product</strong></td>
+              <td>1 : Many</td>
+              <td>StockBatch</td>
+              <td>A product can have multiple batches arriving at different dates with varying expiry dates.</td>
+            </tr>
+            <tr>
+              <td><strong>PurchaseItem</strong></td>
+              <td>1 : 1</td>
+              <td>StockBatch</td>
+              <td>Receiving a purchase item spawns a corresponding batch for expiration management.</td>
+            </tr>
+            <tr>
+              <td><strong>SaleItem</strong></td>
+              <td>Many : 1</td>
+              <td>StockBatch</td>
+              <td>Sale items decrement the oldest batch first (FEFO) to minimize inventory waste.</td>
+            </tr>
+            <tr>
+              <td><strong>Customer</strong></td>
+              <td>1 : Many</td>
+              <td>Customer Ledger</td>
+              <td>Sales increase ledger balance (Debit); payments and returns decrease it (Credit).</td>
+            </tr>
+            <tr>
+              <td><strong>Sale</strong></td>
+              <td>1 : Many</td>
+              <td>Payment</td>
+              <td>Supports multi-installment partial payments against sales invoices.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SECTION 3: PAGE-BY-PAGE AUDIT (23 PAGES)   -->
+    <!-- ========================================== -->
+    <section id="pages">
+      <div class="section-header">
+        <h2 class="section-title"><span>📋</span> Detailed Review of Every Page (23 Pages)</h2>
+        <p class="section-desc">
+          Rigorous inspection of UI components, connected APIs, feature health, and UX ratings.
+        </p>
+      </div>
+
+      <div class="card-grid" id="pagesGrid">
+
+        <!-- Page 1 -->
+        <div class="card page-card" data-domain="auth">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">1. Login Page</div>
+                <div class="card-route">/login</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Authentication entry point. Features full password authentication with demo credential pills for fast testing.</div>
+            <ul class="feature-list">
+              <li>Input fields for Username/Email and Password</li>
+              <li>"Fill Demo Credentials" pill for instant admin login</li>
+              <li>Stateless JWT token preservation in local storage</li>
+              <li>Auto-redirects to Dashboard upon successful login</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>POST /api/auth/login</code>. On failure, triggers red toast notification with error code.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 2 -->
+        <div class="card page-card" data-domain="dashboard">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">2. Executive Dashboard</div>
+                <div class="card-route">/</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Invenza executive command center wired to real database metrics, revenue breakdowns, and live alerts.</div>
+            <ul class="feature-list">
+              <li>Live Stats Cards (Sales, Revenue, Purchases, Invoices)</li>
+              <li>Quick Actions header bar for rapid modal workflows</li>
+              <li>Revenue breakdown and Sales trend charts</li>
+              <li>Low stock alerts table with one-click reorder dialog</li>
+              <li>Expiring Soon batch card with FEFO 30-day countdown</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Fetches <code>/api/dashboard/stats</code>, <code>/api/reports/sales/basic</code>, <code>/api/inventory/batches/expiring</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 3 -->
+        <div class="card page-card" data-domain="catalog">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">3. Product Catalog List</div>
+                <div class="card-route">/products</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Master catalog table displaying SKUs, categories, brands, price points, GST rates, and live stock levels.</div>
+            <ul class="feature-list">
+              <li>Real-time search by product title or SKU code</li>
+              <li>Filter by Category and Brand dropdowns</li>
+              <li>Stock status badge (In Stock, Low Stock, Out of Stock)</li>
+              <li>Soft delete and restore capability with confirmations</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Consumes <code>GET /api/products</code> with pagination and search query params.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 4 -->
+        <div class="card page-card" data-domain="catalog">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">4. Create Product</div>
+                <div class="card-route">/products/new</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Comprehensive product registration form with validation and tax classification.</div>
+            <ul class="feature-list">
+              <li>Product code, barcode, name, and description fields</li>
+              <li>Unit selection (piece, box, kg, liter) and pricing</li>
+              <li>GST tax bracket selection (0%, 5%, 12%, 18%, 28%)</li>
+              <li>Reorder threshold and maximum capacity levels</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Sends payload to <code>POST /api/products</code> validated via Zod schema.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 5 -->
+        <div class="card page-card" data-domain="catalog">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">5. Edit Product</div>
+                <div class="card-route">/products/:id/edit</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Update existing catalog records with pre-filled inputs and category association.</div>
+            <ul class="feature-list">
+              <li>Pre-populated fields from server state</li>
+              <li>Price modifications and GST tax rate adjustments</li>
+              <li>Cancel and return navigation buttons</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Uses <code>GET /api/products/:id</code> and <code>PUT /api/products/:id</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 6 -->
+        <div class="card page-card" data-domain="inventory">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">6. Inventory Hub</div>
+                <div class="card-route">/inventory</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Three-tab warehouse control center featuring Stock levels, Movement audit logs, and Lots/Batches.</div>
+            <ul class="feature-list">
+              <li><strong>Tab 1 (Stock):</strong> Real-time on-hand, reserved, and available quantity</li>
+              <li><strong>Tab 2 (Logs):</strong> Immutable movement audits (Purchase, Sale, Adjustment)</li>
+              <li><strong>Tab 3 (Batches):</strong> Checkpoint 07 batch expiry, FEFO status, days left</li>
+              <li>Bulk CSV Import modal with PapaParse pre-flight validator</li>
+              <li>Stock Adjustment dialog with reason logging</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>/api/inventory</code>, <code>/api/inventory/logs</code>, <code>/api/inventory/batches</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 7 -->
+        <div class="card page-card" data-domain="purchase">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">7. Purchase Orders List</div>
+                <div class="card-route">/purchases</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Procurement ledger displaying supplier orders, PO numbers, dates, and fulfillment statuses.</div>
+            <ul class="feature-list">
+              <li>Supplier name and reference code search</li>
+              <li>Purchase status badges (RECEIVED, ORDERED, CANCELLED)</li>
+              <li>Total expenditure summary with tax calculations</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Consumes <code>GET /api/purchases</code> with server pagination.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 8 -->
+        <div class="card page-card" data-domain="purchase">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">8. New Purchase Order</div>
+                <div class="card-route">/purchases/new</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Multi-line item procurement intake form with automatic batch generation.</div>
+            <ul class="feature-list">
+              <li>Supplier dropdown selection</li>
+              <li>Dynamic line item addition with product selection</li>
+              <li>Lot/Batch number and expiry date entry for each line item</li>
+              <li>Spawns <code>StockBatch</code> records automatically on save</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Sends to <code>POST /api/purchases</code>. Updates aggregate inventory instantly.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 9 -->
+        <div class="card page-card" data-domain="purchase">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">9. Edit Purchase Order</div>
+                <div class="card-route">/purchases/:id/edit</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Edit draft purchase orders prior to receiving or reconcile cost discrepancies.</div>
+            <ul class="feature-list">
+              <li>Edit line item quantities and landed unit costs</li>
+              <li>Modify supplier reference invoice numbers</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/purchases/:id</code> and <code>PUT /api/purchases/:id</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 10 -->
+        <div class="card page-card" data-domain="sales">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">10. Sales Invoices List</div>
+                <div class="card-route">/sales</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Central billing hub showing tax invoices, customer names, payment statuses, and actions.</div>
+            <ul class="feature-list">
+              <li>Payment status pill indicators (PAID, PARTIAL, UNPAID)</li>
+              <li>View Tax Invoice modal with compliant formatting</li>
+              <li>Client-side vector PDF generation & download</li>
+              <li>Quick "Record Payment" button triggering payment modal</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/sales</code> and <code>GET /api/sales/:id/invoice</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 11 -->
+        <div class="card page-card" data-domain="sales">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">11. New Sales Invoice (POS)</div>
+                <div class="card-route">/sales/new</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">High-speed invoice builder. Executes automated FEFO batch deductions and GST tax calculations.</div>
+            <ul class="feature-list">
+              <li>Customer selection with outstanding balance display</li>
+              <li>Dynamic line items with real-time subtotal & tax computing</li>
+              <li>Automated CGST/SGST vs IGST split based on state matching</li>
+              <li>Deducts from oldest batches automatically on completion</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>POST /api/sales</code>. Creates debit entry on Customer Ledger.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 12 -->
+        <div class="card page-card" data-domain="sales">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">12. Edit Sales Invoice</div>
+                <div class="card-route">/sales/:id/edit</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Modify unpaid invoice drafts and adjust shipping or discount parameters.</div>
+            <ul class="feature-list">
+              <li>Pre-loads existing line items and customer information</li>
+              <li>Re-calculates GST tax distribution on quantity change</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/sales/:id</code> and <code>PUT /api/sales/:id</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 13 -->
+        <div class="card page-card" data-domain="finance">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">13. Payments Ledger</div>
+                <div class="card-route">/payments</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Cash and bank collections management. Logs receipts and transitions invoice payment statuses.</div>
+            <ul class="feature-list">
+              <li>Payment method tracking (Cash, Bank Transfer, Cheque, Online)</li>
+              <li>Reference code / transaction ID logging</li>
+              <li>Linked sales invoice reference and customer name</li>
+              <li>Record Payment modal with instant ledger reconciliation</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/payments</code> and <code>POST /api/payments</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 14 -->
+        <div class="card page-card" data-domain="crm">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">14. Customers CRM</div>
+                <div class="card-route">/customers</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Customer contact database with credit limit tracking and outstanding balances.</div>
+            <ul class="feature-list">
+              <li>Customer contact info, phone, email, and billing address</li>
+              <li>Total outstanding debit balance indicator</li>
+              <li>Direct button to view full chronological Customer Ledger</li>
+              <li>Add and Edit customer modal forms with validation</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/customers</code> and <code>POST /api/customers</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 15 -->
+        <div class="card page-card" data-domain="crm">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">15. Customer Ledger & Statement</div>
+                <div class="card-route">/customers/:id/ledger</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Complete financial statement for individual accounts with one-click WhatsApp statement sharing.</div>
+            <ul class="feature-list">
+              <li>Running debit/credit transaction breakdown</li>
+              <li>Date window filter (MTD, YTD, Custom range)</li>
+              <li>One-click WhatsApp share link formatted with statement balance</li>
+              <li>Print statement button for formal billing dispatches</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/customers/:id/ledger</code> and <code>/share</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 16 -->
+        <div class="card page-card" data-domain="crm">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">16. Suppliers Directory</div>
+                <div class="card-route">/suppliers</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Vendor database storing supplier code, representative contacts, and GST identification numbers.</div>
+            <ul class="feature-list">
+              <li>Supplier code and company name listing</li>
+              <li>Contact person name, phone, and email address</li>
+              <li>Tax/GST registration number records</li>
+              <li>Add and edit vendor modal dialogs</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Consumes <code>GET /api/suppliers</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 17 -->
+        <div class="card page-card" data-domain="returns">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">17. Returns List</div>
+                <div class="card-route">/returns</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Reversal and return merchandise authorization (RMA) management table.</div>
+            <ul class="feature-list">
+              <li>Customer and Supplier return classification</li>
+              <li>Reason logging (damaged, defective, expired, surplus)</li>
+              <li>Total refund amount and restock status</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/returns</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 18 -->
+        <div class="card page-card" data-domain="returns">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">18. New Return Order</div>
+                <div class="card-route">/returns/new</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Process customer merchandise returns and trigger inventory restock or credit note.</div>
+            <ul class="feature-list">
+              <li>Link return to original sale or purchase invoice</li>
+              <li>Line item selection with quantity and refund calculation</li>
+              <li>Inventory restocking option for undamaged items</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Sends to <code>POST /api/returns</code>. Updates inventory and customer ledger credit.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 19 -->
+        <div class="card page-card" data-domain="reports">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">19. Reports & Analytics</div>
+                <div class="card-route">/reports</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Business intelligence dashboard featuring Sales, Purchases, Stock Valuation, and Brand reports.</div>
+            <ul class="feature-list">
+              <li>Sales by Product, Customer, and Brand</li>
+              <li>Purchases by Supplier, Product, and Brand</li>
+              <li>Inventory Valuation & Stock movement audits</li>
+              <li>Batch Expiry analysis with remaining stock counts</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>/api/reports/sales/*</code>, <code>/api/reports/purchase/*</code>, <code>/api/reports/inventory/*</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 20 -->
+        <div class="card page-card" data-domain="settings">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">20. User Profile & Security</div>
+                <div class="card-route">/profile</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">User account overview, personal credentials, and password rotation form.</div>
+            <ul class="feature-list">
+              <li>Current account details and assigned roles</li>
+              <li>Change password form with validation checks</li>
+              <li>Session active organization badge</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Uses <code>GET /api/auth/me</code> and user profile update routes.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 21 -->
+        <div class="card page-card" data-domain="admin">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">21. Users Management</div>
+                <div class="card-route">/users</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Team administration panel for creating users, assigning roles, and managing seats.</div>
+            <ul class="feature-list">
+              <li>Table of team members with assigned roles</li>
+              <li>Invite/Add User dialog with role assignment</li>
+              <li>Account activation / deactivation switches</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/members</code> and <code>POST /api/members</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 22 -->
+        <div class="card page-card" data-domain="admin">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">22. RBAC Permissions Matrix</div>
+                <div class="card-route">/permissions</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Interactive permission matrix (Checkpoint 06) governing operational privileges per role.</div>
+            <ul class="feature-list">
+              <li>Multi-role matrix: Owner, Admin, Manager, Sales Rep, Warehouse</li>
+              <li>Module capability toggles (Create, Read, Update, Delete)</li>
+              <li>Interactive role editor saving matrix to database</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Consumes <code>GET /api/roles</code> and <code>PUT /api/roles/:id</code>.
+            </div>
+          </details>
+        </div>
+
+        <!-- Page 23 -->
+        <div class="card page-card" data-domain="settings">
+          <div>
+            <div class="card-header-flex">
+              <div>
+                <div class="card-title">23. Billing & Organization</div>
+                <div class="card-route">/billing</div>
+              </div>
+              <span class="status-badge working">Live</span>
+            </div>
+            <div class="card-desc">Tenant profile, currency preferences (PKR), billing address, and subscription tier.</div>
+            <ul class="feature-list">
+              <li>Company name and registration information</li>
+              <li>Primary operating currency display (PKR)</li>
+              <li>Invoice header disclaimers and footer notes</li>
+            </ul>
+          </div>
+          <details>
+            <summary>API Contracts & Notes</summary>
+            <div class="detail-body">
+              Calls <code>GET /api/organizations</code>.
+            </div>
+          </details>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SECTION 4: MISSING FEATURES & ROADMAP      -->
+    <!-- ========================================== -->
+    <section id="gaps">
+      <div class="section-header">
+        <h2 class="section-title"><span>⚠️</span> Missing Features, Architectural Gaps & Roadmap</h2>
+        <p class="section-desc">
+          Honest audit of unbuilt capabilities, deferred checkpoints, and production enhancements required for full enterprise deployment.
+        </p>
+      </div>
+
+      <div class="roadmap-list">
+        <!-- Gap 1 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon red">🛑</div>
+          <div class="roadmap-content">
+            <h3>Checkpoint 11: Configurable Return Policies & Automated Credit Terms Enforcement</h3>
+            <p>
+              While returns can be created manually and credit limits are saved on Customer records, the automated policy enforcement engine is <strong>Spec only</strong>.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No automated return-window cutoff (e.g., rejecting customer returns after 14 days)</li>
+              <li class="missing-item">No restocking fee deduction calculation on returned items</li>
+              <li class="missing-item">No automated order-blocking when a customer exceeds their Net-30 credit terms or overdue limit</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: High (Financial & Inventory Risk)</span>
+              <span>• Status: Checkpoint 11 Pending</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gap 2 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon red">🎨</div>
+          <div class="roadmap-content">
+            <h3>Checkpoint 12: Client-Customizable Invoice Layout Engine</h3>
+            <p>
+              The system currently provides one hardcoded standard Invenza Tax Invoice layout. Checkpoint 12 specifies customizable invoice templates.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No template selector (e.g. Classic vs Modern vs Thermal 80mm POS receipt layout)</li>
+              <li class="missing-item">No logo upload tool for dynamic branding in invoice headers</li>
+              <li class="missing-item">No user-configurable invoice terms & bank payment details in settings</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: Medium (Brand Customization)</span>
+              <span>• Status: Checkpoint 12 Pending</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gap 3 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon yellow">📱</div>
+          <div class="roadmap-content">
+            <h3>Automated WhatsApp Business Cloud API Integration</h3>
+            <p>
+              Checkpoint 16 implemented WhatsApp sharing via <code>https://wa.me/?text=...</code> protocol links, which requires an operator to manually click and send via WhatsApp Web/App.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No automated background webhook sending invoices to customer phones upon generation</li>
+              <li class="missing-item">No automated payment receipt dispatch via WhatsApp Cloud API</li>
+              <li class="missing-item">No two-way customer confirmation of statement receipt</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: Medium (Operator Productivity)</span>
+              <span>• Status: Manual wa.me Link Only</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gap 4 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon yellow">🏭</div>
+          <div class="roadmap-content">
+            <h3>Multi-Warehouse & Bin Location Management</h3>
+            <p>
+              Inventory is currently aggregated globally across the entire organization. There is no multi-warehouse partitioning.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No multiple warehouse support (e.g., Central Warehouse vs Branch Depot vs Store)</li>
+              <li class="missing-item">No inter-warehouse transfer orders (Transfer Order with In-Transit status)</li>
+              <li class="missing-item">No aisle/shelf/bin location tracking inside warehouses</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: High (For Multi-Location Distributors)</span>
+              <span>• Status: Architecture Limitation</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gap 5 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon blue">💻</div>
+          <div class="roadmap-content">
+            <h3>Desktop Offline-First Sync Engine (Electron)</h3>
+            <p>
+              The Electron shell packaging passes builds and parity tests, but it acts primarily as a packaged Chromium browser window pointing to the live server.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No local embedded SQLite replica for zero-connectivity offline operation</li>
+              <li class="missing-item">No background sync conflict resolution when offline sales sync back to Postgres</li>
+              <li class="missing-item">No offline bill caching when retail internet drops</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: Medium (Retail Resilience)</span>
+              <span>• Status: Checkpoint 05 Packaged Only</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gap 6 -->
+        <div class="roadmap-item">
+          <div class="roadmap-icon blue">📷</div>
+          <div class="roadmap-content">
+            <h3>Hardware Barcode / QR Scanner Integration</h3>
+            <p>
+              Currently, product codes, barcodes, and serial numbers must be entered by keyboard or bulk-imported via CSV.
+            </p>
+            <ul class="feature-list">
+              <li class="missing-item">No built-in camera barcode scanner stream in the POS page</li>
+              <li class="missing-item">No hardware USB HID barcode wedge scanner listener for rapid shelf audits</li>
+              <li class="missing-item">No barcode label generator/printer for newly received unlabelled goods</li>
+            </ul>
+            <div class="roadmap-meta">
+              <span>Impact: Medium (Warehouse Speed)</span>
+              <span>• Status: Feature Opportunity</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+      const activeSec = document.getElementById(tabId);
+      if (activeSec) activeSec.classList.add('active');
+
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b =>
+        b.getAttribute('onclick').includes(tabId)
+      );
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    function filterContent() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      const cards = document.querySelectorAll('.card, .roadmap-item');
+
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (!q || text.includes(q)) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

@@ -11,10 +11,12 @@ const { saleModel, saleItemModel, customerModel, productModel, dbStub } =
       // loading every sale in the window and folding it in JavaScript.
       groupBy: vi.fn(),
     };
+
     const saleItem = {
       findMany: vi.fn(),
       groupBy: vi.fn(),
     };
+
     // The grouped reports look the display fields up for the keys they grouped
     // on, in a second scoped query.
     const customer = { findMany: vi.fn() };
@@ -25,7 +27,14 @@ const { saleModel, saleItemModel, customerModel, productModel, dbStub } =
       saleItemModel: saleItem,
       customerModel: customer,
       productModel: product,
-      dbStub: { $transaction: vi.fn(), sale, saleItem, customer, product },
+      dbStub: {
+        member: { findFirst: async () => ({ role: "owner" }) },
+        $transaction: vi.fn(),
+        sale,
+        saleItem,
+        customer,
+        product,
+      },
     };
   });
 
@@ -34,6 +43,7 @@ vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_other";
 
 const asTenant = (req: request.Test, organizationId = ORG) =>
@@ -95,6 +105,7 @@ const mockSaleLineGroups = ({ quantities, subtotals, lineCounts }: SaleLineGroup
 
       const column = Object.keys(args._sum)[0];
       const source = column === "quantity" ? quantities : subtotals;
+
       return Promise.resolve(
         Object.entries(source).map(([saleId, value]) => ({
           saleId,
@@ -109,6 +120,7 @@ const mockSaleLineGroups = ({ quantities, subtotals, lineCounts }: SaleLineGroup
 // aggregate the database would have produced for them.
 const seedCustomerGroups = (rows: Record<string, unknown>[]) => {
   const byCustomer = new Map<string, { orders: number; total: number }>();
+
   for (const row of rows) {
     const id = row.customerId as string;
     const bucket = byCustomer.get(id) ?? { orders: 0, total: 0 };
@@ -116,6 +128,7 @@ const seedCustomerGroups = (rows: Record<string, unknown>[]) => {
     bucket.total += row.totalAmount as number;
     byCustomer.set(id, bucket);
   }
+
   return [...byCustomer.entries()]
     .sort((a, b) => b[1].total - a[1].total)
     .map(([customerId, bucket]) => ({
@@ -130,20 +143,24 @@ const seedProductGroups = (rows: Record<string, unknown>[]) => {
     string,
     { quantity: number; totalPrice: number; priceSum: number; lines: number }
   >();
+
   for (const row of rows) {
     const id = row.productId as string;
+
     const bucket = byProduct.get(id) ?? {
       quantity: 0,
       totalPrice: 0,
       priceSum: 0,
       lines: 0,
     };
+
     bucket.quantity += row.quantity as number;
     bucket.totalPrice += row.totalPrice as number;
     bucket.priceSum += row.unitPrice as number;
     bucket.lines += 1;
     byProduct.set(id, bucket);
   }
+
   return [...byProduct.entries()]
     .sort((a, b) => b[1].totalPrice - a[1].totalPrice)
     .map(([productId, bucket]) => ({
@@ -163,9 +180,12 @@ const seedSaleProductGroups = (rows: Record<string, unknown>[]) => {
       if (args.by[0] === "productId") {
         return Promise.resolve(seedProductGroups(rows));
       }
+
       const column = Object.keys(args._sum)[0];
+
       const source =
         column === "quantity" ? { sale_1: 4 } : { sale_1: 300 };
+
       return Promise.resolve(
         Object.entries(source).map(([saleId, value]) => ({
           saleId,
@@ -221,6 +241,7 @@ describe("org scoping", () => {
     const calls = saleItemModel.groupBy.mock.calls.filter(
       (call) => call[0].by[0] === "productId"
     );
+
     expect(calls).toHaveLength(1);
     expect(calls[0][0].where).toMatchObject({ sale: { organizationId: ORG } });
   });
@@ -705,6 +726,7 @@ describe("GET /api/reports/sales/by-product", () => {
     const productGroups = saleItemModel.groupBy.mock.calls.filter(
       (call) => call[0].by[0] === "productId"
     );
+
     expect(productGroups[0][0]).toMatchObject({
       by: ["productId"],
       _count: { _all: true },
@@ -728,9 +750,11 @@ describe("GET /api/reports/sales/full", () => {
     const res = await asTenant(request(app).get("/api/reports/sales/full"));
 
     const basic = await asTenant(request(app).get("/api/reports/sales/basic"));
+
     const byCustomer = await asTenant(
       request(app).get("/api/reports/sales/by-customer")
     );
+
     const byProduct = await asTenant(
       request(app).get("/api/reports/sales/by-product")
     );
@@ -768,6 +792,7 @@ describe("GET /api/reports/sales/full", () => {
     const productGroups = saleItemModel.groupBy.mock.calls.filter(
       (call) => call[0].by[0] === "productId"
     );
+
     expect(productGroups[0][0].where.sale.saleDate).toMatchObject({
       gte: new Date("2026-04-01"),
     });

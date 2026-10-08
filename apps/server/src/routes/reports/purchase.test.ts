@@ -11,6 +11,7 @@ const { purchaseModel, purchaseItemModel, supplierModel, productModel, dbStub } 
       // loading every purchase in the window and folding it in JavaScript.
       groupBy: vi.fn(),
     };
+
     const purchaseItem = {
       findMany: vi.fn(),
       // Two reports share this model and group by different keys: the basic
@@ -18,6 +19,7 @@ const { purchaseModel, purchaseItemModel, supplierModel, productModel, dbStub } 
       // dispatches on the key so both can be seeded independently.
       groupBy: vi.fn(),
     };
+
     // The grouped reports look the display fields up for the keys they grouped
     // on, in a second scoped query.
     const supplier = { findMany: vi.fn() };
@@ -28,7 +30,14 @@ const { purchaseModel, purchaseItemModel, supplierModel, productModel, dbStub } 
       purchaseItemModel: purchaseItem,
       supplierModel: supplier,
       productModel: product,
-      dbStub: { $transaction: vi.fn(), purchase, purchaseItem, supplier, product },
+      dbStub: {
+        member: { findFirst: async () => ({ role: "owner" }) },
+        $transaction: vi.fn(),
+        purchase,
+        purchaseItem,
+        supplier,
+        product,
+      },
     };
   });
 
@@ -38,6 +47,7 @@ vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 // documents; `groups` are the aggregates the database would have returned.
 const seedSupplierGroups = (rows: Record<string, unknown>[]) => {
   const bySupplier = new Map<string, { orders: number; total: number }>();
+
   for (const row of rows) {
     const id = row.supplierId as string;
     const bucket = bySupplier.get(id) ?? { orders: 0, total: 0 };
@@ -45,6 +55,7 @@ const seedSupplierGroups = (rows: Record<string, unknown>[]) => {
     bucket.total += row.totalAmount as number;
     bySupplier.set(id, bucket);
   }
+
   // The report orders by summed total in SQL, so the mock returns them in that
   // order rather than making the service re-sort.
   return [...bySupplier.entries()]
@@ -61,20 +72,24 @@ const seedProductGroups = (rows: Record<string, unknown>[]) => {
     string,
     { quantity: number; totalCost: number; costSum: number; lines: number }
   >();
+
   for (const row of rows) {
     const id = row.productId as string;
+
     const bucket = byProduct.get(id) ?? {
       quantity: 0,
       totalCost: 0,
       costSum: 0,
       lines: 0,
     };
+
     bucket.quantity += row.quantity as number;
     bucket.totalCost += row.totalCost as number;
     bucket.costSum += row.unitCost as number;
     bucket.lines += 1;
     byProduct.set(id, bucket);
   }
+
   return [...byProduct.entries()]
     .sort((a, b) => b[1].totalCost - a[1].totalCost)
     .map(([productId, bucket]) => ({
@@ -91,6 +106,7 @@ const seedProductGroups = (rows: Record<string, unknown>[]) => {
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_other";
 
 const asTenant = (req: request.Test, organizationId = ORG) =>
@@ -167,6 +183,7 @@ describe("org scoping", () => {
     const calls = purchaseItemModel.groupBy.mock.calls.filter(
       (call) => call[0].by[0] === "productId"
     );
+
     expect(calls).toHaveLength(1);
     expect(calls[0][0].where).toMatchObject({ purchase: { organizationId: ORG } });
   });
@@ -659,9 +676,11 @@ describe("GET /api/reports/purchase/full", () => {
     const res = await asTenant(request(app).get("/api/reports/purchase/full"));
 
     const basic = await asTenant(request(app).get("/api/reports/purchase/basic"));
+
     const bySupplier = await asTenant(
       request(app).get("/api/reports/purchase/by-supplier")
     );
+
     const byProduct = await asTenant(
       request(app).get("/api/reports/purchase/by-product")
     );
@@ -699,6 +718,7 @@ describe("GET /api/reports/purchase/full", () => {
     const productGroups = purchaseItemModel.groupBy.mock.calls.filter(
       (call) => call[0].by[0] === "productId"
     );
+
     expect(productGroups[0][0].where.purchase.purchaseDate).toMatchObject({
       gte: new Date("2026-03-01"),
     });

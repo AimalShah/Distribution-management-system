@@ -4,7 +4,7 @@ import {
   SupplierUpdateSchema,
   supplierListQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, notFound } from "../http";
+import { asyncHandler } from "../http";
 import {
   addSupplier,
   getSupplierById,
@@ -19,10 +19,12 @@ supplierRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = supplierListQuerySchema.parse(req.query);
+
     const result = await getSuppliers({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -31,7 +33,7 @@ supplierRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const supplier = await getSupplierById(req.params.id, req.auth.organizationId);
-    if (!supplier) throw notFound("Supplier not found", "SUPPLIER_NOT_FOUND");
+
     res.json(supplier);
   })
 );
@@ -49,11 +51,13 @@ supplierRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = SupplierUpdateSchema.parse(req.body);
+
     const supplier = await updateSupplier(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(supplier);
   })
 );

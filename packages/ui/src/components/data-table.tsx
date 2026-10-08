@@ -31,6 +31,7 @@ export function DataTable<TData>({
       const next = typeof updater === "function"
         ? updater({ pageIndex, pageSize })
         : updater;
+
       onPaginationChange(next.pageIndex, next.pageSize);
     },
     manualPagination: true,

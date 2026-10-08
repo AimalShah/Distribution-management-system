@@ -27,6 +27,7 @@ describe("Checkpoint 7 — Batch/Lot Inventory Acceptance", () => {
       expiringWithinDays: 30,
       search: "BATCH-123",
     });
+
     expect(result.success).toBe(true);
   });
 
@@ -37,7 +38,9 @@ describe("Checkpoint 7 — Batch/Lot Inventory Acceptance", () => {
       quantity: 100,
       unitCost: 10.5,
     });
+
     expect(result.success).toBe(true);
+
     if (result.success) {
       expect(result.data.quantity).toBe(100);
       expect(result.data.batchNumber).toBe("LOT-999");

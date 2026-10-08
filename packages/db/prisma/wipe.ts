@@ -16,6 +16,7 @@ import "./load-env";
 
 /** Same ids `seed.ts` creates and `apps/server/.env` reads. */
 const ORGANIZATION_ID = "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE";
+
 const OWNER_ID = "JEXqru5KeZxSMUhEQ1I6P5hJgMepXMum";
 
 /** Children before parents: every row below has a foreign key to one above. */
@@ -52,12 +53,15 @@ async function main() {
   const { default: prisma } = await import("../src/client");
 
   console.log("🗑️  Deleting all rows...");
+
   for (const model of wipeOrder) {
     const deleted = await prisma[model].deleteMany();
+
     if (deleted.count > 0) console.log(`   ${(model + " ").padEnd(16)} ${deleted.count}`);
   }
 
   const now = new Date();
+
   const organization = await prisma.organization.create({
     data: {
       id: ORGANIZATION_ID,

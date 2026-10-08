@@ -19,9 +19,11 @@ export function loadEnvFile(file: string): void {
 
   for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
     const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+
     if (!match) continue;
 
     const [, key, raw] = match;
+
     if (process.env[key] !== undefined) continue;
     process.env[key] = raw.replace(/^(["'])(.*)\1$/, "$2");
   }
@@ -30,4 +32,5 @@ export function loadEnvFile(file: string): void {
 // packages/db/.env first, then the repo root, so a workspace-level override
 // can fill in what the package file leaves out.
 loadEnvFile(path.join(__dirname, "..", ".env"));
+
 loadEnvFile(path.join(__dirname, "..", "..", "..", ".env"));

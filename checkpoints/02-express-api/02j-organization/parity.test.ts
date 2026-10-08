@@ -66,14 +66,17 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
 
   afterAll(async () => {
     if (sessions.length) await prisma.session.deleteMany({ where: { id: { in: sessions } } });
+
     if (orgs.length) {
       // Cascades take the memberships and the invited users' member rows with it.
       await prisma.organization.deleteMany({ where: { id: { in: orgs } } });
     }
+
     if (made.length) {
       await prisma.inventoryLog.deleteMany({ where: { userId: { in: made } } });
       await prisma.user.deleteMany({ where: { id: { in: made } } });
     }
+
     if (t) await teardownTenants(t);
   });
 
@@ -91,6 +94,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
         updatedAt: new Date(),
       },
     });
+
     return id;
   };
 
@@ -114,6 +118,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
           : {}),
       },
     });
+
     return id;
   };
 
@@ -131,6 +136,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
         updatedAt: new Date(),
       },
     });
+
     return id;
   };
 
@@ -277,6 +283,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
       .post("/api/organizations/set-active")
       .set(asUser("", t.userId))
       .send({ organizationId: t.organizationId });
+
     expect(setActive.status).toBe(400);
     expect(setActive.body).toMatchObject({ code: "SESSION_REQUIRED" });
   });
@@ -377,6 +384,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
     const membership = await prisma.member.findFirstOrThrow({
       where: { organizationId: res.body.id, userId },
     });
+
     expect(membership.role).toBe("owner");
 
     // The dashboard and the onboarding redirect both read `isFormComplete`.
@@ -413,10 +421,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2j — Organization API", () => {
 
   it("treats the slug as globally unique", async () => {
     const taken = slug("taken");
+
     const first = await request(app)
       .post("/api/organizations")
       .set(asUser("", await makeUser("slugone")))
       .send({ name: "First", slug: taken });
+
     expect(first.status).toBe(201);
     orgs.push(first.body.id);
 

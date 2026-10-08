@@ -5,7 +5,7 @@ import {
   paginationQuerySchema,
   saleListQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, badRequest, notFound } from "../http";
+import { asyncHandler } from "../http";
 import {
   cancelSale,
   createSale,
@@ -19,6 +19,8 @@ import {
   updateSale,
 } from "../services/sale";
 
+import { requireUserId } from "../middleware/auth-context";
+
 import { renderSaleInvoiceHtml } from "../services/sale-invoice-template";
 import { generateSalePdf } from "../services/sale-pdf";
 
@@ -28,10 +30,12 @@ saleRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = saleListQuerySchema.parse(req.query);
+
     const result = await getSales({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -41,12 +45,14 @@ saleRouter.get(
   "/customer/:customerId",
   asyncHandler(async (req, res) => {
     const { page, pageSize } = paginationQuerySchema.parse(req.query);
+
     const result = await getSalesByCustomer({
       customerId: req.params.customerId,
       organizationId: req.auth.organizationId,
       page,
       pageSize,
     });
+
     res.json(result);
   })
 );
@@ -55,8 +61,8 @@ saleRouter.get(
   "/:id/print",
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
-    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
-    const html = renderSaleInvoiceHtml(sale as any);
+
+    const html = renderSaleInvoiceHtml(sale);
     res.type("html").send(html);
   })
 );
@@ -65,8 +71,8 @@ saleRouter.get(
   "/:id/pdf",
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
-    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
-    const pdf = await generateSalePdf(sale as any);
+
+    const pdf = await generateSalePdf(sale);
     res
       .type("pdf")
       .set("Content-Disposition", `inline; filename="invoice-${sale.saleCode}.pdf"`)
@@ -78,11 +84,13 @@ saleRouter.get(
   "/:id/invoice",
   asyncHandler(async (req, res) => {
     const sale = await getSaleInvoiceData(req.params.id, req.auth.organizationId);
-    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+
     if (req.accepts("html") && !req.accepts("json")) {
-      const html = renderSaleInvoiceHtml(sale as any);
+      const html = renderSaleInvoiceHtml(sale);
+
       return res.type("html").send(html);
     }
+
     res.json(sale);
   })
 );
@@ -91,7 +99,7 @@ saleRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
-    if (!sale) throw notFound("Sale not found", "SALE_NOT_FOUND");
+
     res.json(sale);
   })
 );
@@ -102,21 +110,11 @@ saleRouter.post(
     const data = SaleInvoiceSchema.parse(req.body);
 
     // Every stock movement is written to `InventoryLog`, whose `userId` is
-    // required. Until Checkpoint 3 replaces this middleware with a real
-    // session, the caller has to say who they are.
-    if (!req.auth.userId) {
-      throw badRequest(
-        "Missing user context. Send the x-user-id header so the inventory log " +
-          "can be attributed.",
-        "USER_REQUIRED"
-      );
-    }
+    // required, so the caller has to say who they are.
+    const userId = requireUserId(req.auth.userId);
 
-    const sale = await createSale(
-      data,
-      req.auth.organizationId,
-      req.auth.userId
-    );
+    const sale = await createSale(data, req.auth.organizationId, userId);
+
     res.status(201).json(sale);
   })
 );
@@ -135,15 +133,9 @@ saleRouter.delete(
   asyncHandler(async (req, res) => {
     // A delete reverses the stock the invoice consumed, so it writes ledger rows
     // and needs attribution for the same reason the create does.
-    if (!req.auth.userId) {
-      throw badRequest(
-        "Missing user context. Send the x-user-id header so the stock reversal " +
-          "can be attributed.",
-        "USER_REQUIRED"
-      );
-    }
+    const userId = requireUserId(req.auth.userId);
 
-    const deleted = await deleteSale(req.params.id, req.auth.organizationId, req.auth.userId);
+    const deleted = await deleteSale(req.params.id, req.auth.organizationId, userId);
     res.json(deleted);
   })
 );
@@ -153,15 +145,9 @@ saleRouter.post(
   asyncHandler(async (req, res) => {
     // A restore re-consumes the stock the delete gave back — same ledger, same
     // attribution requirement.
-    if (!req.auth.userId) {
-      throw badRequest(
-        "Missing user context. Send the x-user-id header so the stock restoration " +
-          "can be attributed.",
-        "USER_REQUIRED"
-      );
-    }
+    const userId = requireUserId(req.auth.userId);
 
-    const restored = await restoreSale(req.params.id, req.auth.organizationId, req.auth.userId);
+    const restored = await restoreSale(req.params.id, req.auth.organizationId, userId);
     res.json(restored);
   })
 );

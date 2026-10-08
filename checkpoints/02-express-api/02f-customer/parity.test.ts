@@ -68,10 +68,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
 
   it("treats customerCode as globally unique, across tenants", async () => {
     const code = unique("C");
+
     const first = await request(app)
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form({ customerCode: code }));
+
     expect(first.status).toBe(201);
 
     const second = await request(app)
@@ -91,6 +93,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form({ creditLimit: 0 }));
+
     expect(zero.status).toBe(201);
     expect(zero.body.creditLimit).toBe(0);
 
@@ -102,6 +105,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .put(`/api/customers/${zero.body.id}`)
       .set(asOrg(t.organizationId))
       .send({ creditLimit: "" });
+
     expect(cleared.status).toBe(200);
     expect(cleared.body.creditLimit).toBeNull();
   });
@@ -113,12 +117,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const off = await request(app)
       .put(`/api/customers/${id}`)
       .set(asOrg(t.organizationId))
       .send({ isActive: false });
+
     expect(off.body.isActive).toBe(false);
 
     const renamed = await request(app)
@@ -139,6 +145,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form({ email: "someone@example.test", phone: "0300-1234567", city: "Karachi" }));
+
     expect(created.body.email).toBe("someone@example.test");
 
     const cleared = await request(app)
@@ -159,6 +166,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form({ isActive: true }));
+
     const archived = await request(app)
       .post("/api/customers")
       .set(asOrg(t.organizationId))
@@ -182,6 +190,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     await prisma.sale.create({
@@ -209,6 +218,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       .post("/api/customers")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -238,6 +248,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2f — Customer API", () => {
       const req = request(app)[verb](`/api/customers/${t.otherCustomerId}`).set(
         asOrg(t.organizationId)
       );
+
       const res = await (verb === "put" ? req.send({ name: "Hijacked" }) : req);
       expect(res.status).toBe(404);
     }

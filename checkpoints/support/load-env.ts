@@ -25,9 +25,11 @@ const envPath = path.resolve(__dirname, "..", "..", ".env");
 if (!process.env.DATABASE_URL?.trim() && fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, "utf-8").split(/\r?\n/)) {
     const match = /^\s*(DATABASE_URL(?:_UNPOOLED)?)\s*=\s*(.*?)\s*$/.exec(line);
+
     if (!match) continue;
     // `.env` files commonly quote URLs because they contain `?` and `&`.
     const value = match[2].replace(/^["']|["']$/g, "").trim();
+
     if (value && !process.env[match[1]]) process.env[match[1]] = value;
   }
 }

@@ -1,6 +1,13 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { InventoryReportQuery } from "@dms/shared";
+import {
+  inventoryLogScope,
+  inventoryScope,
+  purchaseItemScope,
+  reportWindow,
+  stockBatchScope,
+} from "../scope";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -13,6 +20,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * would be inventing a movement the write path refuses to record.
  */
 const INCREASES = ["IN", "RETURN"] as const;
+
 const DECREASES = ["OUT", "DAMAGED", "EXPIRED"] as const;
 
 /**
@@ -39,22 +47,21 @@ export async function getBasicInventoryReport(
   organizationId: string,
   { startDate, endDate }: InventoryReportQuery
 ) {
+  const windowBound = reportWindow({ startDate, endDate });
+
+  // The movement type is a caller's concern — which *kind* of row this group
+  // reads — and everything that makes a row in scope comes from the module.
   const movementWhere = (types: readonly string[]): Prisma.InventoryLogWhereInput => ({
-    inventory: { organizationId },
+    ...inventoryLogScope({ organizationId, window: windowBound }),
+    // SAFETY: `types` only ever arrives as `INCREASES`, `DECREASES`, or the
+    // `["ADJUSTMENT"]` literal below — each an `as const` tuple of members of
+    // the movement enum this schema generates, so its members are enum members.
     movementType: { in: types as Prisma.EnumInventoryMovementFilter["in"] },
-    ...(startDate || endDate
-      ? {
-          createdAt: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endDate ? { lte: endDate } : {}),
-          },
-        }
-      : {}),
   });
 
   const [inventories, increases, decreases, adjustments] = await Promise.all([
     prisma.inventory.findMany({
-      where: { organizationId },
+      where: inventoryScope({ organizationId }),
       select: {
         productId: true,
         quantityOnHand: true,
@@ -125,11 +132,11 @@ const sumFor = (
  */
 export async function getStockValuationReport(
   organizationId: string,
-  query: InventoryReportQuery
+  _query: InventoryReportQuery
 ) {
   const [inventories, costs] = await Promise.all([
     prisma.inventory.findMany({
-      where: { organizationId },
+      where: inventoryScope({ organizationId }),
       select: {
         productId: true,
         quantityOnHand: true,
@@ -139,7 +146,7 @@ export async function getStockValuationReport(
     prisma.purchaseItem.groupBy({
       by: ["productId"],
       _avg: { unitCost: true },
-      where: { purchase: { organizationId } },
+      where: purchaseItemScope({ organizationId }),
     }),
   ]);
 
@@ -173,10 +180,11 @@ export async function getStockValuationReport(
  * The raw movement log, scoped to the tenant.
  *
  * `InventoryLog` has no `organizationId` of its own — the columns are
- * `inventoryId`, `productId` and `userId` — so the tenant filter goes through
- * the `inventory` relation. The legacy had no filter at all, which meant every
- * caller's movement log, for every product in the installation, to anyone who
- * could reach the endpoint.
+ * `inventoryId`, `productId` and `userId` — so the tenant filter is reached
+ * through the `inventory` relation, knowledge that now sits in the scope module
+ * rather than with this query. The legacy had no filter at all, which meant
+ * every caller's movement log, for every product in the installation, to anyone
+ * who could reach the endpoint.
  *
  * `previousQty` and `newQty` are included because they are the part of the row
  * that makes it auditable: `quantity` alone says 4 units moved and not whether
@@ -187,17 +195,7 @@ export async function getInventoryMovements(
   { startDate, endDate }: InventoryReportQuery
 ) {
   return prisma.inventoryLog.findMany({
-    where: {
-      inventory: { organizationId },
-      ...(startDate || endDate
-        ? {
-            createdAt: {
-              ...(startDate ? { gte: startDate } : {}),
-              ...(endDate ? { lte: endDate } : {}),
-            },
-          }
-        : {}),
-    },
+    where: inventoryLogScope({ organizationId, window: reportWindow({ startDate, endDate }) }),
     select: {
       id: true,
       movementType: true,
@@ -239,7 +237,7 @@ export async function getLowStockReport(
 ) {
   const inventories = await prisma.inventory.findMany({
     where: {
-      organizationId,
+      ...inventoryScope({ organizationId }),
       quantityOnHand: { lte: prisma.inventory.fields.reorderLevel },
       reorderLevel: { gt: 0 },
     },
@@ -263,7 +261,7 @@ export async function getLowStockReport(
 
   const purchaseItems = await prisma.purchaseItem.findMany({
     where: {
-      purchase: { organizationId },
+      ...purchaseItemScope({ organizationId }),
       productId: { in: inventories.map((inv) => inv.productId) },
     },
     select: {
@@ -282,6 +280,7 @@ export async function getLowStockReport(
     const itemsForProduct = purchaseItems.filter(
       (pi) => pi.productId === inv.productId
     );
+
     // The most recent purchase overall, not the most recent inside the window:
     // a supplier last bought from eight months ago is the one to reorder from,
     // and returning null just because the window excluded them would answer a
@@ -292,6 +291,7 @@ export async function getLowStockReport(
         !endDate ||
         (pi.purchase.purchaseDate >= startDate && pi.purchase.purchaseDate <= endDate)
     ) ?? itemsForProduct[0];
+
     const shortfall = Math.max(0, inv.reorderLevel - inv.quantityOnHand);
 
     return {
@@ -334,7 +334,7 @@ export async function getLowStockReport(
  */
 export async function getExpiryReport(
   organizationId: string,
-  { startDate, endDate, daysUntilExpiry }: InventoryReportQuery & {
+  { startDate, daysUntilExpiry }: InventoryReportQuery & {
     daysUntilExpiry?: number;
   }
 ) {
@@ -342,19 +342,28 @@ export async function getExpiryReport(
   // No start date means no lower bound rather than the epoch: the legacy used
   // `new Date(0)`, which asks for every purchase line ever written.
   const windowStart = startDate ?? null;
+
   const expiryLimit =
     daysUntilExpiry !== undefined
       ? new Date(now.getTime() + daysUntilExpiry * MS_PER_DAY)
       : null;
 
+  // Built key by key rather than spread: each bound that was not asked for
+  // must stay out of the filter instead of entering it as `{}`.
+  const expiryFilter: Prisma.DateTimeNullableFilter = { not: null };
+
+  if (windowStart) {
+    expiryFilter.gte = windowStart;
+  }
+
+  if (expiryLimit) {
+    expiryFilter.lte = expiryLimit;
+  }
+
   const items = await prisma.purchaseItem.findMany({
     where: {
-      purchase: { organizationId },
-      expiryDate: {
-        not: null,
-        ...(windowStart ? { gte: windowStart } : {}),
-        ...(expiryLimit ? { lte: expiryLimit } : {}),
-      },
+      ...purchaseItemScope({ organizationId }),
+      expiryDate: expiryFilter,
     },
     select: {
       id: true,
@@ -382,19 +391,24 @@ export async function getExpiryReport(
 
   const [stock, batches] = await Promise.all([
     prisma.inventory.findMany({
-      where: { organizationId, productId: { in: items.map((i) => i.productId) } },
+      where: {
+        ...inventoryScope({ organizationId }),
+        productId: { in: items.map((i) => i.productId) },
+      },
       select: { productId: true, quantityOnHand: true },
     }),
-    typeof (prisma as any).stockBatch?.findMany === "function"
-      ? prisma.stockBatch.findMany({
-          where: { organizationId, productId: { in: items.map((i) => i.productId) } },
-          select: { productId: true, batchNumber: true, quantityRemaining: true },
-        })
-      : Promise.resolve([]),
+    prisma.stockBatch.findMany({
+      where: {
+        ...stockBatchScope({ organizationId }),
+        productId: { in: items.map((i) => i.productId) },
+      },
+      select: { productId: true, batchNumber: true, quantityRemaining: true },
+    }),
   ]);
 
   return items.flatMap((item) => {
     const expiryDate = item.expiryDate;
+
     if (!expiryDate) return [];
 
     const matchedBatch = batches.find(

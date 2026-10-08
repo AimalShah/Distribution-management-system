@@ -5,7 +5,8 @@ import type {
   PurchaseItemInput,
   PurchaseUpdateInput,
 } from "@dms/shared";
-import { badRequest } from "../http/errors";
+import { badRequest, notFound } from "../http/errors";
+import { applyStockMovement, type StockMovementRequest } from "./stock-movement";
 
 const listInclude = {
   supplier: true,
@@ -31,6 +32,7 @@ const lineTotal = (item: PurchaseItemInput) => {
   const gross = item.quantity * item.unitCost;
   const itemDiscount = item.itemDiscount ?? 0;
   const tax = ((item.taxPercent ?? 0) / 100) * (gross - itemDiscount);
+
   return gross - itemDiscount + tax;
 };
 
@@ -54,8 +56,11 @@ export async function getPurchases({
 }: PurchaseListArgs) {
   const where: Prisma.PurchaseWhereInput = {
     organizationId,
-    ...(search ? { purchaseCode: { contains: search, mode: "insensitive" } } : {}),
   };
+
+  if (search) {
+    where.purchaseCode = { contains: search, mode: "insensitive" };
+  }
 
   const [data, total] = await Promise.all([
     prisma.purchase.findMany({
@@ -116,10 +121,16 @@ export async function getPurchasesBySupplier({
 }
 
 export async function getPurchaseById(id: string, organizationId: string) {
-  return prisma.purchase.findFirst({
+  const purchase = await prisma.purchase.findFirst({
     where: { id, organizationId },
     include: detailInclude,
   });
+
+  if (!purchase) {
+    throw notFound("Purchase not found", "PURCHASE_NOT_FOUND");
+  }
+
+  return purchase;
 }
 
 export async function createPurchase(
@@ -160,6 +171,7 @@ export async function createPurchase(
     // tenant's stock for a product id this organization does not own. Checking
     // the tenant first turns that into a 400 before anything is written.
     const productIds = [...new Set(data.items.map((item) => item.productId))];
+
     const owned = await tx.product.findMany({
       where: { id: { in: productIds }, organizationId },
       select: { id: true },
@@ -192,75 +204,37 @@ export async function createPurchase(
     });
 
     for (const item of data.items) {
-      // The increment is left to the database rather than computed from a read.
-      // A read-modify-write cannot hold under READ COMMITTED: two purchases for
-      // the same product both read 5, both write 15, and 20 units received are
-      // recorded as 10. `{ increment }` is a single statement against the row it
-      // updates, so the database serialises it, and it also makes two lines for
-      // the same product accumulate because each one increments the same row.
-      const inventory = await tx.inventory.upsert({
-        where: { productId: item.productId },
-        update: { quantityOnHand: { increment: item.quantity } },
-        create: {
-          productId: item.productId,
-          organizationId,
-          quantityOnHand: item.quantity,
-          reorderLevel: 10,
-        },
-      });
-
-      // `upsert` returns the row as it stands after this statement, so the
-      // ledger's opening figure is derived from it. previousQty + quantity =
-      // newQty therefore holds by construction, including when another
-      // purchase committed between two lines of the same document.
-      const newQty = inventory.quantityOnHand;
-      const previousQty = newQty - item.quantity;
-
-      await tx.inventoryLog.create({
-        data: {
-          inventoryId: inventory.id,
-          productId: item.productId,
-          userId,
-          movementType: "IN",
-          quantity: item.quantity,
-          previousQty,
-          newQty,
-          reason: `Stock In from Purchase ${data.purchaseCode}`,
-          reference: data.purchaseCode,
-        },
-      });
-
-      if (item.batchNumber && typeof (tx as any).stockBatch?.upsert === "function") {
-        const matchingPurchaseItem = purchase.purchaseItems?.find(
-          (pi) => pi.productId === item.productId && pi.batchNumber === item.batchNumber
-        );
-
-        await tx.stockBatch.upsert({
-          where: {
-            productId_batchNumber_organizationId: {
-              productId: item.productId,
+      // A receipt can arrive before the product has any stock row, so the
+      // movement carries the reorder level to open it with; the increment
+      // itself stays a single statement the database serialises. The ledger
+      // row and the lot belong to the same movement, so the module writes
+      // them together.
+      const batch: StockMovementRequest["batch"] = item.batchNumber
+        ? {
+            receipt: {
               batchNumber: item.batchNumber,
-              organizationId,
+              expiryDate: item.expiryDate,
+              unitCost: item.unitCost,
+              purchaseItemId: purchase.purchaseItems?.find(
+                (pi) => pi.productId === item.productId && pi.batchNumber === item.batchNumber
+              )?.id,
             },
-          },
-          update: {
-            quantityRemaining: { increment: item.quantity },
-            quantityReceived: { increment: item.quantity },
-            unitCost: item.unitCost,
-            expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
-          },
-          create: {
-            productId: item.productId,
-            organizationId,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
-            quantityReceived: item.quantity,
-            quantityRemaining: item.quantity,
-            unitCost: item.unitCost,
-            purchaseItemId: matchingPurchaseItem?.id,
-          },
-        });
-      }
+          }
+        : { untracked: true };
+
+      await applyStockMovement({
+        tx,
+        organizationId,
+        userId,
+        productId: item.productId,
+        direction: "in",
+        quantity: item.quantity,
+        movementType: "IN",
+        reason: `Stock In from Purchase ${data.purchaseCode}`,
+        reference: data.purchaseCode,
+        opening: { reorderLevel: 10 },
+        batch,
+      });
     }
 
     return purchase;

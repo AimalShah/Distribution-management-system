@@ -32,6 +32,7 @@ const WINDOW = {
   startDate: "2026-01-01T00:00:00.000Z",
   endDate: "2026-12-31T23:59:59.999Z",
 };
+
 const window = `?startDate=${WINDOW.startDate}&endDate=${WINDOW.endDate}`;
 
 const at = (iso: string) => new Date(iso);
@@ -176,6 +177,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
       },
       select: { id: true },
     });
+
     return row.id;
   };
 
@@ -194,6 +196,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
         brandId: orgId === t.organizationId ? t.brandId : t.otherBrandId,
       },
     });
+
     return id;
   };
 
@@ -227,20 +230,25 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
         createdAt: purchaseDate,
       },
     });
+
     for (const item of items) {
       await prisma.purchaseItem.create({
         data: { id: `pit_${unique("item")}`, purchaseId: id, ...item },
       });
     }
+
     return id;
   };
 
   const basic = (orgId: string, query = "") =>
     request(app).get(`/api/reports/purchase/basic${query}`).set(asOrg(orgId));
+
   const bySupplier = (orgId: string, query = "") =>
     request(app).get(`/api/reports/purchase/by-supplier${query}`).set(asOrg(orgId));
+
   const byProduct = (orgId: string, query = "") =>
     request(app).get(`/api/reports/purchase/by-product${query}`).set(asOrg(orgId));
+
   const full = (orgId: string, query = "") =>
     request(app).get(`/api/reports/purchase/full${query}`).set(asOrg(orgId));
 
@@ -291,9 +299,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
       { status: "Completed", orders: 4, totalAmount: 490 },
       { status: "Pending", orders: 1, totalAmount: 80 },
     ]);
+
     const completed = res.body.byStatus.find(
       (s: { status: string }) => s.status === "Completed"
     );
+
     expect(completed.totalAmount).toBeLessThan(res.body.totalPurchaseAmount);
   });
 
@@ -406,6 +416,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
     const widget = res.body.find(
       (r: { productId: string }) => r.productId === products.widget
     );
+
     expect(widget.quantity).toBe(15);
     expect(widget.totalCost).toBe(190);
     expect(widget.unit).toBe("pcs");
@@ -431,6 +442,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
     const seeded = res.body.find(
       (r: { productId: string }) => r.productId === products.seeded
     );
+
     expect(seeded.averageUnitCost).toBe(7);
     expect(seeded.totalCost).toBe(300);
     expect(seeded.quantity).toBe(40);
@@ -440,6 +452,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
     const widget = res.body.find(
       (r: { productId: string }) => r.productId === products.widget
     );
+
     expect(widget.averageUnitCost).toBeCloseTo(70 / 3, 6);
     expect(widget.averageUnitCost).not.toBeCloseTo(190 / 15, 3);
   });
@@ -457,10 +470,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2n — Purchase Reports API", () => {
     // 570 across five headers, 550 across seven lines: the 200 gap is the freight
     // on the one purchase whose header does not match its line.
     expect(basicRes.body.totalPurchaseAmount).toBe(570);
+
     const lineTotal = productRes.body.reduce(
       (sum: number, r: { totalCost: number }) => sum + r.totalCost,
       0
     );
+
     expect(lineTotal).toBe(550);
   });
 

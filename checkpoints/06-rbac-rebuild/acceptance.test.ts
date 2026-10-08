@@ -25,6 +25,7 @@ describe("Checkpoint 6 — RBAC Rebuild Acceptance", () => {
   it("Admin has full access to all resources", () => {
     const admin = DEFAULT_ROLES.Admin;
     expect(admin.permissions.length).toBeGreaterThanOrEqual(40);
+
     for (const [resource, actions] of Object.entries(PERMISSION_STATEMENT)) {
       for (const action of actions) {
         expect(can(admin.permissions, resource as any, action)).toBe(true);
@@ -54,9 +55,11 @@ describe("Checkpoint 6 — RBAC Rebuild Acceptance", () => {
 
   it("Manager can view all resources and export reports", () => {
     const manager = DEFAULT_ROLES.Manager;
+
     for (const resource of Object.keys(PERMISSION_STATEMENT)) {
       expect(can(manager.permissions, resource as any, "view")).toBe(true);
     }
+
     expect(can(manager.permissions, "reports", "export")).toBe(true);
     expect(can(manager.permissions, "settings", "update")).toBe(true);
     expect(can(manager.permissions, "users", "delete")).toBe(false);
@@ -71,6 +74,7 @@ describe("Checkpoint 6 — RBAC Rebuild Acceptance", () => {
         { resource: "sales", action: "view" },
       ],
     });
+
     expect(parsed.name).toBe("Cashier");
     expect(parsed.permissions).toHaveLength(2);
   });

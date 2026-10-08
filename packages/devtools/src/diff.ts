@@ -17,9 +17,11 @@ export async function diffCheckpoint(name: string) {
 
   const beforeDom = path.join(dir, "before", "render.json");
   const afterDom = path.join(dir, "after", "render.json");
+
   if (fs.existsSync(beforeDom) && fs.existsSync(afterDom)) {
     const before = JSON.parse(fs.readFileSync(beforeDom, "utf8"));
     const after = JSON.parse(fs.readFileSync(afterDom, "utf8"));
+
     if (normalize(before.dom) !== normalize(after.dom)) {
       result.pass = false;
       result.details.push("DOM structure differs (after normalizing generated IDs/timestamps)");
@@ -28,15 +30,19 @@ export async function diffCheckpoint(name: string) {
 
   const beforePng = path.join(dir, "before", "screenshot.png");
   const afterPng = path.join(dir, "after", "screenshot.png");
+
   if (fs.existsSync(beforePng) && fs.existsSync(afterPng)) {
     const img1 = PNG.sync.read(fs.readFileSync(beforePng));
     const img2 = PNG.sync.read(fs.readFileSync(afterPng));
     const diffImg = new PNG({ width: img1.width, height: img1.height });
+
     const diffPixels = pixelmatch(
       img1.data, img2.data, diffImg.data, img1.width, img1.height, { threshold: 0.1 }
     );
+
     const diffRatio = diffPixels / (img1.width * img1.height);
     fs.writeFileSync(path.join(dir, "diff.png"), PNG.sync.write(diffImg));
+
     if (diffRatio > 0.02) {
       result.pass = false;
       result.details.push(`Screenshot differs by ${(diffRatio * 100).toFixed(1)}% of pixels — see diff.png`);

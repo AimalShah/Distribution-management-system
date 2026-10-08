@@ -9,9 +9,11 @@ contextBridge.exposeInMainWorld("electron", {
   ipc: {
     invoke: (channel: string, ...args: any[]) => {
       const validChannels = ["app:version", "app:quit"];
+
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);
       }
+
       throw new Error(`Invalid IPC channel: ${channel}`);
     },
   },

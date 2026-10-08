@@ -15,10 +15,10 @@
  * the oversell is refused, and the refusal writes nothing at all.
  *
  * The second point is the one that generalises. `createSale` runs five writes in
- * one transaction -- the sale, its lines, one guarded decrement per line, and one
- * ledger entry per line. The tests below force a failure *after* the first write
- * (a well-formed but unknown `x-user-id` trips the `InventoryLog.userId` foreign
- * key) and assert the tables came back clean. A mocked suite cannot express that
+ * one transaction -- one guarded decrement per line, one ledger entry per line,
+ * and then the sale with its lines. The test below forces a failure *after* the
+ * first writes (a `saleCode` already on file trips the invoice's unique index)
+ * and asserts the tables came back clean. A mocked suite cannot express that
  * assertion, because there is no such thing as a rolled-back mock.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -28,6 +28,7 @@ import {
   asUser,
   errorBody,
   hasDatabase,
+  orgOnly,
   prisma,
   request,
   seedTenants,
@@ -62,6 +63,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
         unitPrice: 10,
       },
     });
+
     if (qty > 0) {
       await prisma.inventory.create({
         data: {
@@ -72,6 +74,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
         },
       });
     }
+
     return product;
   };
 
@@ -86,9 +89,10 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
   const post = (body: Record<string, unknown>, userId: string | null = t.userId) => {
     const req = request(app).post("/api/sales");
+
     return (userId
       ? req.set(asUser(t.organizationId, userId))
-      : req.set(asOrg(t.organizationId))
+      : req.set(orgOnly(t.organizationId))
     ).send(body);
   };
 
@@ -167,6 +171,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     // proves the lines are summed, the second that sequential deduction still
     // produces two coherent ledger entries.
     const short = await stockedProduct(10);
+
     const refused = await post(
       form({
         items: [
@@ -175,6 +180,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
         ],
       })
     );
+
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ code: "INSUFFICIENT_STOCK" });
     expect(
@@ -182,6 +188,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     ).toBe(10);
 
     const enough = await stockedProduct(10);
+
     const ok = await post(
       form({
         items: [
@@ -190,12 +197,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
         ],
       })
     );
+
     expect(ok.status).toBe(201);
 
     const logs = await prisma.inventoryLog.findMany({
       where: { productId: enough.id },
       orderBy: { createdAt: "asc" },
     });
+
     // previousQty - quantity === newQty on each entry, and they chain.
     expect(logs.map((l) => [l.previousQty, l.quantity, l.newQty])).toEqual([
       [10, 6, 4],
@@ -204,33 +213,59 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
   });
 
   it("rolls back every write when a late step fails", async () => {
-    // `InventoryLog.userId` is a real foreign key and the route only checks that
-    // the header is *present*, not that the user exists. So the sale, its lines
-    // and the stock deduction are all written, and then the ledger insert trips
-    // the constraint. Legacy `addSaleInvoice` ran those as independent statements
-    // and would have left an invoice for stock that was never sold.
+    // The stock movements run *before* the invoice row, because a sale line
+    // records the lot its units were drawn from and the lot is only known once
+    // the deduction has taken it. The invoice insert is therefore the late step,
+    // and `Sale.saleCode` is a global unique index with no pre-check in front of
+    // it: reusing a code already on file lets the deduction and its ledger entry
+    // write first and then refuses the invoice itself.
+    //
+    // Legacy `addSaleInvoice` ran those as independent statements, so it would
+    // have left the invoice out and the stock sold. The assertion that matters is
+    // the second half: the rollback is observable in the tables, not just in the
+    // status code. Rows that differ from the moment before the call would be the
+    // bug this checkpoint is about, and only a real database can tell the
+    // difference.
+    const occupier = await stockedProduct(5);
     const product = await stockedProduct(20);
     const code = unique("SO");
 
+    // Occupy the code with a document whose lines do not touch `product`.
+    const first = await post(
+      form({ saleCode: code, items: [{ productId: occupier.id, quantity: 1, unitPrice: 10 }] })
+    );
+    expect(first.status).toBe(201);
+
+    const salesWithCode = await prisma.sale.count({ where: { saleCode: code } });
+    const qty = (
+      await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })
+    ).quantityOnHand;
+    const logs = await prisma.inventoryLog.count({ where: { productId: product.id } });
+
     const res = await post(
-      form({ saleCode: code, items: [{ productId: product.id, quantity: 7, unitPrice: 10 }] }),
-      "usr_does_not_exist"
+      form({ saleCode: code, items: [{ productId: product.id, quantity: 7, unitPrice: 10 }] })
     );
 
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject(errorBody.foreignKey);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject(errorBody.unique);
 
-    expect(await prisma.sale.findFirst({ where: { saleCode: code } })).toBeNull();
+    // Nothing the second document wrote survived: same invoice count, the stock
+    // still at the figure it was, and not one ledger row for the line it sold.
+    expect(await prisma.sale.count({ where: { saleCode: code } })).toBe(salesWithCode);
+    expect(salesWithCode).toBe(1);
     expect(
       (await prisma.inventory.findUniqueOrThrow({ where: { productId: product.id } })).quantityOnHand
-    ).toBe(20);
-    expect(await prisma.inventoryLog.findMany({ where: { reference: code } })).toEqual([]);
+    ).toBe(qty);
+    expect(qty).toBe(20);
+    expect(await prisma.inventoryLog.count({ where: { productId: product.id } })).toBe(logs);
+    expect(logs).toBe(0);
   });
 
   it("refuses another tenant's customer and product, leaving their data alone", async () => {
     const foreignCustomer = await post(
       form({ customerId: t.otherCustomerId, items: [{ productId: t.productId, quantity: 1, unitPrice: 1 }] })
     );
+
     expect(foreignCustomer.status).toBe(400);
     expect(foreignCustomer.body).toMatchObject({ code: "CUSTOMER_NOT_IN_ORGANIZATION" });
 
@@ -239,6 +274,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     const foreignProduct = await post(
       form({ items: [{ productId: t.otherProductId, quantity: 1, unitPrice: 1 }] })
     );
+
     expect(foreignProduct.status).toBe(400);
     expect(foreignProduct.body).toMatchObject({ code: "PRODUCT_NOT_IN_ORGANIZATION" });
     expect(
@@ -269,6 +305,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
         unitPrice: 1,
       },
     });
+
     await prisma.inventory.create({
       data: {
         productId: theirProduct.id,
@@ -320,9 +357,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     // any tenant could read another tenant's invoice by guessing its code. The
     // union of the two addressing schemes is kept; the scoping is new.
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 1, unitPrice: 10 }] })
     );
+
     const { id, saleCode } = created.body;
 
     for (const key of [id, saleCode]) {
@@ -352,6 +391,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
   it("sends the lines to the detail route and a count to the list", async () => {
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 1, unitPrice: 10 }] })
     );
@@ -364,12 +404,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     const detail = await request(app)
       .get(`/api/sales/${created.body.id}`)
       .set(asOrg(t.organizationId));
+
     expect(detail.body.items).toHaveLength(1);
     expect(detail.body.items[0].product).toBeTruthy();
   });
 
   it("refuses to re-point an invoice at another tenant's customer", async () => {
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 1, unitPrice: 10 }] })
     );
@@ -392,6 +434,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     // sale rows. Cancelling left that path too — it is a guarded endpoint now,
     // not a status the PUT can set for itself.
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 3, unitPrice: 10 }] })
     );
@@ -439,14 +482,17 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
   it("stamps the invoice, keeps its lines, and returns the stock", async () => {
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ items: [{ productId: product.id, quantity: 9, unitPrice: 10 }] })
     );
+
     const id = created.body.id;
 
     const res = await request(app)
       .delete(`/api/sales/${id}`)
       .set(asUser(t.organizationId, t.userId));
+
     expect(res.status, JSON.stringify(res.body)).toBe(200);
 
     // The row and its lines survive for audit; the stamp is what takes the
@@ -468,6 +514,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     const restored = await request(app)
       .post(`/api/sales/${id}/restore`)
       .set(asUser(t.organizationId, t.userId));
+
     expect(restored.status).toBe(200);
     expect(restored.body.deletedAt).toBeNull();
     expect(
@@ -484,12 +531,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     const mine = await request(app)
       .get(`/api/sales/customer/${t.customerId}`)
       .set(asOrg(t.organizationId));
+
     expect(mine.status).toBe(200);
     expect(mine.body.total).toBeGreaterThan(0);
 
     const theirs = await request(app)
       .get(`/api/sales/customer/${t.otherCustomerId}`)
       .set(asOrg(t.organizationId));
+
     expect(theirs.status).toBe(200);
     expect(theirs.body.total).toBe(0);
     expect(theirs.body.data).toEqual([]);
@@ -497,6 +546,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
 
   it("filters the list by status", async () => {
     const product = await stockedProduct(10);
+
     const created = await post(
       form({ status: "Pending", items: [{ productId: product.id, quantity: 1, unitPrice: 10 }] })
     );
@@ -504,6 +554,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2c — Sale / Invoice API", () => {
     const pending = await request(app)
       .get("/api/sales?status=Pending")
       .set(asOrg(t.organizationId));
+
     const completed = await request(app)
       .get("/api/sales?status=Completed")
       .set(asOrg(t.organizationId));

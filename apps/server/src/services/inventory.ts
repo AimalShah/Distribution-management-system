@@ -1,13 +1,15 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
-import type {
-  InventoryAdjustInput,
-  InventoryBulkImportRow,
-  InventoryCreateInput,
-  InventoryMovementValue,
-  InventorySettingsInput,
+import {
+  inventoryBulkImportRowSchema,
+  type InventoryAdjustInput,
+  type InventoryBulkImportRow,
+  type InventoryCreateInput,
+  type InventoryMovementValue,
+  type InventorySettingsInput,
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { applyStockMovement } from "./stock-movement";
 
 /**
  * The legacy `getInventory` embedded `logs: true`, so every adjustment ever made
@@ -28,6 +30,7 @@ const logInclude = {
 } satisfies Prisma.InventoryLogInclude;
 
 const INCREASES: InventoryMovementValue[] = ["IN", "RETURN"];
+
 const DECREASES: InventoryMovementValue[] = ["OUT", "DAMAGED", "EXPIRED"];
 
 /**
@@ -54,7 +57,9 @@ type MovementKind = "in" | "out" | "count";
  */
 const classifyMovement = (movementType: InventoryMovementValue): MovementKind => {
   if (INCREASES.includes(movementType)) return "in";
+
   if (DECREASES.includes(movementType)) return "out";
+
   if (movementType === "ADJUSTMENT") return "count";
 
   // TRANSFER: there is one `Inventory` row per product and no destination or
@@ -65,32 +70,6 @@ const classifyMovement = (movementType: InventoryMovementValue): MovementKind =>
     "UNSUPPORTED_MOVEMENT",
     { movementType }
   );
-};
-
-/**
- * The figure a log row records.
- *
- * A log's `quantity` is a **magnitude** for `IN`, `OUT`, `RETURN`, `DAMAGED` and
- * `EXPIRED` — the direction lives in `movementType`, so an `OUT` of 4 records
- * `quantity: 4, previousQty: 10, newQty: 6` and an `IN` of 4 records the same
- * `quantity: 4`. It is **signed** only for `ADJUSTMENT`, where it is the
- * difference a physical count found: `previousQty + quantity = newQty`.
- *
- * So a directional row satisfies `|previousQty - newQty| = quantity`, and only
- * the count row satisfies `previousQty + quantity = newQty`. Getting this
- * distinction wrong is not hypothetical: checkpoint 2m's report work found the
- * legacy basic inventory report summing this column and reporting the total as
- * a quantity, which counts a delivery and a dispatch of the same size as twice
- * the stock.
- */
-const loggedQuantityFor = (kind: MovementKind, previousQty: number, quantity: number) =>
-  kind === "count" ? quantity - previousQty : quantity;
-
-type MovementTarget = {
-  id: string;
-  productId: string;
-  organizationId: string;
-  quantityOnHand: number;
 };
 
 export async function getInventory({
@@ -119,10 +98,16 @@ export async function getInventory({
 }
 
 export async function getInventoryById(id: string, organizationId: string) {
-  return prisma.inventory.findFirst({
+  const inventory = await prisma.inventory.findFirst({
     where: { id, organizationId },
     include: inventoryInclude,
   });
+
+  if (!inventory) {
+    throw notFound("Inventory record not found", "INVENTORY_NOT_FOUND");
+  }
+
+  return inventory;
 }
 
 export async function getInventoryLogs({
@@ -141,8 +126,11 @@ export async function getInventoryLogs({
   // { organizationId }` on the log model would be rejected by Prisma.
   const where: Prisma.InventoryLogWhereInput = {
     product: { organizationId },
-    ...(productId ? { productId } : {}),
   };
+
+  if (productId) {
+    where.productId = productId;
+  }
 
   const [data, total] = await Promise.all([
     prisma.inventoryLog.findMany({
@@ -254,123 +242,38 @@ export async function adjustInventory(
   }
 
   return prisma.$transaction(async (tx) => {
-    /**
-     * Moves the stock and hands back the pair the ledger needs.
-     *
-     * The quantity is never computed from a read and written back. That pattern
-     * cannot hold under READ COMMITTED: with 10 on hand, a concurrent `IN 5` and
-     * `OUT 5` both read 10, then both write their own answer, so 20 units pass
-     * through the row and the two log entries describe movements that never
-     * happened against each other. Each direction below is instead a single
-     * statement the database evaluates against the row it is updating, so the
-     * quantity on hand and the log entry describing it can never disagree.
-     */
-    const applyMovement = async (
-      target: MovementTarget,
-      moveQuantity: number
-    ): Promise<{ previousQty: number; newQty: number }> => {
-      const scope = { id: target.id, organizationId: target.organizationId } as const;
-
-      if (kind === "in") {
-        const updated = await tx.inventory.update({
-          where: scope,
-          data: { quantityOnHand: { increment: moveQuantity } },
-          select: { quantityOnHand: true },
-        });
-        return {
-          previousQty: updated.quantityOnHand - moveQuantity,
-          newQty: updated.quantityOnHand,
-        };
-      }
-
-      if (kind === "out") {
-        // The `gte` guard and the decrement are the same statement, so only one
-        // transaction can claim the units. `count === 0` means this caller did
-        // not get them, and the follow-up read is what tells a genuine shortage
-        // apart from a row a concurrent transaction deleted.
-        const claimed = await tx.inventory.updateMany({
-          where: { ...scope, quantityOnHand: { gte: moveQuantity } },
-          data: { quantityOnHand: { decrement: moveQuantity } },
-        });
-
-        if (claimed.count === 0) {
-          const current = await tx.inventory.findFirst({
-            where: scope,
-            select: { quantityOnHand: true },
-          });
-
-          if (!current) {
-            throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-              inventoryId: target.id,
-            });
-          }
-
-          // Refuse rather than clamp. The legacy service wrote
-          // `Math.max(0, newQty)`, so writing off 10 against 5 in stock recorded
-          // a movement of 10 for a change of 5 and the shortfall simply
-          // disappeared.
-          throw conflict("Not enough stock for this movement", "INSUFFICIENT_STOCK", {
-            available: current.quantityOnHand,
-            requested: moveQuantity,
-          });
-        }
-
-        // `updateMany` returns a count rather than a row, so the opening figure
-        // is read back off the row as it stands after the write. That keeps
-        // `previousQty - quantity = newQty` true by construction even when
-        // another transaction committed between the scope read and this write.
-        const current = await tx.inventory.findFirstOrThrow({
-          where: scope,
-          select: { quantityOnHand: true },
-        });
-
-        return {
-          previousQty: current.quantityOnHand + moveQuantity,
-          newQty: current.quantityOnHand,
-        };
-      }
-
-      // A count is a physical figure, so the caller's number is the answer
-      // whatever the row said a moment ago. The opening figure is still read,
-      // because it is what the log records as the change the count made. Two
-      // operators counting the same shelf at the same moment is a conflict in
-      // the warehouse rather than an invariant in the database, so the last
-      // count wins; the alternative is a lock this endpoint does not otherwise
-      // need.
-      const updated = await tx.inventory.update({
-        where: scope,
-        data: { quantityOnHand: moveQuantity },
-        select: { quantityOnHand: true },
-      });
-
-      return { previousQty: target.quantityOnHand, newQty: updated.quantityOnHand };
-    };
-
     // Scoped to the organization. The legacy `findUnique({ where: { productId } })`
     // had no tenant filter, so a caller could adjust another tenant's stock by
     // naming a product id they do not own.
     const target = await tx.inventory.findFirst({
       where: { id: data.inventoryId, organizationId },
-      select: { id: true, productId: true, organizationId: true, quantityOnHand: true },
+      select: { id: true, productId: true },
     });
 
     if (!target) {
       throw notFound("Inventory record not found", "INVENTORY_NOT_FOUND");
     }
 
-    const { previousQty, newQty } = await applyMovement(target, quantity);
-
-    await tx.inventoryLog.create({
-      data: {
-        inventoryId: target.id,
-        productId: target.productId,
-        userId,
-        movementType,
-        quantity: loggedQuantityFor(kind, previousQty, quantity),
-        previousQty,
-        newQty,
-        reason: data.reason,
-      },
+    // This caller's policy stops at the lookup: the movement type is one this
+    // model supports, the quantity is legal, the id resolves in this
+    // organization. The guarded write, the ledger row and the batch
+    // consequences are one movement, so the module keeps them together.
+    await applyStockMovement({
+      tx,
+      organizationId,
+      userId,
+      productId: target.productId,
+      direction: kind,
+      quantity,
+      movementType,
+      reason: data.reason,
+      // Consulted only for the decreasing direction: an increase or a count
+      // never reaches the guard.
+      refusal: (available) =>
+        conflict("Not enough stock for this movement", "INSUFFICIENT_STOCK", {
+          available,
+          requested: quantity,
+        }),
     });
 
     return tx.inventory.findFirstOrThrow({
@@ -415,42 +318,57 @@ export async function bulkImportInventory(
   const errors: BulkImportError[] = [];
   const validCandidates: { rowNum: number; data: InventoryBulkImportRow }[] = [];
 
-  // 1. Initial field validation per row
+  // 1. Initial field validation per row. `productCode` is decoded by the shared
+  // row schema instead of being narrowed with a runtime check: the rows arrive
+  // from the route's payload parsing, and the schema is the owner of what
+  // counts as a code.
   rows.forEach((row, idx) => {
     const rowNum = idx + 1;
-    if (!row.productCode || typeof row.productCode !== "string" || !row.productCode.trim()) {
+    const parsedCode = inventoryBulkImportRowSchema.shape.productCode.safeParse(
+      row.productCode
+    );
+
+    if (!parsedCode.success) {
       errors.push({ row: rowNum, error: "Missing or invalid productCode" });
+
       return;
     }
+
     const qty = Number(row.quantityOnHand);
+
     if (isNaN(qty) || !Number.isInteger(qty) || qty < 0) {
       errors.push({
         row: rowNum,
-        productCode: row.productCode,
+        productCode: parsedCode.data,
         error: "quantityOnHand must be a non-negative integer",
       });
+
       return;
     }
+
     if (
       row.reorderLevel !== undefined &&
       (isNaN(Number(row.reorderLevel)) || !Number.isInteger(Number(row.reorderLevel)) || Number(row.reorderLevel) < 0)
     ) {
       errors.push({
         row: rowNum,
-        productCode: row.productCode,
+        productCode: parsedCode.data,
         error: "reorderLevel must be a non-negative integer",
       });
+
       return;
     }
+
     if (
       row.maxStockLevel !== undefined &&
       (isNaN(Number(row.maxStockLevel)) || !Number.isInteger(Number(row.maxStockLevel)) || Number(row.maxStockLevel) < 0)
     ) {
       errors.push({
         row: rowNum,
-        productCode: row.productCode,
+        productCode: parsedCode.data,
         error: "maxStockLevel must be a non-negative integer",
       });
+
       return;
     }
 
@@ -458,7 +376,7 @@ export async function bulkImportInventory(
       rowNum,
       data: {
         ...row,
-        productCode: row.productCode.trim(),
+        productCode: parsedCode.data,
         quantityOnHand: qty,
         reorderLevel: row.reorderLevel !== undefined ? Number(row.reorderLevel) : undefined,
         maxStockLevel: row.maxStockLevel !== undefined ? Number(row.maxStockLevel) : undefined,
@@ -472,6 +390,7 @@ export async function bulkImportInventory(
 
   // 2. Resolve products in organization
   const productCodes = Array.from(new Set(validCandidates.map((c) => c.data.productCode)));
+
   const products = await prisma.product.findMany({
     where: {
       organizationId,
@@ -481,6 +400,7 @@ export async function bulkImportInventory(
   });
 
   const productMap = new Map<string, { id: string; productCode: string; name: string }>();
+
   for (const p of products) {
     productMap.set(p.productCode, p);
   }
@@ -493,6 +413,7 @@ export async function bulkImportInventory(
 
   for (const item of validCandidates) {
     const p = productMap.get(item.data.productCode);
+
     if (!p) {
       errors.push({
         row: item.rowNum,
@@ -519,14 +440,23 @@ export async function bulkImportInventory(
       });
 
       if (existing) {
+        const updateData: Prisma.InventoryUpdateInput = {
+          quantityOnHand: item.data.quantityOnHand,
+        };
+
+        if (item.data.reorderLevel !== undefined) {
+          updateData.reorderLevel = item.data.reorderLevel;
+        }
+
+        if (item.data.maxStockLevel !== undefined) {
+          updateData.maxStockLevel = item.data.maxStockLevel;
+        }
+
         await tx.inventory.update({
           where: { id: existing.id },
-          data: {
-            quantityOnHand: item.data.quantityOnHand,
-            ...(item.data.reorderLevel !== undefined ? { reorderLevel: item.data.reorderLevel } : {}),
-            ...(item.data.maxStockLevel !== undefined ? { maxStockLevel: item.data.maxStockLevel } : {}),
-          },
+          data: updateData,
         });
+
         updated++;
       } else {
         await tx.inventory.create({

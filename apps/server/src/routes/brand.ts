@@ -4,7 +4,7 @@ import {
   BrandUpdateSchema,
   brandListQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, notFound } from "../http";
+import { asyncHandler } from "../http";
 import {
   addBrand,
   getBrandById,
@@ -19,10 +19,12 @@ brandRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = brandListQuerySchema.parse(req.query);
+
     const result = await getBrands({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -31,7 +33,7 @@ brandRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const brand = await getBrandById(req.params.id, req.auth.organizationId);
-    if (!brand) throw notFound("Brand not found", "BRAND_NOT_FOUND");
+
     res.json(brand);
   })
 );
@@ -52,11 +54,13 @@ brandRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = BrandUpdateSchema.parse(req.body);
+
     const brand = await updateBrand(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(brand);
   })
 );

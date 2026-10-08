@@ -30,6 +30,7 @@ const WINDOW = {
   startDate: "2026-01-01T00:00:00.000Z",
   endDate: "2026-12-31T23:59:59.999Z",
 };
+
 const window = `?startDate=${WINDOW.startDate}&endDate=${WINDOW.endDate}`;
 
 const at = (iso: string) => new Date(iso);
@@ -178,6 +179,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
       },
       select: { id: true },
     });
+
     return row.id;
   };
 
@@ -196,6 +198,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
         brandId: orgId === t.organizationId ? t.brandId : t.otherBrandId,
       },
     });
+
     return id;
   };
 
@@ -229,20 +232,25 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
         createdAt: saleDate,
       },
     });
+
     for (const item of items) {
       await prisma.saleItem.create({
         data: { id: `sit_${unique("item")}`, saleId: id, ...item },
       });
     }
+
     return id;
   };
 
   const basic = (orgId: string, query = "") =>
     request(app).get(`/api/reports/sales/basic${query}`).set(asOrg(orgId));
+
   const byCustomer = (orgId: string, query = "") =>
     request(app).get(`/api/reports/sales/by-customer${query}`).set(asOrg(orgId));
+
   const byProduct = (orgId: string, query = "") =>
     request(app).get(`/api/reports/sales/by-product${query}`).set(asOrg(orgId));
+
   const full = (orgId: string, query = "") =>
     request(app).get(`/api/reports/sales/full${query}`).set(asOrg(orgId));
 
@@ -301,6 +309,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
     const totals = res.body.dailyTotals.map(
       (d: { date: string; total: number }) => [d.date, d.total]
     );
+
     expect(totals.map(([date]) => date)).toEqual([
       "2026-02-14",
       "2026-03-03",
@@ -320,6 +329,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
         s.totalAmount,
       ])
     );
+
     expect(Object.keys(byStatus)).toEqual(["Completed", "Pending"]);
     expect(byStatus.Pending).toBeCloseTo(200, 6);
     expect(byStatus.Completed).toBeCloseTo(405.001, 6);
@@ -356,6 +366,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
     const unspecified = res.body.byStatus.find(
       (s: { status: string }) => s.status === "Unspecified"
     );
+
     expect(unspecified).toBeDefined();
     expect(unspecified.orders).toBe(1);
     expect(unspecified.totalAmount).toBeCloseTo(60, 6);
@@ -411,6 +422,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2o — Sales Reports API", () => {
     const dormant = res.body.find(
       (r: { customerId: string }) => r.customerId === customers.dormant
     );
+
     expect(dormant).toMatchObject({ isActive: false, orders: 1 });
     expect(dormant.totalAmount).toBeCloseTo(DRIFTING_HEADER, 6);
   });

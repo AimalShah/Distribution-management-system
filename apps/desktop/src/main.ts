@@ -15,6 +15,7 @@ function createWindow() {
   });
 
   const isDev = process.env.NODE_ENV === "development";
+
   if (isDev) {
     mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();

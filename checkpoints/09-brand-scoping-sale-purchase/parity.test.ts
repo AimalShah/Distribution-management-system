@@ -45,6 +45,7 @@ const root = path.resolve(__dirname, "../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -56,7 +57,9 @@ describe("Checkpoint 9 — Brand-Scoping (Contract & Static)", () => {
       endDate: "2026-12-31",
       brandId: "brand_abc_123",
     });
+
     expect(rangeResult.success).toBe(true);
+
     if (rangeResult.success) {
       expect(rangeResult.data.brandId).toBe("brand_abc_123");
     }
@@ -134,18 +137,23 @@ describe("Checkpoint 9 — Brand-Scoping (Live DB & API)", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Electronics", organizationId: orgId },
     });
+
     const brand1 = await prisma.brand.create({
       data: { name: "Sony", organizationId: orgId },
     });
+
     const brand2 = await prisma.brand.create({
       data: { name: "Samsung", organizationId: orgId },
     });
+
     const cust = await prisma.customer.create({
       data: { name: "Tech Store", organizationId: orgId },
     });
+
     const supp = await prisma.supplier.create({
       data: {
         organizationId: orgId,
@@ -267,6 +275,7 @@ describe("Checkpoint 9 — Brand-Scoping (Live DB & API)", () => {
       .get("/api/reports/sales/by-brand")
       .set(ORGANIZATION_HEADER, orgId)
       .set(USER_HEADER, userId);
+
     expect(httpBrandSales.status).toBe(200);
     expect(httpBrandSales.body.some((b: any) => b.brandId === brand1.id)).toBe(true);
 
@@ -274,6 +283,7 @@ describe("Checkpoint 9 — Brand-Scoping (Live DB & API)", () => {
       .get("/api/reports/purchase/by-brand")
       .set(ORGANIZATION_HEADER, orgId)
       .set(USER_HEADER, userId);
+
     expect(httpBrandPurch.status).toBe(200);
     expect(httpBrandPurch.body.some((b: any) => b.brandId === brand2.id)).toBe(true);
 

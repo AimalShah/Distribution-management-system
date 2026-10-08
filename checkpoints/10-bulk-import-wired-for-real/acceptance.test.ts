@@ -20,10 +20,15 @@ import { bulkImportInventory } from "../../apps/server/src/services/inventory";
 
 // Mock database for service/route assertions
 const mockFindManyProducts = vi.fn();
+
 const mockFindManyInventory = vi.fn();
+
 const mockFindFirstInventory = vi.fn();
+
 const mockCreateInventory = vi.fn();
+
 const mockUpdateInventory = vi.fn();
+
 const mockTransaction = vi.fn(async (cb: any) =>
   cb({
     inventory: {
@@ -132,6 +137,7 @@ describe("Checkpoint 10 — Bulk Import", () => {
       reorderLevel: "invalid",
       maxStockLevel: 5,
     };
+
     const validation = validateInventoryRow(invalidRow);
     expect(validation.valid).toBe(false);
     expect(validation.errors.length).toBeGreaterThan(0);
@@ -183,6 +189,7 @@ describe("Checkpoint 10 — Bulk Import", () => {
       productCode: `BULK-${String(i + 1).padStart(4, "0")}`,
       name: `Bulk Product ${i + 1}`,
     }));
+
     mockFindManyProducts.mockResolvedValue(mockProducts);
     mockFindFirstInventory.mockResolvedValue(null);
     mockCreateInventory.mockResolvedValue({ id: "inv_created" });
@@ -213,6 +220,7 @@ describe("Checkpoint 10 — Bulk Import", () => {
       maxStockLevel: 50,
       quantityReserved: 0,
     };
+
     expect(InventoryCreateSchema.safeParse(validSingle).success).toBe(true);
 
     // Negative stock rejected by real schema
@@ -220,6 +228,7 @@ describe("Checkpoint 10 — Bulk Import", () => {
       productId: "prod_123",
       quantityOnHand: -5,
     };
+
     expect(InventoryCreateSchema.safeParse(invalidSingle).success).toBe(false);
 
     // inventoryBulkImportRowSchema requires productCode and non-negative quantityOnHand
@@ -229,12 +238,14 @@ describe("Checkpoint 10 — Bulk Import", () => {
       quantityOnHand: 15,
       reorderLevel: 2,
     };
+
     expect(inventoryBulkImportRowSchema.safeParse(validImportRow).success).toBe(true);
 
     const invalidImportRow = {
       productCode: "",
       quantityOnHand: "not-a-number",
     };
+
     expect(inventoryBulkImportRowSchema.safeParse(invalidImportRow).success).toBe(false);
 
     // inventoryBulkImportSchema requires at least 1 row

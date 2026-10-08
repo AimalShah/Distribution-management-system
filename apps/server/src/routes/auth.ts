@@ -39,6 +39,7 @@ authRouter.get(
   "/me",
   asyncHandler(async (req, res) => {
     const claims = verifySessionToken(bearerToken(req.header("authorization")));
+
     if (!claims) {
       throw unauthorized("Missing or expired session token", "INVALID_SESSION");
     }

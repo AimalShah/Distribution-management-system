@@ -1,7 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { BrandInput, BrandUpdateInput } from "@dms/shared";
-import { conflict, unprocessable } from "../http";
+import { conflict, notFound, unprocessable } from "../http";
 
 // The legacy list returned bare brand rows and nothing embeds a brand's products
 // today, but a brand's product count is the one thing a caller needs before
@@ -29,9 +29,15 @@ export async function getBrands({
 }: BrandListArgs) {
   const where: Prisma.BrandWhereInput = {
     organizationId,
-    ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
-    ...(categoryId ? { categoryId } : {}),
   };
+
+  if (search) {
+    where.name = { contains: search, mode: "insensitive" };
+  }
+
+  if (categoryId) {
+    where.categoryId = categoryId;
+  }
 
   const [data, total] = await Promise.all([
     prisma.brand.findMany({
@@ -50,7 +56,13 @@ export async function getBrands({
 // The legacy `getBrandById` used `findUnique({ where: { id } })` with no tenant
 // filter, so any authenticated member could read another tenant's brand by id.
 export async function getBrandById(id: string, organizationId: string) {
-  return prisma.brand.findFirst({ where: { id, organizationId } });
+  const brand = await prisma.brand.findFirst({ where: { id, organizationId } });
+
+  if (!brand) {
+    throw notFound("Brand not found", "BRAND_NOT_FOUND");
+  }
+
+  return brand;
 }
 
 /**

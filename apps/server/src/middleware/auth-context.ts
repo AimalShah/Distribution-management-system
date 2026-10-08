@@ -2,10 +2,15 @@ import type { RequestHandler } from "express";
 import { badRequest } from "../http/errors";
 
 export const ORGANIZATION_HEADER = "x-organization-id";
+
 export const ORGANIZATION_ENV_VAR = "DMS_ORGANIZATION_ID";
+
 export const USER_HEADER = "x-user-id";
+
 export const USER_ENV_VAR = "DMS_USER_ID";
+
 export const SESSION_HEADER = "x-session-id";
+
 export const SESSION_ENV_VAR = "DMS_SESSION_ID";
 
 declare global {
@@ -58,6 +63,7 @@ export const authContext: RequestHandler = (req, _res, next) => {
         "ORGANIZATION_REQUIRED"
       )
     );
+
     return;
   }
 
@@ -109,6 +115,13 @@ export const bootstrapAuthContext: RequestHandler = (req, _res, next) => {
  * cannot work without are `undefined` rather than present, and a route that
  * needs one has to say so.
  *
+ * Which handlers require user attribution is decided here, not at each handler:
+ * a handler that writes a row whose `userId` is required (`InventoryLog`,
+ * stock movements, payments) states that fact by calling this one assertion,
+ * and its own comment says why that handler is one of them. The wording and the
+ * 400 USER_REQUIRED answer belong to the helper, so there is no second copy of
+ * either to drift.
+ *
  * These live here, next to the middleware that fills `req.auth` and to the
  * Checkpoint 3 note about replacing it, because they are the same concern read
  * the other way around. They are assertions about request context, not about
@@ -121,6 +134,7 @@ export const requireUserId = (userId?: string): string => {
       "USER_REQUIRED"
     );
   }
+
   return userId;
 };
 
@@ -131,6 +145,7 @@ export const requireSessionId = (sessionId?: string): string => {
       "SESSION_REQUIRED"
     );
   }
+
   return sessionId;
 };
 

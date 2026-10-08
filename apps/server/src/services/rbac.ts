@@ -3,15 +3,15 @@ import {
   can,
   DEFAULT_ROLES,
   type CreateRoleInput,
-  type PermissionItem,
   type PermissionResource,
   type UpdateRoleInput,
   type UpdateRolePermissionsInput,
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { MEMBER_ROLES, permissionsForRole } from "../roles";
 
 export async function seedDefaultRoles(organizationId: string) {
-  for (const [key, def] of Object.entries(DEFAULT_ROLES)) {
+  for (const def of Object.values(DEFAULT_ROLES)) {
     const existing = await prisma.role.findFirst({
       where: { organizationId, name: def.name },
     });
@@ -35,6 +35,16 @@ export async function seedDefaultRoles(organizationId: string) {
   }
 }
 
+/**
+ * Everything one member may do in one tenant, resolved in the order the answer
+ * can change: no membership at all is nothing, an owner outranks any custom
+ * role, a `customRole` speaks for itself, and a bare `Member.role` string is
+ * looked up in `roles.ts`.
+ *
+ * The empty list is the important case. It is what a caller who is not in this
+ * organization gets, so the guard built on `checkPermission` denies rather than
+ * falls back to a default set.
+ */
 export async function getMemberPermissions(
   userId: string,
   organizationId: string
@@ -52,41 +62,17 @@ export async function getMemberPermissions(
     return [];
   }
 
-  // Owner always has full access
-  if (member.role === "owner") {
-    return [{ resource: "*", action: "*" }];
-  }
-
-  // If assigned to a custom/system role
-  if (member.customRole) {
+  // A custom role narrows everyone but an owner. The precedence is ownership
+  // first: assigning a role to an owner has to leave the access ownership
+  // already grants alone, and only `roles.ts` says what that access is.
+  if (member.customRole && member.role !== MEMBER_ROLES.owner) {
     return member.customRole.permissions.map((p) => ({
       resource: p.resource,
       action: p.action,
     }));
   }
 
-  // Fallback for role strings
-  const roleName = member.role.toLowerCase();
-  if (roleName === "admin" || roleName === "adminrole") {
-    return DEFAULT_ROLES.Admin.permissions;
-  }
-  if (roleName === "sales") {
-    return DEFAULT_ROLES.Sales.permissions;
-  }
-  if (roleName.includes("inventory")) {
-    return DEFAULT_ROLES["Inventory Staff"].permissions;
-  }
-  if (roleName === "manager") {
-    return DEFAULT_ROLES.Manager.permissions;
-  }
-
-  // Default member view permissions
-  return [
-    { resource: "products", action: "view" },
-    { resource: "categories", action: "view" },
-    { resource: "brands", action: "view" },
-    { resource: "inventory", action: "view" },
-  ];
+  return [...permissionsForRole(member.role)];
 }
 
 export async function checkPermission(
@@ -96,6 +82,7 @@ export async function checkPermission(
   action: string
 ): Promise<boolean> {
   const permissions = await getMemberPermissions(userId, organizationId);
+
   return can(permissions, resource, action);
 }
 
@@ -178,6 +165,7 @@ export async function updateRole(id: string, organizationId: string, data: Updat
     const duplicate = await prisma.role.findFirst({
       where: { organizationId, name: data.name, id: { not: id } },
     });
+
     if (duplicate) {
       throw conflict("A role with this name already exists", "ROLE_ALREADY_EXISTS");
     }
@@ -219,6 +207,7 @@ export async function updateRolePermissions(
 
   return prisma.$transaction(async (tx) => {
     await tx.rolePermission.deleteMany({ where: { roleId: id } });
+
     if (data.permissions.length > 0) {
       await tx.rolePermission.createMany({
         data: data.permissions.map((p) => ({

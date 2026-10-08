@@ -38,6 +38,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
   });
 
   const sent: Email[] = [];
+
   const verifyingApp = createApp({
     authMode: "session",
     auth: createAuth({
@@ -54,6 +55,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
   const newEmail = (label: string) => {
     const email = `${unique(label)}@example.test`.toLowerCase();
     emails.push(email);
+
     return email;
   };
 
@@ -62,10 +64,13 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
   /** Sign up and return the session token better-auth issued. */
   async function signUp(label: string): Promise<{ email: string; token: string; userId: string }> {
     const email = newEmail(label);
+
     const res = await request(app)
       .post("/api/auth/sign-up/email")
       .send({ name: `Auth ${label}`, email, password: PASSWORD });
+
     expect(res.status).toBe(200);
+
     return { email, token: res.body.token, userId: res.body.user.id };
   }
 
@@ -74,8 +79,10 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       .post("/api/auth/organization/create")
       .set(bearer(token))
       .send({ name, slug: unique("slug").toLowerCase() });
+
     expect(res.status).toBe(200);
     organizationIds.push(res.body.id);
+
     return res.body.id;
   }
 
@@ -99,6 +106,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
   describe("email and password", () => {
     it("POST /api/auth/sign-up/email creates the user and stores only a hash", async () => {
       const email = newEmail("signup");
+
       const res = await request(app)
         .post("/api/auth/sign-up/email")
         .send({ name: "Test User", email, password: PASSWORD });
@@ -109,6 +117,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       const account = await prisma.account.findFirstOrThrow({
         where: { user: { email }, providerId: "credential" },
       });
+
       expect(account.password).toBeTruthy();
       expect(account.password).not.toContain(PASSWORD);
     });
@@ -125,6 +134,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
 
     it("ignores a client supplied organizationId at sign-up", async () => {
       const email = newEmail("forged");
+
       const res = await request(app)
         .post("/api/auth/sign-up/email")
         .send({ name: "Forger", email, password: PASSWORD, organizationId: "org_someone_else" });
@@ -173,9 +183,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       await request(app)
         .post("/api/auth/sign-up/email")
         .send({ name: "Cookie", email, password: PASSWORD });
+
       const signIn = await request(app)
         .post("/api/auth/sign-in/email")
         .send({ email, password: PASSWORD });
+
       const cookies = ([] as string[]).concat(signIn.headers["set-cookie"] ?? []);
       expect(cookies.some((c) => c.includes("session_token"))).toBe(true);
 
@@ -277,6 +289,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       const membership = await prisma.member.findUniqueOrThrow({
         where: { organizationId_userId: { organizationId, userId } },
       });
+
       expect(membership.role).toBe("owner");
       const session = await prisma.session.findFirstOrThrow({ where: { token } });
       expect(session.activeOrganizationId).toBe(organizationId);
@@ -285,6 +298,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
         .post("/api/categories")
         .set(bearer(token))
         .send({ name: unique("Beverages") });
+
       expect(res.status).toBe(201);
       const category = await prisma.category.findUniqueOrThrow({ where: { id: res.body.id } });
       expect(category.organizationId).toBe(organizationId);
@@ -296,12 +310,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       const second = await createOrganization(token, "Second");
 
       expect((await setActive(token, first)).status).toBe(200);
+
       const inFirst = await request(app)
         .post("/api/categories")
         .set(bearer(token))
         .send({ name: unique("First Category") });
 
       expect((await setActive(token, second)).status).toBe(200);
+
       const inSecond = await request(app)
         .post("/api/categories")
         .set(bearer(token))
@@ -358,14 +374,17 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
         .get("/api/auth/admin/list-users")
         .query({ searchField: "email", searchValue: admin.email, searchOperator: "contains" })
         .set(bearer(admin.token));
+
       expect(list.status).toBe(200);
       expect(list.body.users.map((u: { id: string }) => u.id)).toContain(admin.userId);
 
       const email = newEmail("staff");
+
       const created = await request(app)
         .post("/api/auth/admin/create-user")
         .set(bearer(admin.token))
         .send({ email, password: PASSWORD, name: "Staff", role: "user" });
+
       expect(created.status).toBe(200);
       expect(await prisma.user.count({ where: { email } })).toBe(1);
 
@@ -373,6 +392,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
         .post("/api/auth/admin/remove-user")
         .set(bearer(admin.token))
         .send({ userId: created.body.user.id });
+
       expect(removed.status).toBe(200);
       expect(await prisma.user.count({ where: { email } })).toBe(0);
     });
@@ -381,9 +401,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
   describe("email verification", () => {
     it("blocks sign-in until the emailed link is followed", async () => {
       const email = newEmail("verify");
+
       const signUpRes = await request(verifyingApp)
         .post("/api/auth/sign-up/email")
         .send({ name: "Verify", email, password: PASSWORD });
+
       expect(signUpRes.status).toBe(200);
 
       const message = sent.find((m) => m.to === email);
@@ -392,6 +414,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       const blocked = await request(verifyingApp)
         .post("/api/auth/sign-in/email")
         .send({ email, password: PASSWORD });
+
       expect(blocked.status).toBe(403);
 
       const url = new URL(/https?:\/\/\S+/.exec(message!.html)![0]);
@@ -401,6 +424,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
       const allowed = await request(verifyingApp)
         .post("/api/auth/sign-in/email")
         .send({ email, password: PASSWORD });
+
       expect(allowed.status).toBe(200);
     });
   });

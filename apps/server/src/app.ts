@@ -36,6 +36,7 @@ export function createApp(options: AppOptions = {}): Express {
   const auth = options.auth ?? createAuth();
 
   const strict = authMode === "session" ? sessionAuthContext(auth) : authContext;
+
   const bootstrap =
     authMode === "session" ? sessionBootstrapAuthContext(auth) : bootstrapAuthContext;
 
@@ -48,8 +49,10 @@ export function createApp(options: AppOptions = {}): Express {
       origin(origin, callback) {
         if (!origin || allowedOrigins.has(origin)) {
           callback(null, true);
+
           return;
         }
+
         callback(null, false);
       },
       // The session cookie only reaches a cross-origin API if the response

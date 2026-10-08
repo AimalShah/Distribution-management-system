@@ -84,6 +84,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
       .post("/api/brands")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -103,12 +104,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
     const mine = await prisma.category.create({
       data: { name: unique("Category"), organizationId: t.organizationId },
     });
+
     const name = "Twin " + unique("");
 
     const first = await request(app)
       .post("/api/brands")
       .set(asOrg(t.organizationId))
       .send(form({ name }));
+
     expect(first.status).toBe(201);
 
     // Same tenant, different category.
@@ -116,6 +119,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
       .post("/api/brands")
       .set(asOrg(t.organizationId))
       .send(form({ name, categoryId: mine.id }));
+
     expect(second.status).toBe(201);
 
     // Same tenant, same category.
@@ -171,6 +175,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
       .post("/api/brands")
       .set(asOrg(t.organizationId))
       .send(form());
+
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -187,12 +192,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
     const filtered = await request(app)
       .get(`/api/brands?categoryId=${t.categoryId}`)
       .set(asOrg(t.organizationId));
+
     expect(filtered.status).toBe(200);
     expect(filtered.body.total).toBeGreaterThan(0);
 
     const empty = await request(app)
       .get("/api/brands?categoryId=")
       .set(asOrg(t.organizationId));
+
     expect(empty.status).toBe(400);
   });
 
@@ -201,6 +208,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2i — Brand API", () => {
       const req = request(app)[verb](`/api/brands/${t.otherBrandId}`).set(
         asOrg(t.organizationId)
       );
+
       const res = await (verb === "put" ? req.send({ name: "Hijacked" }) : req);
       expect(res.status).toBe(404);
     }

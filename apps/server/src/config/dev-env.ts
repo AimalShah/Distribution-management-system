@@ -14,9 +14,11 @@ function load(file: string): void {
 
   for (const line of fs.readFileSync(file, "utf-8").split(/\r?\n/)) {
     const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+
     if (!match) continue;
 
     const value = match[2].replace(/^["']|["']$/g, "").trim();
+
     if (value && process.env[match[1]] === undefined) {
       process.env[match[1]] = value;
     }
@@ -34,6 +36,7 @@ function workspaceRoot(start: string): string | undefined {
     if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
 
     const parent = path.dirname(dir);
+
     if (parent === dir) return undefined;
     dir = parent;
   }
@@ -63,6 +66,7 @@ function workspaceRoot(start: string): string | undefined {
  * invisible to them. `index.ts` is the process entry and the only importer.
  */
 const root = workspaceRoot(process.cwd());
+
 if (root) {
   load(path.join(root, ".env"));
   load(path.join(root, "apps", "server", ".env"));

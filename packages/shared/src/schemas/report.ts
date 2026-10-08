@@ -63,26 +63,43 @@ export const reportExpiryQuerySchema = reportRangeQuerySchema.extend({
 });
 
 export const inventoryBasicQuerySchema = reportRangeQuerySchema;
+
 export const inventoryMovementsQuerySchema = reportRangeQuerySchema;
+
 export const inventoryLowStockQuerySchema = reportRangeQuerySchema;
+
 export const inventoryStockValuationQuerySchema = reportRangeQuerySchema;
+
 export const inventoryExpiryQuerySchema = reportExpiryQuerySchema;
+
 export const inventoryFullQuerySchema = reportExpiryQuerySchema;
 
 export const purchaseBasicQuerySchema = reportRangeQuerySchema;
+
 export const purchaseBySupplierQuerySchema = reportRangeQuerySchema;
+
 export const purchaseByProductQuerySchema = reportRangeQuerySchema;
+
 export const purchaseByBrandQuerySchema = reportRangeQuerySchema;
+
 export const purchaseFullQuerySchema = reportRangeQuerySchema;
 
 export const salesBasicQuerySchema = reportRangeQuerySchema;
+
 export const salesByCustomerQuerySchema = reportRangeQuerySchema;
+
 export const salesByProductQuerySchema = reportRangeQuerySchema;
+
 export const salesByBrandQuerySchema = reportRangeQuerySchema;
+
 export const salesFullQuerySchema = reportRangeQuerySchema;
 
 export type ReportRangeQuery = z.output<typeof reportRangeQuerySchema>;
+
 export type InventoryReportQuery = z.output<typeof reportRangeQuerySchema>;
+
 export type InventoryExpiryQuery = z.output<typeof reportExpiryQuerySchema>;
+
 export type PurchaseReportQuery = z.output<typeof reportRangeQuerySchema>;
+
 export type SalesReportQuery = z.output<typeof reportRangeQuerySchema>;

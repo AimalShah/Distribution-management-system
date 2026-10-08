@@ -6,7 +6,7 @@ import {
 import { asyncHandler, notFound } from "../http";
 import {
   createOrganization,
-  getActiveOrganization,
+  findActiveOrganization,
   getUserOrganizations,
   setActiveOrganization,
 } from "../services/organization";
@@ -44,7 +44,7 @@ organizationRouter.get(
     const userId = requireUserId(req.auth.userId);
     const sessionId = requireSessionId(req.auth.sessionId);
 
-    const organization = await getActiveOrganization(userId, sessionId);
+    const organization = await findActiveOrganization(userId, sessionId);
 
     if (!organization) {
       throw notFound(

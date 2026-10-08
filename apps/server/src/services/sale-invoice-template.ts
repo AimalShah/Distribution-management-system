@@ -1,3 +1,5 @@
+import { calculateSaleBreakdown } from "@dms/shared";
+
 export interface SaleInvoiceRenderData {
   saleCode: string;
   saleDate: Date | string;
@@ -50,14 +52,33 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
   const customerAddress = sale.customer?.address || "";
 
   const items = sale.items || [];
-  const subtotal = items.reduce(
-    (sum, it) => sum + it.quantity * it.unitPrice,
-    0
-  );
-  const tax =
-    sale.taxAmount ||
-    (sale.cgstAmount || 0) + (sale.sgstAmount || 0) + (sale.igstAmount || 0);
-  const discount = sale.discount || 0;
+
+  // The totals block prints the same module the write path called, fed with
+  // what is stored on the document: line subtotals and splits pass through
+  // untouched, and the header's own figures win — nothing here re-derives
+  // arithmetic of its own.
+  const money = calculateSaleBreakdown({
+    items: items.map((it) => ({
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      subtotal: it.totalPrice ?? it.quantity * it.unitPrice,
+      cgstRate: it.cgstRate ?? 0,
+      sgstRate: it.sgstRate ?? 0,
+      igstRate: it.igstRate ?? 0,
+      cgstAmount: it.cgstAmount ?? 0,
+      sgstAmount: it.sgstAmount ?? 0,
+      igstAmount: it.igstAmount ?? 0,
+    })),
+    discount: sale.discount ?? undefined,
+    taxAmount: sale.taxAmount ?? undefined,
+    cgstAmount: sale.cgstAmount ?? undefined,
+    sgstAmount: sale.sgstAmount ?? undefined,
+    igstAmount: sale.igstAmount ?? undefined,
+  });
+
+  const subtotal = money.subtotal;
+  const tax = money.taxAmount;
+  const discount = money.discount;
   const total = sale.totalAmount;
 
   const itemRows = items
@@ -68,6 +89,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       const cgst = item.cgstRate ?? 0;
       const sgst = item.sgstRate ?? 0;
       const igst = item.igstRate ?? 0;
+
       const gstRate = (cgst > 0 || sgst > 0)
         ? (cgst + sgst)
         : (igst || item.taxPercent || item.product?.gstRate || 0);

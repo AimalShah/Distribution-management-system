@@ -2,18 +2,21 @@ import request from "supertest";
 import express, { type Express } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../http";
-import { authContext, ORGANIZATION_HEADER, USER_HEADER } from "./auth-context";
+import { authContext, ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "./auth-context";
 import { requireAdmin } from "./permissions";
 
 const { memberModel, dbStub } = vi.hoisted(() => {
   const member = { findFirst: vi.fn() };
+
   return { memberModel: member, dbStub: { $transaction: vi.fn(), member } };
 });
 
 vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
+
 const OWNER = "user_owner";
 
 /**
@@ -30,6 +33,7 @@ const buildApp = (): Express => {
     res.json({ ok: true });
   });
   app.use(errorHandler);
+
   return app;
 };
 
@@ -119,11 +123,14 @@ describe("requireAdmin", () => {
   });
 
   it("never treats a missing context as permission to proceed", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     // A guard that answers "allowed" when it cannot tell is a guard that can be
     // switched off by omitting a header.
     const noUser = await request(app)
       .get("/admin-only")
       .set(ORGANIZATION_HEADER, ORG);
+
     const noOrg = await request(app)
       .get("/admin-only")
       .set(USER_HEADER, OWNER);

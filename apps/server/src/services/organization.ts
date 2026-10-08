@@ -20,8 +20,12 @@ async function findMembership(userId: string, organizationId: string) {
  * Here the active organization is only ever the session's choice. When the
  * session has not chosen one there is no active organization, and that is
  * reported as such rather than filled in with an arbitrary row.
+ *
+ * Optional read, hence the `find` name: "the user has no active organization"
+ * is a real answer the route turns into its own 404, not a missing row, so this
+ * one keeps returning null.
  */
-export async function getActiveOrganization(userId: string, sessionId: string) {
+export async function findActiveOrganization(userId: string, sessionId: string) {
   const session = await prisma.session.findFirst({
     // `expiresAt` is on the model and was not in the predicate, so an expired or
     // revoked session id resolved an active organization just as a live one did.

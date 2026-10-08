@@ -23,11 +23,13 @@ const { productModel, categoryModel, brandModel } = vi.hoisted(() => ({
 
 vi.mock("@dms/db", () => ({
   default: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     product: productModel,
     category: categoryModel,
     brand: brandModel,
   },
   prisma: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     product: productModel,
     category: categoryModel,
     brand: brandModel,
@@ -37,6 +39,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
 
 const productFixture = (overrides: Record<string, unknown> = {}) => ({
@@ -336,6 +339,7 @@ describe("POST /api/products", () => {
       expect(res.status).toBe(400);
       expect(res.body.code).toBe("VALIDATION_ERROR");
     }
+
     expect(productModel.create).not.toHaveBeenCalled();
   });
 

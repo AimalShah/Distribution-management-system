@@ -37,6 +37,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -81,6 +82,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
       "Created By",
       "Actions",
     ];
+
     for (const header of expectedHeaders) {
       expect(listSrc, `ReturnList must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -126,6 +128,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
       returnDate: "2026-10-04",
       items: [],
     });
+
     expect(noItemsResult.success).toBe(false);
 
     // Schema validation: SALE without saleId fails
@@ -143,6 +146,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
         },
       ],
     });
+
     expect(saleNoRefResult.success).toBe(false);
 
     // Schema validation: PURCHASE without purchaseId fails
@@ -160,6 +164,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
         },
       ],
     });
+
     expect(purchaseNoRefResult.success).toBe(false);
 
     // Schema validation: valid DAMAGED return passes
@@ -178,6 +183,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
         },
       ],
     });
+
     expect(validDamagedResult.success).toBe(true);
 
     // Schema validation: valid SALE return with saleId passes
@@ -196,6 +202,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
         },
       ],
     });
+
     expect(validSaleResult.success).toBe(true);
   });
 
@@ -256,18 +263,22 @@ describe("Checkpoint 4f — Returns Pages", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -299,6 +310,7 @@ describe("Checkpoint 4f — Returns Pages", () => {
       });
 
       const code = unique("RET");
+
       const res = await request(app)
         .post("/api/returns")
         .set(asUser(t.organizationId, t.userId))

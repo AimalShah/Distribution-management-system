@@ -1,30 +1,13 @@
 import prisma from "@dms/db";
-import type { Prisma } from "@dms/db";
 import type { PurchaseReportQuery } from "@dms/shared";
-
-const purchaseWindow = (
-  organizationId: string,
-  { startDate, endDate, brandId }: PurchaseReportQuery
-): Prisma.PurchaseWhereInput => ({
-  organizationId,
-  ...(startDate || endDate
-    ? {
-        purchaseDate: {
-          ...(startDate ? { gte: startDate } : {}),
-          ...(endDate ? { lte: endDate } : {}),
-        },
-      }
-    : {}),
-  ...(brandId
-    ? {
-        purchaseItems: {
-          some: {
-            product: { brandId },
-          },
-        },
-      }
-    : {}),
-});
+import {
+  productScope,
+  purchaseItemScope,
+  purchaseScope,
+  reportWindow,
+  supplierScope,
+  type ScopeInput,
+} from "../scope";
 
 /**
  * Header totals for the window.
@@ -44,9 +27,17 @@ export async function getBasicPurchaseReport(
   organizationId: string,
   query: PurchaseReportQuery
 ) {
+  // What "active, in-tenant, in-window, in-brand" means is `scope`'s to decide;
+  // only the columns summed and grouped on are this report's.
+  const scope: ScopeInput = {
+    organizationId,
+    window: reportWindow(query),
+    brandId: query.brandId,
+  };
+
   const [purchases, quantities] = await Promise.all([
     prisma.purchase.findMany({
-      where: purchaseWindow(organizationId, query),
+      where: purchaseScope(scope),
       select: {
         id: true,
         purchaseCode: true,
@@ -61,7 +52,7 @@ export async function getBasicPurchaseReport(
       by: ["purchaseId"],
       _count: { _all: true },
       _sum: { quantity: true },
-      where: { purchase: purchaseWindow(organizationId, query) },
+      where: { purchase: purchaseScope(scope) },
     }),
   ]);
 
@@ -141,7 +132,7 @@ export async function getPurchaseBySupplier(
   // had one row per purchase across the whole window, joined to `Supplier` on each.
   const groups = await prisma.purchase.groupBy({
     by: ["supplierId"],
-    where: purchaseWindow(organizationId, query),
+    where: purchaseScope({ organizationId, window: reportWindow(query), brandId: query.brandId }),
     _count: { _all: true },
     _sum: { totalAmount: true },
     orderBy: { _sum: { totalAmount: "desc" } },
@@ -149,17 +140,19 @@ export async function getPurchaseBySupplier(
 
   const suppliers = await prisma.supplier.findMany({
     where: {
-      organizationId,
+      ...supplierScope({ organizationId }),
       id: { in: groups.map((group) => group.supplierId) },
     },
     select: { id: true, companyName: true },
   });
+
   const byId = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
 
   // `Purchase.supplierId` is a required relation, so a group always resolves. The
   // filter is here so a dangling row drops one line rather than throwing.
   return groups.flatMap((group) => {
     const supplier = byId.get(group.supplierId);
+
     if (!supplier) return [];
 
     return [
@@ -195,10 +188,12 @@ export async function getPurchaseByProduct(
   // spend-weighted -- the number the loop produced, preserved here.
   const groups = await prisma.purchaseItem.groupBy({
     by: ["productId"],
-    where: {
-      purchase: purchaseWindow(organizationId, query),
-      ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
-    },
+    where: purchaseItemScope({
+      organizationId,
+      window: reportWindow(query),
+      brandId: query.brandId,
+      brandOnLine: true,
+    }),
     _count: { _all: true },
     _sum: { quantity: true, totalCost: true, unitCost: true },
     orderBy: { _sum: { totalCost: "desc" } },
@@ -206,18 +201,19 @@ export async function getPurchaseByProduct(
 
   const products = await prisma.product.findMany({
     where: {
-      organizationId,
+      ...productScope({ organizationId, brandId: query.brandId }),
       id: { in: groups.map((group) => group.productId) },
-      ...(query.brandId ? { brandId: query.brandId } : {}),
     },
     select: { id: true, name: true, productCode: true, unit: true },
   });
+
   const byId = new Map(products.map((product) => [product.id, product]));
 
   // `PurchaseItem.productId` is a required relation, so a group always resolves.
   // The filter is here so a dangling row drops one line rather than throwing.
   return groups.flatMap((group) => {
     const product = byId.get(group.productId);
+
     if (!product) return [];
 
     const lineCount = group._count._all;
@@ -244,10 +240,15 @@ export async function getPurchaseByBrand(
   organizationId: string,
   query: PurchaseReportQuery
 ) {
-  const where: Prisma.PurchaseItemWhereInput = {
-    purchase: purchaseWindow(organizationId, query),
-    ...(query.brandId ? { product: { brandId: query.brandId } } : {}),
-  };
+  // The line's own product must carry the brand as well as the order
+  // containing it — a mixed-brand order contributes only its matching lines to
+  // this grouping, while still being admitted by the document-grain filter.
+  const where = purchaseItemScope({
+    organizationId,
+    window: reportWindow(query),
+    brandId: query.brandId,
+    brandOnLine: true,
+  });
 
   const groups = await prisma.purchaseItem.groupBy({
     by: ["productId"],
@@ -260,7 +261,7 @@ export async function getPurchaseByBrand(
 
   const products = await prisma.product.findMany({
     where: {
-      organizationId,
+      ...productScope({ organizationId }),
       id: { in: groups.map((g) => g.productId) },
     },
     select: {
@@ -272,6 +273,7 @@ export async function getPurchaseByBrand(
   });
 
   const productMap = new Map(products.map((p) => [p.id, p]));
+
   const brandMap = new Map<
     string,
     {
@@ -286,9 +288,11 @@ export async function getPurchaseByBrand(
 
   for (const group of groups) {
     const prod = productMap.get(group.productId);
+
     if (!prod || !prod.brand) continue;
 
     const bId = prod.brand.id;
+
     const existing = brandMap.get(bId) || {
       brandId: bId,
       brandName: prod.brand.name,

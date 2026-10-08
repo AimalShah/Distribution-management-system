@@ -7,6 +7,7 @@ import type {
   ReturnUpdateInput,
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { applyStockMovement } from "./stock-movement";
 
 /**
  * The legacy list embedded every line with its product, so one row carried an
@@ -70,105 +71,13 @@ const labelFor = (returnType: ReturnTypeValue) =>
 /** Total units of one product across every line, so repeats are checked together. */
 const sumByProduct = (lines: { productId: string; quantity: number }[]) => {
   const totals = new Map<string, number>();
+
   for (const line of lines) {
     totals.set(line.productId, (totals.get(line.productId) ?? 0) + line.quantity);
   }
+
   return totals;
 };
-
-/**
- * The transaction-scoped client `prisma.$transaction` hands to its callback.
- *
- * `Prisma.TransactionClient` is the bare client's version of this and is not
- * interchangeable here: the shared client is extended with a query logger, so an
- * interactive transaction hands back the extended shape and the two do not
- * structurally match.
- */
-type TransactionTx = Omit<
-  typeof prisma,
-  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
->;
-
-/**
- * Moves one product's stock and hands back the pair the ledger needs.
- *
- * The tenant is a separate argument rather than a field read off `target`,
- * because `target` comes from a `select` that only asks for the columns the
- * caller happens to need. A scope of `{ id, organizationId: undefined }` matches
- * any tenant's row, so the filter has to be something the caller cannot forget to
- * carry.
- *
- * The new quantity is never computed from a read and written back. That pattern
- * cannot hold under READ COMMITTED: with 10 on hand, a concurrent inbound and
- * outbound return of the same product would both read 10, then both write their
- * own answer, so 20 units pass through the row and the two log entries describe
- * movements that never happened against each other. Each direction is instead a
- * single statement the database evaluates against the row it is updating, so the
- * quantity on hand and the log entry describing it can never disagree.
- *
- * An increase is plain arithmetic. A decrease is a guarded decrement: the `gte`
- * guard and the decrement are the same statement, so only one transaction can
- * claim the units, and `count === 0` means this caller did not get them. The
- * follow-up read is what tells a genuine shortage apart from a row a concurrent
- * transaction deleted.
- */
-async function applyStockMovement(
-  tx: TransactionTx,
-  target: { id: string },
-  organizationId: string,
-  direction: "in" | "out",
-  quantity: number,
-  shortage: { code: string; message: string }
-): Promise<{ previousQty: number; newQty: number }> {
-  const scope = { id: target.id, organizationId } as const;
-
-  if (direction === "in") {
-    const updated = await tx.inventory.update({
-      where: scope,
-      data: { quantityOnHand: { increment: quantity } },
-      select: { quantityOnHand: true },
-    });
-
-    return { previousQty: updated.quantityOnHand - quantity, newQty: updated.quantityOnHand };
-  }
-
-  const claimed = await tx.inventory.updateMany({
-    where: { ...scope, quantityOnHand: { gte: quantity } },
-    data: { quantityOnHand: { decrement: quantity } },
-  });
-
-  if (claimed.count === 0) {
-    const current = await tx.inventory.findFirst({
-      where: scope,
-      select: { quantityOnHand: true },
-    });
-
-    if (!current) {
-      throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-        inventoryId: target.id,
-      });
-    }
-
-    // Refuse rather than clamp. Clamping at zero, as the legacy inventory
-    // service did, records a movement of 10 against a change of 5 and the
-    // shortfall simply disappears.
-    throw conflict(shortage.message, shortage.code, {
-      available: current.quantityOnHand,
-      requested: quantity,
-    });
-  }
-
-  // `updateMany` returns a count rather than a row, so the opening figure is
-  // read back off the row as it stands after the write. That keeps the ledger's
-  // arithmetic true by construction even when another transaction committed
-  // between the scope read and this write.
-  const current = await tx.inventory.findFirstOrThrow({
-    where: scope,
-    select: { quantityOnHand: true },
-  });
-
-  return { previousQty: current.quantityOnHand + quantity, newQty: current.quantityOnHand };
-}
 
 export async function getReturns({
   organizationId,
@@ -184,9 +93,15 @@ export async function getReturns({
     // caller sees active returns only, which is what they saw before the column
     // existed.
     deletedAt: deleted ? { not: null } : null,
-    ...(returnType ? { returnType } : {}),
-    ...(search ? { returnCode: { contains: search, mode: "insensitive" } } : {}),
   };
+
+  if (returnType) {
+    where.returnType = returnType;
+  }
+
+  if (search) {
+    where.returnCode = { contains: search, mode: "insensitive" };
+  }
 
   const [data, total] = await Promise.all([
     prisma.return.findMany({
@@ -212,10 +127,16 @@ export async function getReturns({
  * read one record.
  */
 export async function getReturnByIdOrCode(idOrCode: string, organizationId: string) {
-  return prisma.return.findFirst({
+  const found = await prisma.return.findFirst({
     where: { organizationId, OR: [{ id: idOrCode }, { returnCode: idOrCode }] },
     include: detailInclude,
   });
+
+  if (!found) {
+    throw notFound("Return not found", "RETURN_NOT_FOUND");
+  }
+
+  return found;
 }
 
 type DocumentLine = { productId: string; quantity: number };
@@ -262,13 +183,15 @@ function assertQuantitiesFit({
     );
   }
 
-  const overReturned = [...requested.entries()]
-    .map(([productId, quantity]) => ({
-      productId,
-      available: (onDocument.get(productId) ?? 0) - (alreadyReturned.get(productId) ?? 0),
-      requested: quantity,
-    }))
-    .filter((line) => line.requested > line.available);
+  const overReturned: { productId: string; available: number; requested: number }[] = [];
+
+  for (const [productId, quantity] of requested) {
+    const available = (onDocument.get(productId) ?? 0) - (alreadyReturned.get(productId) ?? 0);
+
+    if (quantity > available) {
+      overReturned.push({ productId, available, requested: quantity });
+    }
+  }
 
   if (overReturned.length > 0) {
     throw conflict(
@@ -396,6 +319,7 @@ export async function createReturn(
         where: { productId: { in: productIds }, organizationId },
         select: { id: true, productId: true, quantityOnHand: true },
       });
+
       const inventoryByProduct = new Map(
         inventoryRows.map((row) => [row.productId, row])
       );
@@ -411,13 +335,19 @@ export async function createReturn(
       }
 
       if (direction === "out") {
-        const shortages = [...requested.entries()]
-          .map(([productId, quantity]) => ({
-            productId,
-            available: inventoryByProduct.get(productId)!.quantityOnHand,
-            requested: quantity,
-          }))
-          .filter((line) => line.requested > line.available);
+        const shortages: { productId: string; available: number; requested: number }[] = [];
+
+        for (const [productId, quantity] of requested) {
+          const inventory = inventoryByProduct.get(productId);
+
+          if (inventory && quantity > inventory.quantityOnHand) {
+            shortages.push({
+              productId,
+              available: inventory.quantityOnHand,
+              requested: quantity,
+            });
+          }
+        }
 
         if (shortages.length > 0) {
           throw conflict("Not enough stock to cover this return", "INSUFFICIENT_STOCK", {
@@ -454,34 +384,27 @@ export async function createReturn(
       });
 
       for (const [productId, quantity] of requested) {
-        const row = inventoryByProduct.get(productId)!;
-
-        const { previousQty, newQty } = await applyStockMovement(
+        // The stock row and the ledger row move together inside the module;
+        // what stays here is the document's own words for a refusal.
+        await applyStockMovement({
           tx,
-          row,
           organizationId,
+          userId,
+          productId,
           direction,
           quantity,
-          {
-            code: "INSUFFICIENT_STOCK",
-            message: "Not enough stock to cover this return",
-          }
-        );
-
-        await tx.inventoryLog.create({
-          data: {
-            inventoryId: row.id,
-            productId,
-            userId,
-            movementType: movementTypeFor(returnType),
-            quantity,
-            previousQty,
-            newQty,
-            reason: data.reason
-              ? `${labelFor(returnType)} ${data.returnCode}: ${data.reason}`
-              : `${labelFor(returnType)} ${data.returnCode}`,
-            reference: data.returnCode,
-          },
+          movementType: movementTypeFor(returnType),
+          reason: data.reason
+            ? `${labelFor(returnType)} ${data.returnCode}: ${data.reason}`
+            : `${labelFor(returnType)} ${data.returnCode}`,
+          reference: data.returnCode,
+          // Consulted only when the direction takes stock out: an inbound
+          // handback never reaches the guard.
+          refusal: (available) =>
+            conflict("Not enough stock to cover this return", "INSUFFICIENT_STOCK", {
+              available,
+              requested: quantity,
+            }),
         });
       }
 
@@ -553,46 +476,28 @@ export async function deleteReturn(id: string, organizationId: string, userId: s
       const direction = movesStockIn(existing.returnType) ? "out" : "in";
 
       for (const [productId, quantity] of sumByProduct(existing.items)) {
-        const row = await tx.inventory.findFirst({
-          where: { productId, organizationId },
-          select: { id: true, quantityOnHand: true },
-        });
-
-        if (!row) {
-          throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-            productId,
-          });
-        }
-
-        const { previousQty, newQty } = await applyStockMovement(
+        await applyStockMovement({
           tx,
-          row,
           organizationId,
+          userId,
+          productId,
           direction,
           quantity,
-          {
-            code: "INSUFFICIENT_STOCK_FOR_REVERSAL",
-            message:
+          // The reversal of `RETURN` is an `OUT`, and the reversal of an `OUT`,
+          // `EXPIRED` or `DAMAGED` is a `RETURN`. The pair reads as one movement
+          // out and one back, whichever way round the return went.
+          movementType: direction === "in" ? "RETURN" : "OUT",
+          reason: `Reversal of return ${existing.returnCode}`,
+          reference: existing.returnCode,
+          // Consulted only when the direction takes stock out: giving stock
+          // back to the warehouse never reaches the guard.
+          refusal: (available) =>
+            conflict(
               "These goods have been sold on since this return, so it cannot be deleted " +
-              "without taking stock on hand that is not there",
-          }
-        );
-
-        await tx.inventoryLog.create({
-          data: {
-            inventoryId: row.id,
-            productId,
-            userId,
-            // The reversal of `RETURN` is an `OUT`, and the reversal of an `OUT`,
-            // `EXPIRED` or `DAMAGED` is a `RETURN`. The pair reads as one movement
-            // out and one back, whichever way round the return went.
-            movementType: direction === "in" ? "RETURN" : "OUT",
-            quantity,
-            previousQty,
-            newQty,
-            reason: `Reversal of return ${existing.returnCode}`,
-            reference: existing.returnCode,
-          },
+                "without taking stock on hand that is not there",
+              "INSUFFICIENT_STOCK_FOR_REVERSAL",
+              { available, requested: quantity }
+            ),
         });
       }
 
@@ -718,43 +623,25 @@ export async function restoreReturn(id: string, organizationId: string, userId: 
       const direction = movesStockIn(existing.returnType) ? "in" : "out";
 
       for (const [productId, quantity] of requested) {
-        const row = await tx.inventory.findFirst({
-          where: { productId, organizationId },
-          select: { id: true, quantityOnHand: true },
-        });
-
-        if (!row) {
-          throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-            productId,
-          });
-        }
-
-        const { previousQty, newQty } = await applyStockMovement(
+        await applyStockMovement({
           tx,
-          row,
           organizationId,
+          userId,
+          productId,
           direction,
           quantity,
-          {
-            code: "INSUFFICIENT_STOCK_FOR_RESTORE",
-            message:
+          movementType: movementTypeFor(existing.returnType),
+          reason: `Restoration of return ${existing.returnCode}`,
+          reference: existing.returnCode,
+          // Consulted only when the direction takes stock out: re-applying a
+          // customer handback never reaches the guard.
+          refusal: (available) =>
+            conflict(
               "There is no longer enough stock on hand to re-apply this return, so it " +
-              "cannot be restored",
-          }
-        );
-
-        await tx.inventoryLog.create({
-          data: {
-            inventoryId: row.id,
-            productId,
-            userId,
-            movementType: movementTypeFor(existing.returnType),
-            quantity,
-            previousQty,
-            newQty,
-            reason: `Restoration of return ${existing.returnCode}`,
-            reference: existing.returnCode,
-          },
+                "cannot be restored",
+              "INSUFFICIENT_STOCK_FOR_RESTORE",
+              { available, requested: quantity }
+            ),
         });
       }
 

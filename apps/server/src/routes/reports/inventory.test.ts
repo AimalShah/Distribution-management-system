@@ -9,20 +9,33 @@ const { inventoryModel, inventoryLogModel, purchaseItemModel, dbStub } =
       findMany: vi.fn(),
       fields: { reorderLevel: "reorderLevel" },
     };
+
     const inventoryLog = {
       findMany: vi.fn(),
       groupBy: vi.fn(),
     };
+
     const purchaseItem = {
       findMany: vi.fn(),
       groupBy: vi.fn(),
+    };
+
+    const stockBatch = {
+      findMany: vi.fn(),
     };
 
     return {
       inventoryModel: inventory,
       inventoryLogModel: inventoryLog,
       purchaseItemModel: purchaseItem,
-      dbStub: { $transaction: vi.fn(), inventory, inventoryLog, purchaseItem },
+      dbStub: {
+        member: { findFirst: async () => ({ role: "owner" }) },
+        $transaction: vi.fn(),
+        inventory,
+        inventoryLog,
+        purchaseItem,
+        stockBatch,
+      },
     };
   });
 
@@ -31,6 +44,7 @@ vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_other";
 
 const asTenant = (req: request.Test, organizationId = ORG) =>
@@ -60,6 +74,7 @@ beforeEach(() => {
   inventoryLogModel.groupBy.mockResolvedValue([]);
   purchaseItemModel.findMany.mockResolvedValue([]);
   purchaseItemModel.groupBy.mockResolvedValue([]);
+  dbStub.stockBatch.findMany.mockResolvedValue([]);
 });
 
 describe("org scoping", () => {
@@ -597,6 +612,7 @@ describe("GET /api/reports/inventory/full", () => {
     for (const call of inventoryModel.findMany.mock.calls) {
       expect(call[0].where).toMatchObject({ organizationId: ORG });
     }
+
     for (const call of purchaseItemModel.findMany.mock.calls) {
       expect(call[0].where).toMatchObject({ purchase: { organizationId: ORG } });
     }

@@ -134,8 +134,13 @@ export const returnListQuerySchema = paginationQuerySchema.extend({
 // Named `ReturnTypeValue` rather than `ReturnType`, which is a TypeScript
 // built-in utility type and would shadow it on every import.
 export type ReturnTypeValue = (typeof ReturnTypes)[number];
+
 export type ReturnItemInput = z.output<typeof ReturnItemSchema>;
+
 export type ReturnCreateInput = z.output<typeof ReturnCreateSchema>;
+
 export type ReturnUpdateInput = z.output<typeof ReturnUpdateSchema>;
+
 export type ReturnListQuery = z.output<typeof returnListQuerySchema>;
+
 export type ReturnFormData = ReturnCreateInput;

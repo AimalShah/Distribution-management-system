@@ -1,7 +1,7 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { ORGANIZATION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const reorderLevelField = { modelName: "Inventory", name: "reorderLevel" };
 
@@ -9,6 +9,7 @@ const { models, transaction } = vi.hoisted(() => {
   const reorderLevel = Object.freeze({ modelName: "Inventory", name: "reorderLevel" });
 
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     inventory: {
       findFirst: vi.fn(),
       findFirstOrThrow: vi.fn(),
@@ -28,6 +29,7 @@ const { models, transaction } = vi.hoisted(() => {
       create: vi.fn(),
     },
     product: { findFirst: vi.fn(), findMany: vi.fn() },
+    stockBatch: { findMany: vi.fn(), update: vi.fn() },
     reorderLevel,
   };
 
@@ -49,6 +51,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const USER = "user_1";
 
 const auth = (withUser = true) => ({
@@ -109,6 +112,9 @@ beforeEach(() => {
   models.inventoryLog.create.mockResolvedValue(logFixture());
   models.product.findFirst.mockResolvedValue({ id: "prod_1", productCode: "PROD-001" });
   models.product.findMany.mockResolvedValue([{ id: "prod_1", productCode: "PROD-001", name: "Product 1" }]);
+  // No batches are tracked for this product, so FEFO and its reverse have
+  // nothing to touch.
+  models.stockBatch.findMany.mockResolvedValue([]);
 });
 
 describe("organization context", () => {
@@ -153,6 +159,7 @@ describe("GET /api/inventory", () => {
     const arg = models.inventory.findMany.mock.calls[0][0] as {
       include: Record<string, unknown>;
     };
+
     expect(arg.include).toHaveProperty("product");
     expect(arg.include).toHaveProperty("_count");
     expect(arg.include).not.toHaveProperty("logs");
@@ -199,6 +206,7 @@ describe("GET /api/inventory/logs", () => {
     const arg = models.inventoryLog.findMany.mock.calls[0][0] as {
       include: { user: { select: Record<string, boolean> } };
     };
+
     expect(arg.include.user.select).toEqual({ name: true, email: true });
   });
 
@@ -351,6 +359,8 @@ describe("POST /api/inventory", () => {
 
 describe("POST /api/inventory/adjust", () => {
   it("requires a user and writes nothing without one", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app)
       .post("/api/inventory/adjust")
       .set(auth(false))
@@ -469,10 +479,12 @@ describe("POST /api/inventory/adjust", () => {
         .send({ inventoryId: "inv_1", movementType: "OUT", quantity: 4, reason: "test" });
 
       expect(res.status).toBe(200);
+
       const { previousQty, newQty } = models.inventoryLog.create.mock.calls[0][0].data as {
         previousQty: number;
         newQty: number;
       };
+
       expect({ previousQty, newQty }).toEqual({ previousQty: 10, newQty: 6 });
     });
 
@@ -739,6 +751,7 @@ describe("POST /api/inventory/bulk-import", () => {
     models.inventory.findFirst.mockResolvedValue(null);
 
     const csvData = "productCode,quantityOnHand,reorderLevel\nPROD-001,40,5";
+
     const res = await request(app)
       .post("/api/inventory/bulk-import")
       .set(auth())

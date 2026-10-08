@@ -72,15 +72,19 @@ function resolveDatabaseUrl(): string | undefined {
   if (process.env.DATABASE_URL?.trim()) return process.env.DATABASE_URL.trim();
 
   const envPath = path.join(root, ".env");
+
   if (!fs.existsSync(envPath)) return undefined;
 
   for (const line of fs.readFileSync(envPath, "utf-8").split(/\r?\n/)) {
     const match = /^\s*DATABASE_URL\s*=\s*(.*?)\s*$/.exec(line);
+
     if (!match) continue;
     // `.env` files usually quote URLs because they contain `?` and `&`.
     const value = match[1].replace(/^["']|["']$/g, "").trim();
+
     if (value) return value;
   }
+
   return undefined;
 }
 
@@ -148,6 +152,21 @@ export interface Tenant {
 }
 
 /**
+ * Which user owns each organization this file seeded.
+ *
+ * The permission guard answers "may this caller do that?" from the tenant *and*
+ * the caller, so a request carrying only `x-organization-id` is a request nobody
+ * can attribute: 400 USER_REQUIRED, not "allowed". Almost every suite here means
+ * "act as this tenant" and says so by naming the organization, and repeating the
+ * owner id beside it in each of those calls would split one fact across dozens of
+ * files. `seedTenants` records it here and `asOrg` looks it up.
+ *
+ * Teardown removes the entry with the rows, so an organization id that has been
+ * torn down stops answering as a caller rather than pointing at a deleted user.
+ */
+const ownerByOrganization = new Map<string, string>();
+
+/**
  * Create two fully independent tenants.
  *
  * The second is the point of half the assertions: "this tenant's rows are
@@ -161,6 +180,7 @@ export async function seedTenants(): Promise<Tenant> {
   const org = await prisma.organization.create({
     data: { id: `org_${unique("a")}`, name: `Parity A ${unique("")}`, createdAt: at },
   });
+
   const otherOrg = await prisma.organization.create({
     data: { id: `org_${unique("b")}`, name: `Parity B ${unique("")}`, createdAt: at },
   });
@@ -179,6 +199,7 @@ export async function seedTenants(): Promise<Tenant> {
       updatedAt: at,
     },
   });
+
   const otherUser = await prisma.user.create({
     data: {
       id: `usr_${unique("b")}`,
@@ -199,9 +220,15 @@ export async function seedTenants(): Promise<Tenant> {
     data: { id: `mem_${unique("b")}`, organizationId: otherOrg.id, userId: otherUser.id, role: "owner", createdAt: at },
   });
 
+  // Remember who the owner is, so `asOrg` can speak for the tenant it names.
+  // See `asOrg` for why a tenant header alone is no longer a caller.
+  ownerByOrganization.set(org.id, user.id);
+  ownerByOrganization.set(otherOrg.id, otherUser.id);
+
   const category = await prisma.category.create({
     data: { id: `cat_${unique("a")}`, name: unique("Category"), organizationId: org.id },
   });
+
   const otherCategory = await prisma.category.create({
     data: { id: `cat_${unique("b")}`, name: unique("Category"), organizationId: otherOrg.id },
   });
@@ -211,6 +238,7 @@ export async function seedTenants(): Promise<Tenant> {
   const brand = await prisma.brand.create({
     data: { id: `brd_${unique("a")}`, name: unique("Brand"), organizationId: org.id, categoryId: category.id },
   });
+
   const otherBrand = await prisma.brand.create({
     data: { id: `brd_${unique("b")}`, name: unique("Brand"), organizationId: otherOrg.id, categoryId: otherCategory.id },
   });
@@ -228,6 +256,7 @@ export async function seedTenants(): Promise<Tenant> {
       unitPrice: 20,
     },
   });
+
   const otherProduct = await prisma.product.create({
     data: {
       id: `prd_${unique("b")}`,
@@ -245,6 +274,7 @@ export async function seedTenants(): Promise<Tenant> {
   const customer = await prisma.customer.create({
     data: { id: `cus_${unique("a")}`, customerCode: unique("CUST"), organizationId: org.id, name: "Parity Customer" },
   });
+
   const otherCustomer = await prisma.customer.create({
     data: {
       id: `cus_${unique("b")}`,
@@ -263,6 +293,7 @@ export async function seedTenants(): Promise<Tenant> {
       companyName: "Parity Supplier",
     },
   });
+
   const otherSupplier = await prisma.supplier.create({
     data: {
       id: `sup_${unique("b")}`,
@@ -323,6 +354,9 @@ export async function teardownTenants(t: Tenant): Promise<void> {
   await prisma.member.deleteMany({ where: { organizationId: inOrgs } });
   await prisma.organization.deleteMany({ where: { id: { in: orgs } } });
   await prisma.user.deleteMany({ where: { id: { in: [t.userId, t.otherUserId] } } });
+
+  ownerByOrganization.delete(t.organizationId);
+  ownerByOrganization.delete(t.otherOrganizationId);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -339,12 +373,29 @@ export async function teardownTenants(t: Tenant): Promise<void> {
  * these are the trusted-proxy headers (see `AuthMode` in
  * `middleware/auth-context.ts`); the default mode ignores them.
  */
-export const asOrg = (organizationId: string) => ({ [ORGANIZATION_HEADER]: organizationId });
+export const orgOnly = (organizationId: string) => ({
+  [ORGANIZATION_HEADER]: organizationId,
+});
 
 export const asUser = (organizationId: string, userId: string) => ({
   [ORGANIZATION_HEADER]: organizationId,
   [USER_HEADER]: userId,
 });
+
+/**
+ * "A caller in this organization", which is what a suite means when it names a
+ * tenant and no user.
+ *
+ * An organization `seedTenants` created carries its owner, so the guard has
+ * someone to ask about. An id it does not know -- a deliberately absent tenant,
+ * one built by hand -- carries the organization alone, which is exactly the
+ * request those tests are about.
+ */
+export const asOrg = (organizationId: string) => {
+  const userId = ownerByOrganization.get(organizationId);
+
+  return userId === undefined ? orgOnly(organizationId) : asUser(organizationId, userId);
+};
 
 export const asSession = (organizationId: string, sessionId: string, userId?: string) => ({
   [ORGANIZATION_HEADER]: organizationId,

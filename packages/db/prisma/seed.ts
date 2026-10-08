@@ -48,6 +48,7 @@ async function main() {
 
   // 1. Get or Create Organization
   let organization = await prisma.organization.findFirst();
+
   if (!organization) {
     organization = await prisma.organization.create({
       data: {
@@ -66,6 +67,7 @@ async function main() {
   let owner = await prisma.user.findFirst({
     where: { email: "owner@test.com" },
   });
+
   if (!owner) {
     owner = await prisma.user.create({
       data: {
@@ -86,6 +88,7 @@ async function main() {
   const ownerMember = await prisma.member.findFirst({
     where: { userId: owner.id, organizationId: organization.id },
   });
+
   if (!ownerMember) {
     await prisma.member.create({
       data: {
@@ -131,6 +134,7 @@ async function main() {
         }),
       },
     });
+
     users.push(user);
   }
 
@@ -178,6 +182,7 @@ async function main() {
   // 5. Create Accounts (OAuth/social login accounts)
   for (let i = 0; i < 10; i++) {
     const user = faker.helpers.arrayElement(users);
+
     const provider = faker.helpers.arrayElement([
       "google",
       "github",
@@ -249,6 +254,7 @@ async function main() {
 
   // 8. Create Categories
   const categories = [];
+
   const categoryNames = [
     "Electronics",
     "Clothing",
@@ -272,6 +278,7 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+
     categories.push(category);
   }
 
@@ -279,8 +286,10 @@ async function main() {
 
   // 9. Create Brands
   const brands = [];
+
   for (let i = 0; i < 30; i++) {
     const category = faker.helpers.arrayElement(categories);
+
     const brand = await prisma.brand.create({
       data: {
         name: `${faker.company.name()} ${i + 1}`,
@@ -291,6 +300,7 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+
     brands.push(brand);
   }
 
@@ -298,9 +308,11 @@ async function main() {
 
   // 10. Create Products with Inventory
   const products = [];
+
   for (let i = 0; i < 200; i++) {
     const category = faker.helpers.arrayElement(categories);
     const categoryBrands = brands.filter((b) => b.categoryId === category.id);
+
     const brand =
       categoryBrands.length > 0
         ? faker.helpers.arrayElement(categoryBrands)
@@ -311,6 +323,7 @@ async function main() {
       max: 5000,
       fractionDigits: 2,
     });
+
     const unitCost =
       unitPrice * faker.number.float({ min: 0.4, max: 0.8, fractionDigits: 2 });
 
@@ -340,6 +353,7 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+
     products.push(product);
 
     // Create corresponding inventory entry
@@ -363,6 +377,7 @@ async function main() {
 
   // 11. Create Suppliers
   const suppliers = [];
+
   for (let i = 0; i < 25; i++) {
     const supplier = await prisma.supplier.create({
       data: {
@@ -382,6 +397,7 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+
     suppliers.push(supplier);
   }
 
@@ -389,6 +405,7 @@ async function main() {
 
   // 12. Create Customers
   const customers = [];
+
   for (let i = 0; i < 100; i++) {
     const customer = await prisma.customer.create({
       data: {
@@ -414,6 +431,7 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+
     customers.push(customer);
   }
 
@@ -451,16 +469,20 @@ async function main() {
     for (let j = 0; j < itemCount; j++) {
       const product = faker.helpers.arrayElement(products);
       const quantity = faker.number.int({ min: 5, max: 100 });
+
       const unitCost =
         product.unitCost *
         faker.number.float({ min: 0.9, max: 1.1, fractionDigits: 2 });
+
       const discount =
         faker.helpers.maybe(() =>
           faker.number.float({ min: 0, max: unitCost * quantity * 0.1 })
         ) || 0;
+
       const taxPercent = faker.helpers.maybe(() =>
         faker.number.float({ min: 0, max: 20 })
       );
+
       const totalCost = quantity * unitCost - discount;
       totalAmount += totalCost;
 
@@ -548,16 +570,20 @@ async function main() {
     for (let j = 0; j < itemCount; j++) {
       const product = faker.helpers.arrayElement(products);
       const quantity = faker.number.int({ min: 1, max: 20 });
+
       const unitPrice =
         product.unitPrice *
         faker.number.float({ min: 0.9, max: 1.2, fractionDigits: 2 });
+
       const discount =
         faker.helpers.maybe(() =>
           faker.number.float({ min: 0, max: unitPrice * quantity * 0.15 })
         ) || 0;
+
       const taxPercent = faker.helpers.maybe(() =>
         faker.number.float({ min: 0, max: 25 })
       );
+
       const totalPrice = quantity * unitPrice - discount;
       totalAmount += totalPrice;
 
@@ -617,6 +643,7 @@ async function main() {
   // 15. Create Returns with Items and Update Inventory
   for (let i = 0; i < 25; i++) {
     const user = faker.helpers.arrayElement(users);
+
     const returnType = faker.helpers.arrayElement([
       "SALE",
       "PURCHASE",
@@ -650,10 +677,12 @@ async function main() {
       const product = faker.helpers.arrayElement(products);
       const quantity = faker.number.int({ min: 1, max: 10 });
       const unitPrice = product.unitPrice;
+
       const taxAmount = faker.number.float({
         min: 0,
         max: unitPrice * quantity * 0.1,
       });
+
       const discount =
         faker.helpers.maybe(() =>
           faker.number.float({ min: 0, max: unitPrice * quantity * 0.05 })
@@ -733,6 +762,7 @@ async function main() {
   for (let i = 0; i < 30; i++) {
     const product = faker.helpers.arrayElement(products);
     const user = faker.helpers.arrayElement(users);
+
     const adjustmentType = faker.helpers.arrayElement([
       "ADJUSTMENT",
       "TRANSFER",
@@ -749,6 +779,7 @@ async function main() {
       const quantity = faker.number.int({ min: 1, max: 20 });
 
       let updatedInventory;
+
       if (isPositiveAdjustment) {
         updatedInventory = await prisma.inventory.update({
           where: { productId: product.id },

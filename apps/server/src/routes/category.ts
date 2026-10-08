@@ -4,7 +4,7 @@ import {
   CategoryUpdateSchema,
   categoryListQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, notFound } from "../http";
+import { asyncHandler } from "../http";
 import {
   addCategory,
   getCategories,
@@ -19,10 +19,12 @@ categoryRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = categoryListQuerySchema.parse(req.query);
+
     const result = await getCategories({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -31,7 +33,7 @@ categoryRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const category = await getCategoryById(req.params.id, req.auth.organizationId);
-    if (!category) throw notFound("Category not found", "CATEGORY_NOT_FOUND");
+
     res.json(category);
   })
 );
@@ -49,11 +51,13 @@ categoryRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = CategoryUpdateSchema.parse(req.body);
+
     const category = await updateCategory(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(category);
   })
 );

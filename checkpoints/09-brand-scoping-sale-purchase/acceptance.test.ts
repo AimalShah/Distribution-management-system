@@ -45,15 +45,19 @@ describe("Checkpoint 9 — Brand-Scoping", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Cat 1", organizationId: orgId },
     });
+
     const brandA = await prisma.brand.create({
       data: { name: "Brand Alpha", organizationId: orgId },
     });
+
     const brandB = await prisma.brand.create({
       data: { name: "Brand Beta", organizationId: orgId },
     });
+
     const cust = await prisma.customer.create({
       data: { name: "Customer 1", organizationId: orgId },
     });
@@ -138,15 +142,19 @@ describe("Checkpoint 9 — Brand-Scoping", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Cat P", organizationId: orgId },
     });
+
     const brandA = await prisma.brand.create({
       data: { name: "Brand Purchase A", organizationId: orgId },
     });
+
     const brandB = await prisma.brand.create({
       data: { name: "Brand Purchase B", organizationId: orgId },
     });
+
     const supplier = await prisma.supplier.create({
       data: {
         organizationId: orgId,
@@ -233,12 +241,15 @@ describe("Checkpoint 9 — Brand-Scoping", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Cat G", organizationId: orgId },
     });
+
     const brandX = await prisma.brand.create({
       data: { name: "Brand X", organizationId: orgId },
     });
+
     const cust = await prisma.customer.create({
       data: { name: "Customer X", organizationId: orgId },
     });
@@ -304,12 +315,15 @@ describe("Checkpoint 9 — Brand-Scoping", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Cat PB", organizationId: orgId },
     });
+
     const brandY = await prisma.brand.create({
       data: { name: "Brand Y", organizationId: orgId },
     });
+
     const supplier = await prisma.supplier.create({
       data: {
         organizationId: orgId,

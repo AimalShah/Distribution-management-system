@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 const root = path.resolve(__dirname, "../..");
+
 const desktopDir = path.join(root, "apps/desktop");
 
 describe("Checkpoint 5 — Electron Shell: Package & Config", () => {

@@ -1,7 +1,7 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { SESSION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { SESSION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { organizationModel, memberModel, sessionModel, userModel, dbStub } =
   vi.hoisted(() => {
@@ -10,13 +10,16 @@ const { organizationModel, memberModel, sessionModel, userModel, dbStub } =
       findFirst: vi.fn(),
       create: vi.fn(),
     };
+
     const member = {
       findFirst: vi.fn(),
     };
+
     const session = {
       findFirst: vi.fn(),
       updateMany: vi.fn(),
     };
+
     const user = {
       update: vi.fn(),
     };
@@ -48,7 +51,9 @@ vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 const app = createApp();
 
 const USER = "user_1";
+
 const SESSION = "session_1";
+
 const ORG = "org_1";
 
 const organizationFixture = (overrides: Record<string, unknown> = {}) => ({
@@ -127,6 +132,8 @@ describe("GET /api/organizations", () => {
   });
 
   it("400s without a user and never touches the database", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).get("/api/organizations");
 
     expect(res.status).toBe(400);
@@ -351,6 +358,8 @@ describe("POST /api/organizations", () => {
   });
 
   it("rejects a request with no user", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).post("/api/organizations").send(validBody);
 
     expect(res.status).toBe(400);
@@ -444,6 +453,7 @@ describe("POST /api/organizations/set-active", () => {
     expect(memberModel.findFirst).not.toHaveBeenCalled();
   });
 });
+
 describe("the other routers are unaffected", () => {
   it("still requires an organization", async () => {
     const res = await request(app).get("/api/categories");

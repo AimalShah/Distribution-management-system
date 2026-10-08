@@ -100,13 +100,22 @@ export const inventoryBulkImportSchema = z.object({
 });
 
 export type InventoryCreateInput = z.output<typeof InventoryCreateSchema>;
+
 export type InventoryAdjustInput = z.output<typeof InventoryAdjustSchema>;
+
 export type InventorySettingsInput = z.output<typeof InventorySettingsSchema>;
+
 export type InventoryListQuery = z.output<typeof inventoryListQuerySchema>;
+
 export type InventoryLogsQuery = z.output<typeof inventoryLogsQuerySchema>;
+
 export type LowStockQuery = z.output<typeof lowStockQuerySchema>;
+
 export type BatchListQuery = z.output<typeof batchListQuerySchema>;
+
 export type StockBatchCreateInput = z.output<typeof stockBatchCreateSchema>;
+
 export type InventoryBulkImportRow = z.output<typeof inventoryBulkImportRowSchema>;
+
 export type InventoryBulkImportInput = z.output<typeof inventoryBulkImportSchema>;
 

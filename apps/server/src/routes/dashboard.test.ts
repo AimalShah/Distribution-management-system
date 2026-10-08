@@ -10,6 +10,7 @@ const { models } = vi.hoisted(() => {
   });
 
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     product: { count: vi.fn() },
     customer: { count: vi.fn() },
     supplier: { count: vi.fn() },
@@ -24,6 +25,7 @@ const { models } = vi.hoisted(() => {
       fields: { reorderLevel },
     },
     reorderLevel,
+    stockBatch: { count: vi.fn(), findMany: vi.fn() },
   };
 
   return { models };
@@ -56,6 +58,8 @@ beforeEach(() => {
   models.purchase.findMany.mockResolvedValue([]);
   models.inventory.count.mockResolvedValue(3);
   models.inventory.findMany.mockResolvedValue([]);
+  models.stockBatch.count.mockResolvedValue(0);
+  models.stockBatch.findMany.mockResolvedValue([]);
 });
 
 describe("GET /api/dashboard/stats", () => {

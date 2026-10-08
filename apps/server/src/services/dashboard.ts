@@ -19,6 +19,9 @@ import prisma from "@dms/db";
  * shown anywhere and are not worth a query.
  */
 export async function getDashboardStats(organizationId: string) {
+  const now = new Date();
+  const threshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const [
     totalProducts,
     totalCustomers,
@@ -29,6 +32,8 @@ export async function getDashboardStats(organizationId: string) {
     recentSales,
     recentPurchases,
     topInventory,
+    expiringSoonCount,
+    expiringBatches,
   ] = await Promise.all([
     prisma.product.count({ where: { organizationId } }),
     prisma.customer.count({ where: { organizationId } }),
@@ -86,9 +91,30 @@ export async function getDashboardStats(organizationId: string) {
       orderBy: { quantityOnHand: "desc" },
       take: 10,
     }),
+    // The expiring-soon card: how many lots run out of time inside a month,
+    // and the first few of them in expiry order.
+    prisma.stockBatch.count({
+      where: {
+        organizationId,
+        quantityRemaining: { gt: 0 },
+        expiryDate: { not: null, lte: threshold },
+      },
+    }),
+    prisma.stockBatch.findMany({
+      where: {
+        organizationId,
+        quantityRemaining: { gt: 0 },
+        expiryDate: { not: null, lte: threshold },
+      },
+      include: {
+        product: { select: { id: true, name: true, productCode: true, unit: true } },
+      },
+      orderBy: { expiryDate: "asc" },
+      take: 5,
+    }),
   ]);
 
-  const result = {
+  return {
     totalProducts,
     totalCustomers,
     totalSuppliers,
@@ -100,42 +126,7 @@ export async function getDashboardStats(organizationId: string) {
     recentSales,
     recentPurchases,
     topInventory,
-    expiringSoonCount: 0,
-    expiringBatches: [] as any[],
+    expiringSoonCount,
+    expiringBatches,
   };
-
-  // Check if stockBatch is available on the prisma instance (for unit test mock tolerance)
-  if (typeof (prisma as any).stockBatch?.count === "function") {
-    try {
-      const now = new Date();
-      const threshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const [count, batches] = await Promise.all([
-        prisma.stockBatch.count({
-          where: {
-            organizationId,
-            quantityRemaining: { gt: 0 },
-            expiryDate: { not: null, lte: threshold },
-          },
-        }),
-        prisma.stockBatch.findMany({
-          where: {
-            organizationId,
-            quantityRemaining: { gt: 0 },
-            expiryDate: { not: null, lte: threshold },
-          },
-          include: {
-            product: { select: { id: true, name: true, productCode: true, unit: true } },
-          },
-          orderBy: { expiryDate: "asc" },
-          take: 5,
-        }),
-      ]);
-      result.expiringSoonCount = count;
-      result.expiringBatches = batches;
-    } catch {
-      // Fallback if model is not mocked
-    }
-  }
-
-  return result;
 }

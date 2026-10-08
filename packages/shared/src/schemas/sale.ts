@@ -67,7 +67,11 @@ export const saleListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type SaleInvoiceItemInput = z.output<typeof SaleInvoiceItemSchema>;
+
 export type SaleInvoiceInput = z.output<typeof SaleInvoiceSchema>;
+
 export type SaleUpdateInput = z.output<typeof SaleUpdateSchema>;
+
 export type SaleListQuery = z.output<typeof saleListQuerySchema>;
+
 export type SaleInvoiceFormData = SaleInvoiceInput;

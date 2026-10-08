@@ -8,7 +8,7 @@
  * 4. UI components: AddInventoryForm with tabs, manual form, CSV file selection, preview table, and template download.
  * 5. Live DB tests (when database is available): End-to-end bulk import with real transaction upserts and error tracking.
  */
-import { describe, expect, it, beforeAll } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import request from "supertest";
@@ -28,9 +28,12 @@ import { bulkImportInventory } from "../../apps/server/src/services/inventory";
 import {
   hasDatabase,
   prisma,
+  seedTenants,
+  teardownTenants,
   unique,
   ORGANIZATION_HEADER,
   USER_HEADER,
+  type Tenant,
 } from "../support/parity-db";
 
 const root = path.resolve(__dirname, "../..");
@@ -38,6 +41,7 @@ const root = path.resolve(__dirname, "../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -51,6 +55,7 @@ describe("Checkpoint 10 — Bulk Import (Contract & Static)", () => {
       reorderLevel: 5,
       maxStockLevel: 100,
     };
+
     const rowParsed = inventoryBulkImportRowSchema.safeParse(validRow);
     expect(rowParsed.success).toBe(true);
 
@@ -59,6 +64,7 @@ describe("Checkpoint 10 — Bulk Import (Contract & Static)", () => {
       productCode: "PROD-102",
       quantityOnHand: -5,
     };
+
     expect(inventoryBulkImportRowSchema.safeParse(invalidRow).success).toBe(false);
 
     // Empty product code should fail
@@ -142,6 +148,7 @@ describe("Checkpoint 10 — CSV Parsing & Validation Functionality", () => {
       reorderLevel: "10",
       maxStockLevel: "100",
     });
+
     expect(valid.valid).toBe(true);
     expect(valid.errors).toHaveLength(0);
 
@@ -150,6 +157,7 @@ describe("Checkpoint 10 — CSV Parsing & Validation Functionality", () => {
       productCode: "",
       quantityOnHand: "-20",
     });
+
     expect(invalid.valid).toBe(false);
     expect(invalid.errors).toContain("Product Code is required");
     expect(invalid.errors).toContain("Quantity On Hand cannot be negative");
@@ -161,6 +169,7 @@ describe("Checkpoint 10 — CSV Parsing & Validation Functionality", () => {
       reorderLevel: "50",
       maxStockLevel: "20",
     });
+
     expect(invalidLevels.valid).toBe(false);
     expect(invalidLevels.errors).toContain(
       "Maximum Stock Level should not be less than Reorder Level"
@@ -191,6 +200,7 @@ describe("Checkpoint 10 — CSV Parsing & Validation Functionality", () => {
 
     const parsed = await parseInventoryCSV(template);
     expect(parsed.length).toBeGreaterThan(0);
+
     for (const row of parsed) {
       expect(validateInventoryRow(row).valid).toBe(true);
     }
@@ -200,6 +210,25 @@ describe("Checkpoint 10 — CSV Parsing & Validation Functionality", () => {
 describe("Checkpoint 10 — Express API Endpoints", () => {
   const proxyApp = createApp({ authMode: "trusted-proxy" });
   const defaultApp = createApp();
+
+  // A tenant header alone is no longer a caller: the guard needs a `Member` row
+  // behind the user header, so the authenticated case below stands on the same
+  // fixture every other parity suite seeds.
+  let tenant: Tenant | undefined;
+  let authOrg = "";
+  let authUser = "";
+
+  beforeAll(async () => {
+    if (!hasDatabase) return;
+
+    tenant = await seedTenants();
+    authOrg = tenant.organizationId;
+    authUser = tenant.userId;
+  });
+
+  afterAll(async () => {
+    if (tenant) await teardownTenants(tenant);
+  });
 
   it("POST /api/inventory/bulk-import rejects unauthenticated calls in session mode", async () => {
     const res = await request(defaultApp)
@@ -218,15 +247,18 @@ describe("Checkpoint 10 — Express API Endpoints", () => {
     expect(res.body.code).toBe("ORGANIZATION_REQUIRED");
   });
 
-  it("POST /api/inventory/bulk-import rejects invalid payload when authenticated", async () => {
-    const res = await request(proxyApp)
-      .post("/api/inventory/bulk-import")
-      .set({ [ORGANIZATION_HEADER]: "org_dummy" })
-      .send({ invalid: true });
+  it.skipIf(!hasDatabase)(
+    "POST /api/inventory/bulk-import rejects invalid payload when authenticated",
+    async () => {
+      const res = await request(proxyApp)
+        .post("/api/inventory/bulk-import")
+        .set({ [ORGANIZATION_HEADER]: authOrg, [USER_HEADER]: authUser })
+        .send({ invalid: true });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("INVALID_BULK_IMPORT_PAYLOAD");
-  });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("INVALID_BULK_IMPORT_PAYLOAD");
+    }
+  );
 });
 
 describe("Checkpoint 10 — Live Database Integration", () => {
@@ -246,6 +278,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
         currency: "PKR",
       },
     });
+
     orgId = org.id;
 
     const user = await prisma.user.create({
@@ -258,6 +291,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
         updatedAt: new Date(),
       },
     });
+
     userId = user.id;
 
     const cat = await prisma.category.create({
@@ -266,6 +300,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
         organizationId: orgId,
       },
     });
+
     categoryId = cat.id;
 
     const brand = await prisma.brand.create({
@@ -275,6 +310,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
         categoryId: cat.id,
       },
     });
+
     brandId = brand.id;
 
     product1 = await prisma.product.create({
@@ -331,6 +367,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
     const inv1 = await prisma.inventory.findFirst({
       where: { productId: product1.id, organizationId: orgId },
     });
+
     expect(inv1).not.toBeNull();
     expect(inv1?.quantityOnHand).toBe(80);
     expect(inv1?.reorderLevel).toBe(15);
@@ -339,6 +376,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
     const inv2 = await prisma.inventory.findFirst({
       where: { productId: product2.id, organizationId: orgId },
     });
+
     expect(inv2).not.toBeNull();
     expect(inv2?.quantityOnHand).toBe(45);
   });
@@ -362,6 +400,7 @@ describe("Checkpoint 10 — Live Database Integration", () => {
     const inv = await prisma.inventory.findFirst({
       where: { productId: product1.id, organizationId: orgId },
     });
+
     expect(inv?.quantityOnHand).toBe(120);
     expect(inv?.reorderLevel).toBe(25);
   });

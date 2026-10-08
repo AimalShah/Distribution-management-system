@@ -27,6 +27,9 @@ export const categoryListQuerySchema = paginationQuerySchema.extend({
 });
 
 export type CategoryInput = z.output<typeof CategorySchema>;
+
 export type CategoryUpdateInput = z.output<typeof CategoryUpdateSchema>;
+
 export type CategoryListQuery = z.output<typeof categoryListQuerySchema>;
+
 export type CategoryFormData = CategoryInput;

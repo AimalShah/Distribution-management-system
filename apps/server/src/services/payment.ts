@@ -20,9 +20,15 @@ export async function getPayments({
   const where: Prisma.PaymentWhereInput = {
     organizationId,
     deletedAt: deleted ? { not: null } : null,
-    ...(customerId ? { customerId } : {}),
-    ...(saleId ? { saleId } : {}),
   };
+
+  if (customerId) {
+    where.customerId = customerId;
+  }
+
+  if (saleId) {
+    where.saleId = saleId;
+  }
 
   const [data, total] = await Promise.all([
     prisma.payment.findMany({
@@ -39,10 +45,16 @@ export async function getPayments({
 }
 
 export async function getPaymentById(id: string, organizationId: string) {
-  return prisma.payment.findFirst({
+  const payment = await prisma.payment.findFirst({
     where: { id, organizationId },
     include: listInclude,
   });
+
+  if (!payment) {
+    throw notFound("Payment not found", "PAYMENT_NOT_FOUND");
+  }
+
+  return payment;
 }
 
 /**
@@ -50,10 +62,13 @@ export async function getPaymentById(id: string, organizationId: string) {
  *
  * With a `saleId` the payment settles that invoice and `Sale.amountPaid` moves
  * in the same transaction. The over-payment guard is a conditional update —
- * `amountPaid <= remaining - amount` evaluated by the database against the row
+ * `amountPaid <= totalAmount - amount` evaluated by the database against the row
  * it is updating — so two concurrent payments that each fit the balance they
  * read cannot both land: the second re-evaluates against the first's write and
- * matches no row. A read-then-write check would let both through.
+ * matches no row. A read-then-write check would let both through. The
+ * threshold is the invoice total, never the remaining balance: subtracting
+ * `amount` from a snapshot of `remaining` would double-subtract what is
+ * already paid and lock a partially paid invoice out of its own balance.
  *
  * Without a `saleId` the money sits on the customer's account as cash on
  * account, which the ledger shows as a receipt without touching any invoice.
@@ -130,7 +145,7 @@ export async function createPayment(
           id: sale.id,
           organizationId,
           deletedAt: null,
-          amountPaid: { lte: remaining - data.amount },
+          amountPaid: { lte: sale.totalAmount - data.amount },
         },
         data: { amountPaid: { increment: data.amount } },
       });

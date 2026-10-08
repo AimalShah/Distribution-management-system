@@ -1,7 +1,13 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
-import type { SaleInvoiceInput, SaleUpdateInput } from "@dms/shared";
+import {
+  calculateSaleBreakdown,
+  isInvalidSaleTotal,
+  type SaleInvoiceInput,
+  type SaleUpdateInput,
+} from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { applyStockMovement } from "./stock-movement";
 
 const listInclude = {
   customer: true,
@@ -16,141 +22,6 @@ const detailInclude = {
   items: { include: { product: true } },
 } satisfies Prisma.SaleInclude;
 
-/**
- * `src/components/sale-invoice/SaleInvoiceForm.tsx` computed the document total
- * in the browser as `sum(quantity * unitPrice) + taxAmount - discount`. Line
- * `taxPercent` is stored on the line but was never part of that sum, so it is
- * not part of this one either.
- */
-export const calculateSaleTotal = (data: SaleInvoiceInput) => {
-  const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const gstTax = (data.cgstAmount ?? 0) + (data.sgstAmount ?? 0) + (data.igstAmount ?? 0);
-  const tax = data.taxAmount ?? (gstTax > 0 ? gstTax : 0);
-  return subtotal + tax - (data.discount ?? 0);
-};
-
-export interface SaleBreakdownItem {
-  productId: string;
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-  productName?: string;
-  productCode?: string;
-  gstApplicable?: boolean;
-  gstRate?: number;
-  cgstRate: number;
-  sgstRate: number;
-  igstRate: number;
-  cgstAmount: number;
-  sgstAmount: number;
-  igstAmount: number;
-}
-
-export interface SaleBreakdownResult {
-  subtotal: number;
-  cgstAmount: number;
-  sgstAmount: number;
-  igstAmount: number;
-  taxAmount: number;
-  discount: number;
-  total: number;
-  items: SaleBreakdownItem[];
-}
-
-export function calculateSaleBreakdown(params: {
-  items: Array<{
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-    subtotal?: number;
-    gstApplicable?: boolean;
-    gstRate?: number;
-    taxPercent?: number;
-    cgstRate?: number;
-    sgstRate?: number;
-    igstRate?: number;
-    cgstAmount?: number;
-    sgstAmount?: number;
-    igstAmount?: number;
-    productName?: string;
-    productCode?: string;
-  }>;
-  isInterState?: boolean;
-  discount?: number;
-  taxAmount?: number;
-}): SaleBreakdownResult {
-  const isInterState = Boolean(params.isInterState);
-  let totalCgst = 0;
-  let totalSgst = 0;
-  let totalIgst = 0;
-  let subtotal = 0;
-
-  const items: SaleBreakdownItem[] = params.items.map((item) => {
-    const lineTotal = item.subtotal ?? item.quantity * item.unitPrice;
-    subtotal += lineTotal;
-    const isGstApplicable = item.gstApplicable ?? true;
-    const rawRate = isGstApplicable ? (item.taxPercent ?? item.gstRate ?? 0) : 0;
-
-    let cgstRate = item.cgstRate ?? 0;
-    let sgstRate = item.sgstRate ?? 0;
-    let igstRate = item.igstRate ?? 0;
-    let cgstAmount = item.cgstAmount ?? 0;
-    let sgstAmount = item.sgstAmount ?? 0;
-    let igstAmount = item.igstAmount ?? 0;
-
-    if (rawRate > 0 && !item.cgstRate && !item.sgstRate && !item.igstRate && !item.cgstAmount && !item.sgstAmount && !item.igstAmount) {
-      if (isInterState) {
-        igstRate = rawRate;
-        igstAmount = Number(((lineTotal * igstRate) / 100).toFixed(2));
-      } else {
-        cgstRate = Number((rawRate / 2).toFixed(2));
-        sgstRate = Number((rawRate / 2).toFixed(2));
-        cgstAmount = Number(((lineTotal * cgstRate) / 100).toFixed(2));
-        sgstAmount = Number(((lineTotal * sgstRate) / 100).toFixed(2));
-      }
-    }
-
-    totalCgst += cgstAmount;
-    totalSgst += sgstAmount;
-    totalIgst += igstAmount;
-
-    return {
-      productId: item.productId,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: lineTotal,
-      productName: item.productName,
-      productCode: item.productCode,
-      gstApplicable: item.gstApplicable,
-      gstRate: item.gstRate,
-      cgstRate,
-      sgstRate,
-      igstRate,
-      cgstAmount,
-      sgstAmount,
-      igstAmount,
-    };
-  });
-
-  const cgstAmount = Number(totalCgst.toFixed(2));
-  const sgstAmount = Number(totalSgst.toFixed(2));
-  const igstAmount = Number(totalIgst.toFixed(2));
-  const totalTax = params.taxAmount !== undefined ? params.taxAmount : Number((cgstAmount + sgstAmount + igstAmount).toFixed(2));
-  const discount = params.discount ?? 0;
-  const total = Number((subtotal + totalTax - discount).toFixed(2));
-
-  return {
-    subtotal: Number(subtotal.toFixed(2)),
-    cgstAmount,
-    sgstAmount,
-    igstAmount,
-    taxAmount: totalTax,
-    discount,
-    total,
-    items,
-  };
-}
-
 export type SaleListArgs = {
   organizationId: string;
   page: number;
@@ -164,9 +35,11 @@ export type SaleListArgs = {
 /** Total units of one product across every line, so repeats are checked together. */
 const demandByProduct = (lines: { productId: string; quantity: number }[]) => {
   const demand = new Map<string, number>();
+
   for (const line of lines) {
     demand.set(line.productId, (demand.get(line.productId) ?? 0) + line.quantity);
   }
+
   return demand;
 };
 
@@ -183,9 +56,15 @@ export async function getSales({
     // The Deleted tab asks for the soft-deleted invoices explicitly; every other
     // caller sees active invoices only, as before.
     deletedAt: deleted ? { not: null } : null,
-    ...(status ? { status } : {}),
-    ...(search ? { saleCode: { contains: search, mode: "insensitive" } } : {}),
   };
+
+  if (status) {
+    where.status = status;
+  }
+
+  if (search) {
+    where.saleCode = { contains: search, mode: "insensitive" };
+  }
 
   const [data, total] = await Promise.all([
     prisma.sale.findMany({
@@ -209,10 +88,16 @@ export async function getSales({
  * by guessing its code.
  */
 export async function getSaleByIdOrCode(idOrCode: string, organizationId: string) {
-  return prisma.sale.findFirst({
+  const sale = await prisma.sale.findFirst({
     where: { organizationId, OR: [{ id: idOrCode }, { saleCode: idOrCode }] },
     include: detailInclude,
   });
+
+  if (!sale) {
+    throw notFound("Sale not found", "SALE_NOT_FOUND");
+  }
+
+  return sale;
 }
 
 // The legacy `getSaleByCustomer` filtered on `customerId` alone, so a customer
@@ -251,13 +136,63 @@ export async function getSalesByCustomer({
 }
 
 export async function createSale(data: SaleInvoiceInput, organizationId: string, userId: string) {
-  const totalAmount = calculateSaleTotal(data);
+  // The document's money figures are derived before the transaction opens, for
+  // two reasons. A line's GST rate falls back to its product's rate, so the
+  // products have to be read first; and the invalid-total refusal has to run
+  // before `$transaction` starts, so a document that cannot be written never
+  // opens one. The same figures are stored below, so what is refused here and
+  // what is written there are one calculation, not two.
+  const productIds = [...demandByProduct(data.items).keys()];
 
-  if (totalAmount < 0) {
+  const owned = await prisma.product.findMany({
+    where: { id: { in: productIds }, organizationId },
+    select: { id: true, gstApplicable: true, gstRate: true },
+  });
+
+  if (owned.length !== productIds.length) {
+    const ownedIds = new Set(owned.map((product) => product.id));
+    throw badRequest(
+      "One or more products do not exist in this organization",
+      "PRODUCT_NOT_IN_ORGANIZATION",
+      { productIds: productIds.filter((id) => !ownedIds.has(id)) }
+    );
+  }
+
+  const productMap = new Map(owned.map((product) => [product.id, product]));
+  const isInterState = Boolean(data.isInterState);
+
+  const money = calculateSaleBreakdown({
+    items: data.items.map((item) => {
+      const product = productMap.get(item.productId);
+
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        gstApplicable: product?.gstApplicable,
+        gstRate: product?.gstRate,
+        taxPercent: item.taxPercent,
+        cgstRate: item.cgstRate,
+        sgstRate: item.sgstRate,
+        igstRate: item.igstRate,
+        cgstAmount: item.cgstAmount,
+        sgstAmount: item.sgstAmount,
+        igstAmount: item.igstAmount,
+      };
+    }),
+    isInterState,
+    discount: data.discount,
+    taxAmount: data.taxAmount,
+    cgstAmount: data.cgstAmount,
+    sgstAmount: data.sgstAmount,
+    igstAmount: data.igstAmount,
+  });
+
+  if (isInvalidSaleTotal(money.total)) {
     throw badRequest(
       "Sale total cannot be negative. Check the discount and tax amounts.",
       "INVALID_TOTAL",
-      { totalAmount }
+      { totalAmount: money.total }
     );
   }
 
@@ -283,78 +218,26 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
       );
     }
 
-    const productIds = [...demandByProduct(data.items).keys()];
-    const owned = await tx.product.findMany({
-      where: { id: { in: productIds }, organizationId },
-      select: { id: true, gstApplicable: true, gstRate: true },
-    });
-
-    if (owned.length !== productIds.length) {
-      const ownedIds = new Set(owned.map((product) => product.id));
-      throw badRequest(
-        "One or more products do not exist in this organization",
-        "PRODUCT_NOT_IN_ORGANIZATION",
-        { productIds: productIds.filter((id) => !ownedIds.has(id)) }
-      );
-    }
-
-    const productMap = new Map(owned.map((product) => [product.id, product]));
-    const isInterState = Boolean(data.isInterState);
-    let totalCgstAmount = 0;
-    let totalSgstAmount = 0;
-    let totalIgstAmount = 0;
-
-    const saleItems = data.items.map((item) => {
-      const prod = productMap.get(item.productId);
-      const isGstApplicable = prod?.gstApplicable ?? true;
-      const rawRate = isGstApplicable ? (item.taxPercent ?? prod?.gstRate ?? 0) : 0;
-      const lineTotal = item.quantity * item.unitPrice;
-
-      let cgstRate = item.cgstRate ?? 0;
-      let sgstRate = item.sgstRate ?? 0;
-      let igstRate = item.igstRate ?? 0;
-      let cgstAmount = item.cgstAmount ?? 0;
-      let sgstAmount = item.sgstAmount ?? 0;
-      let igstAmount = item.igstAmount ?? 0;
-
-      if (rawRate > 0 && !item.cgstRate && !item.sgstRate && !item.igstRate && !item.cgstAmount && !item.sgstAmount && !item.igstAmount) {
-        if (isInterState) {
-          igstRate = rawRate;
-          igstAmount = Number(((lineTotal * igstRate) / 100).toFixed(2));
-        } else {
-          cgstRate = Number((rawRate / 2).toFixed(2));
-          sgstRate = Number((rawRate / 2).toFixed(2));
-          cgstAmount = Number(((lineTotal * cgstRate) / 100).toFixed(2));
-          sgstAmount = Number(((lineTotal * sgstRate) / 100).toFixed(2));
-        }
-      }
-
-      totalCgstAmount += cgstAmount;
-      totalSgstAmount += sgstAmount;
-      totalIgstAmount += igstAmount;
+    // The line rows come from the breakdown that was already checked: the line
+    // subtotal becomes `totalPrice`, and the stored rate is the one actually
+    // applied — the product's rate when the line stated none, else the line's.
+    const saleItems = money.items.map((line, index) => {
+      const item = data.items[index];
 
       return {
         productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: lineTotal,
-        taxPercent: rawRate > 0 ? rawRate : item.taxPercent,
-        cgstRate,
-        sgstRate,
-        igstRate,
-        cgstAmount,
-        sgstAmount,
-        igstAmount,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        totalPrice: line.subtotal,
+        taxPercent: line.taxPercent > 0 ? line.taxPercent : item.taxPercent,
+        cgstRate: line.cgstRate,
+        sgstRate: line.sgstRate,
+        igstRate: line.igstRate,
+        cgstAmount: line.cgstAmount,
+        sgstAmount: line.sgstAmount,
+        igstAmount: line.igstAmount,
       };
     });
-
-    const calculatedCgst = data.cgstAmount !== undefined ? data.cgstAmount : Number(totalCgstAmount.toFixed(2));
-    const calculatedSgst = data.sgstAmount !== undefined ? data.sgstAmount : Number(totalSgstAmount.toFixed(2));
-    const calculatedIgst = data.igstAmount !== undefined ? data.igstAmount : Number(totalIgstAmount.toFixed(2));
-    const totalGst = calculatedCgst + calculatedSgst + calculatedIgst;
-    const finalTaxAmount = data.taxAmount !== undefined ? data.taxAmount : (totalGst > 0 || data.invoiceType === "tax" ? totalGst : undefined);
-    const subtotal = data.items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-    const finalTotalAmount = data.taxAmount !== undefined ? totalAmount : (subtotal + (finalTaxAmount ?? 0) - (data.discount ?? 0));
 
     // The legacy service deducted optimistically and clamped at zero:
     // `quantityOnHand: Math.max(0, newQty)` with only a `console.warn`. Selling
@@ -364,9 +247,9 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     //
     // This pass is for the error message, not for the guarantee. It reports every
     // short line at once instead of failing on the first, but the decision that
-    // actually protects stock is the guarded decrement in the loop below, which
-    // runs against the row as the database sees it. Relying on this read alone
-    // would leave a window between the check and the write.
+    // actually protects stock is the guarded decrement inside the stock-movement
+    // module below, which runs against the row as the database sees it. Relying
+    // on this read alone would leave a window between the check and the write.
     //
     // `quantityOnHand` is the only figure consulted: nothing in the legacy code
     // reserves stock, so `quantityReserved` is not part of availability yet.
@@ -377,7 +260,9 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         where: { productId, organizationId },
         select: { quantityOnHand: true },
       });
+
       const available = inventory?.quantityOnHand ?? 0;
+
       if (requested > available) {
         shortages.push({ productId, available, requested });
       }
@@ -391,135 +276,54 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
       );
     }
 
+    // The movements run before the invoice row because a sale line records the
+    // lot its units were drawn from (`SaleItem.batchId`), and the batch is only
+    // known once the deduction has taken it. The availability decision itself
+    // lives in the stock-movement module: two lines for the same product still
+    // deduct in sequence, because each one sees the previous line's write.
+    const batchIds: (string | null)[] = [];
+
+    for (const item of data.items) {
+      const { batchId } = await applyStockMovement({
+        tx,
+        organizationId,
+        userId,
+        productId: item.productId,
+        direction: "out",
+        quantity: item.quantity,
+        movementType: "OUT",
+        reason: `Stock Out from Sale ${data.saleCode}`,
+        reference: data.saleCode,
+        refusal: (available) =>
+          conflict("Not enough stock to fulfil this sale", "INSUFFICIENT_STOCK", {
+            shortages: [{ productId: item.productId, available, requested: item.quantity }],
+          }),
+      });
+
+      batchIds.push(batchId);
+    }
+
     const sale = await tx.sale.create({
       data: {
         saleCode: data.saleCode,
         customerId: data.customerId,
         saleDate: data.saleDate,
-        totalAmount: finalTotalAmount,
+        totalAmount: money.total,
         discount: data.discount,
-        taxAmount: finalTaxAmount,
+        taxAmount: money.taxAmount,
         invoiceType: data.invoiceType ?? "regular",
         isInterState,
-        cgstAmount: calculatedCgst,
-        sgstAmount: calculatedSgst,
-        igstAmount: calculatedIgst,
+        cgstAmount: money.cgstAmount,
+        sgstAmount: money.sgstAmount,
+        igstAmount: money.igstAmount,
         status: data.status,
         organizationId,
-        items: { create: saleItems },
+        items: {
+          create: saleItems.map((line, index) => ({ ...line, batchId: batchIds[index] })),
+        },
       },
       include: detailInclude,
     });
-
-    for (const item of data.items) {
-      // The availability check and the write are one statement, and that is the
-      // only part that has to be. A read-then-write pair cannot hold under READ
-      // COMMITTED: two concurrent sales of 8 against 10 on hand both pass a
-      // pre-check, both read 10, and both write 2, so 16 units are sold against
-      // 2 left. The `gte` guard is evaluated by the database against the row it
-      // is updating, so only one transaction can claim the units and the other
-      // is refused. Two lines for the same product still deduct in sequence,
-      // because each one sees the previous line's write.
-      const claimed = await tx.inventory.updateMany({
-        where: {
-          productId: item.productId,
-          organizationId,
-          quantityOnHand: { gte: item.quantity },
-        },
-        data: { quantityOnHand: { decrement: item.quantity } },
-      });
-
-      if (claimed.count === 0) {
-        // The pre-pass above already refused a product with no inventory row,
-        // but it ran as a separate read, so a concurrent transaction may have
-        // taken the units, or deleted the row, since.
-        const current = await tx.inventory.findFirst({
-          where: { productId: item.productId, organizationId },
-          select: { quantityOnHand: true },
-        });
-
-        if (!current) {
-          throw conflict(
-            "The stock record for one of the products no longer exists",
-            "INVENTORY_ROW_MISSING",
-            { productId: item.productId }
-          );
-        }
-
-        throw conflict(
-          "Not enough stock to fulfil this sale",
-          "INSUFFICIENT_STOCK",
-          {
-            shortages: [
-              {
-                productId: item.productId,
-                available: current.quantityOnHand,
-                requested: item.quantity,
-              },
-            ],
-          }
-        );
-      }
-
-      // `updateMany` returns a count, not a row, so the ledger's opening figure
-      // is derived from the row as it stands after the write rather than read
-      // before it: previousQty - quantity = newQty holds by construction.
-      const current = await tx.inventory.findFirst({
-        where: { productId: item.productId, organizationId },
-        select: { id: true, quantityOnHand: true },
-      });
-
-      if (!current) {
-        throw conflict(
-          "The stock record for one of the products no longer exists",
-          "INVENTORY_ROW_MISSING",
-          { productId: item.productId }
-        );
-      }
-
-      const newQty = current.quantityOnHand;
-      const previousQty = newQty + item.quantity;
-
-      await tx.inventoryLog.create({
-        data: {
-          inventoryId: current.id,
-          productId: item.productId,
-          userId,
-          movementType: "OUT",
-          quantity: item.quantity,
-          previousQty,
-          newQty,
-          reason: `Stock Out from Sale ${data.saleCode}`,
-          reference: data.saleCode,
-        },
-      });
-
-      // FEFO (First Expired, First Out) batch deduction
-      if (typeof (tx as any).stockBatch?.findMany === "function") {
-        const availableBatches = await tx.stockBatch.findMany({
-          where: {
-            productId: item.productId,
-            organizationId,
-            quantityRemaining: { gt: 0 },
-          },
-          orderBy: [
-            { expiryDate: "asc" },
-            { receivedAt: "asc" },
-          ],
-        });
-
-        let remainingToDeduct = item.quantity;
-        for (const batch of availableBatches) {
-          if (remainingToDeduct <= 0) break;
-          const deduct = Math.min(batch.quantityRemaining, remainingToDeduct);
-          await tx.stockBatch.update({
-            where: { id: batch.id },
-            data: { quantityRemaining: { decrement: deduct } },
-          });
-          remainingToDeduct -= deduct;
-        }
-      }
-    }
 
     return sale;
   });
@@ -660,35 +464,19 @@ export async function deleteSale(id: string, organizationId: string, userId: str
       }
 
       for (const [productId, quantity] of demandByProduct(existing.items)) {
-        const row = await tx.inventory.findFirst({
-          where: { productId, organizationId },
-          select: { id: true, quantityOnHand: true },
-        });
-
-        if (!row) {
-          throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-            productId,
-          });
-        }
-
-        const updated = await tx.inventory.update({
-          where: { id: row.id, organizationId },
-          data: { quantityOnHand: { increment: quantity } },
-          select: { quantityOnHand: true },
-        });
-
-        await tx.inventoryLog.create({
-          data: {
-            inventoryId: row.id,
-            productId,
-            userId,
-            movementType: "IN",
-            quantity,
-            previousQty: updated.quantityOnHand - quantity,
-            newQty: updated.quantityOnHand,
-            reason: `Reversal of sale ${existing.saleCode}`,
-            reference: existing.saleCode,
-          },
+        // Giving stock back never refuses, and the batches the invoice
+        // consumed are credited as it comes — the stock-movement module owns
+        // both the ledger row and that consequence.
+        await applyStockMovement({
+          tx,
+          organizationId,
+          userId,
+          productId,
+          direction: "in",
+          quantity,
+          movementType: "IN",
+          reason: `Reversal of sale ${existing.saleCode}`,
+          reference: existing.saleCode,
         });
       }
 
@@ -732,52 +520,23 @@ export async function restoreSale(id: string, organizationId: string, userId: st
       }
 
       for (const [productId, quantity] of demandByProduct(existing.items)) {
-        const claimed = await tx.inventory.updateMany({
-          where: {
-            productId,
-            organizationId,
-            quantityOnHand: { gte: quantity },
-          },
-          data: { quantityOnHand: { decrement: quantity } },
-        });
-
-        if (claimed.count === 0) {
-          const current = await tx.inventory.findFirst({
-            where: { productId, organizationId },
-            select: { quantityOnHand: true },
-          });
-
-          if (!current) {
-            throw conflict("The stock record no longer exists", "INVENTORY_ROW_MISSING", {
-              productId,
-            });
-          }
-
-          throw conflict(
-            "There is no longer enough stock on hand to re-apply this invoice, " +
-              "so it cannot be restored",
-            "INSUFFICIENT_STOCK_FOR_RESTORE",
-            { productId, available: current.quantityOnHand, requested: quantity }
-          );
-        }
-
-        const current = await tx.inventory.findFirstOrThrow({
-          where: { productId, organizationId },
-          select: { id: true, quantityOnHand: true },
-        });
-
-        await tx.inventoryLog.create({
-          data: {
-            inventoryId: current.id,
-            productId,
-            userId,
-            movementType: "OUT",
-            quantity,
-            previousQty: current.quantityOnHand + quantity,
-            newQty: current.quantityOnHand,
-            reason: `Restoration of sale ${existing.saleCode}`,
-            reference: existing.saleCode,
-          },
+        await applyStockMovement({
+          tx,
+          organizationId,
+          userId,
+          productId,
+          direction: "out",
+          quantity,
+          movementType: "OUT",
+          reason: `Restoration of sale ${existing.saleCode}`,
+          reference: existing.saleCode,
+          refusal: (available) =>
+            conflict(
+              "There is no longer enough stock on hand to re-apply this invoice, " +
+                "so it cannot be restored",
+              "INSUFFICIENT_STOCK_FOR_RESTORE",
+              { productId, available, requested: quantity }
+            ),
         });
       }
 
@@ -880,21 +639,39 @@ export async function uncancelSale(id: string, organizationId: string) {
 
 export async function getSaleInvoiceData(id: string, organizationId: string) {
   const sale = await getSaleByIdOrCode(id, organizationId);
-  if (!sale) return null;
 
   const items = sale.items || [];
-  const subtotal = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-  const totalTax =
-    (sale.cgstAmount || 0) + (sale.sgstAmount || 0) + (sale.igstAmount || 0) ||
-    (sale.taxAmount || 0);
+
+  // The read path asks the same module the write path used, fed with the
+  // figures as they are stored: each line passes its stored subtotal and split
+  // through untouched, and the header's own tax wins exactly as it did on the
+  // way in. Nothing is re-derived from rates that could have changed since.
+  const money = calculateSaleBreakdown({
+    items: items.map((it) => ({
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      subtotal: it.totalPrice ?? it.quantity * it.unitPrice,
+      cgstRate: it.cgstRate ?? 0,
+      sgstRate: it.sgstRate ?? 0,
+      igstRate: it.igstRate ?? 0,
+      cgstAmount: it.cgstAmount ?? 0,
+      sgstAmount: it.sgstAmount ?? 0,
+      igstAmount: it.igstAmount ?? 0,
+    })),
+    discount: sale.discount ?? undefined,
+    taxAmount: sale.taxAmount ?? undefined,
+    cgstAmount: sale.cgstAmount ?? undefined,
+    sgstAmount: sale.sgstAmount ?? undefined,
+    igstAmount: sale.igstAmount ?? undefined,
+  });
 
   return {
     ...sale,
-    subtotal,
-    totalTax,
-    items: items.map((it) => ({
+    subtotal: money.subtotal,
+    totalTax: money.taxAmount,
+    items: items.map((it, index) => ({
       ...it,
-      totalPrice: it.totalPrice ?? it.quantity * it.unitPrice,
+      totalPrice: money.items[index].subtotal,
     })),
   };
 }

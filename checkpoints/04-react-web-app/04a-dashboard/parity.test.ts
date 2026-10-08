@@ -33,6 +33,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -51,6 +52,7 @@ const WIDGETS: Readonly<Record<string, string>> = {
 };
 
 const page = read("apps/web/src/pages/Dashboard.tsx");
+
 const legacy = read("src/app/(app)/dashboard/page.tsx");
 
 describe("Checkpoint 4a — Dashboard", () => {
@@ -130,15 +132,18 @@ describe("Checkpoint 4a — Dashboard", () => {
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -160,6 +165,7 @@ describe("Checkpoint 4a — Dashboard", () => {
     expect(routes).toContain("dashboardRouter");
 
     const service = read("apps/server/src/services/dashboard.ts");
+
     for (const field of [
       "totalSalesAmount",
       "totalPurchasesAmount",

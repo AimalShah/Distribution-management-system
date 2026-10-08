@@ -27,12 +27,14 @@ const { customerModel, saleModel, paymentModel, returnModel } = vi.hoisted(() =>
 
 vi.mock("@dms/db", () => ({
   default: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     customer: customerModel,
     sale: saleModel,
     payment: paymentModel,
     return: returnModel,
   },
   prisma: {
+    member: { findFirst: async () => ({ role: "owner" }) },
     customer: customerModel,
     sale: saleModel,
     payment: paymentModel,
@@ -43,6 +45,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const OTHER_ORG = "org_2";
 
 const customerFixture = (overrides: Record<string, unknown> = {}) => ({

@@ -36,6 +36,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -81,6 +82,7 @@ describe("Checkpoint 4h — Supplier Page", () => {
       "Status",
       "Actions",
     ];
+
     for (const header of expectedHeaders) {
       expect(listSrc, `SupplierList must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -137,12 +139,14 @@ describe("Checkpoint 4h — Supplier Page", () => {
       supplierCode: "SUPP-1",
       contactPerson: "John",
     });
+
     expect(noCompanyResult.success).toBe(false);
 
     const noCodeResult = SupplierSchema.safeParse({
       companyName: "Acme Supplies",
       contactPerson: "John",
     });
+
     expect(noCodeResult.success).toBe(false);
 
     const badEmailResult = SupplierSchema.safeParse({
@@ -151,6 +155,7 @@ describe("Checkpoint 4h — Supplier Page", () => {
       contactPerson: "John",
       email: "not-an-email",
     });
+
     expect(badEmailResult.success).toBe(false);
 
     const validResult = SupplierSchema.safeParse({
@@ -162,10 +167,12 @@ describe("Checkpoint 4h — Supplier Page", () => {
       city: "Chicago",
       isActive: true,
     });
+
     expect(validResult.success).toBe(true);
 
     if (hasDatabase && t) {
       const code = unique("SUPP_ADD");
+
       const res = await request(app)
         .post("/api/suppliers")
         .set(asOrg(t.organizationId))
@@ -201,6 +208,7 @@ describe("Checkpoint 4h — Supplier Page", () => {
 
     if (hasDatabase && t) {
       const code = unique("SUPP_EDT");
+
       const created = await request(app)
         .post("/api/suppliers")
         .set(asOrg(t.organizationId))
@@ -254,18 +262,22 @@ describe("Checkpoint 4h — Supplier Page", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -275,6 +287,7 @@ describe("Checkpoint 4h — Supplier Page", () => {
 
     if (hasDatabase && t) {
       const code = unique("SUPP_DEL");
+
       const created = await request(app)
         .post("/api/suppliers")
         .set(asOrg(t.organizationId))

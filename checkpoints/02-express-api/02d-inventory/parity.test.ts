@@ -36,6 +36,7 @@ import {
   asUser,
   errorBody,
   hasDatabase,
+  orgOnly,
   prisma,
   request,
   seedTenants,
@@ -80,6 +81,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2d — Inventory API", () => {
    */
   const stocked = async (org: string, onHand: number, reorderLevel: number) => {
     const mine = org === t.organizationId;
+
     const p = await prisma.product.create({
       data: {
         productCode: unique("SKU"),
@@ -92,9 +94,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 2d — Inventory API", () => {
         unitPrice: 2,
       },
     });
+
     const row = await prisma.inventory.create({
       data: { productId: p.id, organizationId: org, quantityOnHand: onHand, reorderLevel },
     });
+
     return row;
   };
 
@@ -102,14 +106,16 @@ describe.skipIf(!hasDatabase)("Checkpoint 2d — Inventory API", () => {
     inventoryId: string,
     movementType: string,
     quantity: number,
-    userId: string | null = t.userId
+    userId: string | null = t.userId,
+    reason = "parity suite"
   ) => {
     const req = request(app)
       .post("/api/inventory/adjust")
-      .send({ inventoryId, movementType, quantity, reason: "parity suite" });
+      .send({ inventoryId, movementType, quantity, reason });
+
     return (userId
       ? req.set(asUser(t.organizationId, userId))
-      : req.set(asOrg(t.organizationId))
+      : req.set(orgOnly(t.organizationId))
     );
   };
 
@@ -222,6 +228,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2d — Inventory API", () => {
       where: { inventoryId: row.id, movementType: "ADJUSTMENT" },
       orderBy: { createdAt: "asc" },
     });
+
     // The legacy service set the absolute figure but logged `quantity` unchanged,
     // so a change of 12 was recorded as "moved 15" and no longer added up.
     expect(logs.map((l) => [l.previousQty, l.quantity, l.newQty])).toEqual([
@@ -276,15 +283,18 @@ describe.skipIf(!hasDatabase)("Checkpoint 2d — Inventory API", () => {
 
   it("rolls the movement back when the ledger write fails", async () => {
     // The stock change is applied first and the log second, inside one
-    // transaction. Tripping the `InventoryLog.userId` foreign key after the fact
-    // is the only way to see whether the decrement survives. A mocked suite
-    // cannot ask that question: there is no rollback to mock.
+    // transaction. A reference the database cannot store trips the ledger insert
+    // after the decrement has already landed -- the only way to see whether the
+    // decrement survives. A mocked suite cannot ask that question: there is no
+    // rollback to mock.
     const row = await stocked(t.organizationId, 10, 5);
 
-    const res = await adjust(row.id, "OUT", 4, "usr_does_not_exist");
+    const res = await adjust(row.id, "OUT", 4, t.userId, "parity\u0000suite");
 
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject(errorBody.foreignKey);
+    // An untranslatable column-range failure: see 02b for why the status is not
+    // what this assertion is for.
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ code: "INTERNAL_ERROR" });
 
     expect((await prisma.inventory.findUniqueOrThrow({ where: { id: row.id } })).quantityOnHand).toBe(10);
     expect(await prisma.inventoryLog.count({ where: { inventoryId: row.id } })).toBe(0);

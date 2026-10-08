@@ -1,10 +1,11 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { ORGANIZATION_HEADER, USER_HEADER } from "../middleware/auth-context";
+import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    member: { findFirst: async () => ({ role: "owner" }) },
     return: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -24,6 +25,7 @@ const { models, transaction } = vi.hoisted(() => {
       updateMany: vi.fn(),
     },
     inventoryLog: { create: vi.fn() },
+    stockBatch: { findMany: vi.fn(), update: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -48,6 +50,7 @@ vi.mock("@dms/db", () => ({
 const app = createApp();
 
 const ORG = "org_1";
+
 const USER = "user_1";
 
 const auth = (withUser = true) => ({
@@ -162,6 +165,9 @@ beforeEach(() => {
   models.inventory.update.mockResolvedValue({ quantityOnHand: 12 });
 
   models.inventoryLog.create.mockResolvedValue({});
+  // No batches are tracked for this product, so FEFO and its reverse have
+  // nothing to touch.
+  models.stockBatch.findMany.mockResolvedValue([]);
 });
 
 describe("organization context", () => {
@@ -206,6 +212,7 @@ describe("GET /api/returns", () => {
     const arg = models.return.findMany.mock.calls[0][0] as {
       include: Record<string, unknown>;
     };
+
     expect(arg.include).toHaveProperty("_count");
     expect(arg.include).not.toHaveProperty("items");
   });
@@ -258,6 +265,7 @@ describe("GET /api/returns/:id", () => {
     const arg = models.return.findFirst.mock.calls[0][0] as {
       include: Record<string, unknown>;
     };
+
     expect(arg.include).toHaveProperty("items");
     expect(arg.include).toHaveProperty("sale");
     expect(arg.include).toHaveProperty("purchase");
@@ -342,6 +350,8 @@ describe("POST /api/returns validation", () => {
   });
 
   it("refuses a return with no user to attribute the stock movement to", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).post("/api/returns").set(auth(false)).send(saleReturn());
 
     expect(res.status).toBe(400);
@@ -723,6 +733,7 @@ describe("DELETE /api/returns/:id", () => {
       reason: string;
       reference: string;
     };
+
     expect(data.movementType).toBe("OUT");
     expect(data.previousQty).toBe(10);
     expect(data.newQty).toBe(8);
@@ -778,6 +789,8 @@ describe("DELETE /api/returns/:id", () => {
   });
 
   it("refuses a delete with no user to attribute the reversal to", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
     const res = await request(app).delete("/api/returns/ret_1").set(auth(false));
 
     expect(res.status).toBe(400);

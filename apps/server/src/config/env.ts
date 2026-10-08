@@ -55,6 +55,7 @@ export const host = process.env.DMS_HOST ?? "127.0.0.1";
  */
 export function assertAuthIsSafe(): void {
   if (!isProduction) return;
+
   if (process.env.DMS_TRUSTED_PROXY_AUTH === "true") return;
 
   if ((process.env.BETTER_AUTH_SECRET ?? "").length < 32) {

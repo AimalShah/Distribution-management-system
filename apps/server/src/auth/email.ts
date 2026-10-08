@@ -18,6 +18,7 @@ export const EMAIL_FROM = process.env.EMAIL_FROM ?? "Inventioo <onboarding@resen
 
 export async function sendEmail(email: Email): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
+
   if (!apiKey) return;
 
   const res = await fetch("https://api.resend.com/emails", {

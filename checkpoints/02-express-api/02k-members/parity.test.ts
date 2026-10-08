@@ -71,8 +71,10 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
       await prisma.member.deleteMany({ where: { userId: { in: madeUsers } } });
       await prisma.user.deleteMany({ where: { id: { in: madeUsers } } });
     }
+
     // Cascades take the memberships with the organization.
     if (madeOrgs.length) await prisma.organization.deleteMany({ where: { id: { in: madeOrgs } } });
+
     if (t) await teardownTenants(t);
   });
 
@@ -94,6 +96,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
         updatedAt: new Date(),
       },
     });
+
     return id;
   };
 
@@ -103,6 +106,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
     await prisma.member.create({
       data: { id, organizationId: orgId, userId, role, createdAt: new Date() },
     });
+
     return id;
   };
 
@@ -133,31 +137,37 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
         },
       },
     });
+
     return id;
   };
 
   const add = (orgId: string, body: Record<string, unknown>, caller: string | null = t.userId) => {
     const req = request(app).post(`/api/organizations/${orgId}/members`).send(body);
+
     return caller ? req.set(asUser("", caller)) : req.set(asOrg(""));
   };
 
   const remove = (memberId: string, caller: string | null = t.userId) => {
     const req = request(app).delete(`/api/members/${memberId}`);
+
     return caller ? req.set(asUser("", caller)) : req.set(asOrg(""));
   };
 
   const setRole = (memberId: string, role: string, caller: string | null = t.userId) => {
     const req = request(app).patch(`/api/members/${memberId}/role`).send({ role });
+
     return caller ? req.set(asUser("", caller)) : req.set(asOrg(""));
   };
 
   const listMembers = (orgId: string, caller: string | null = t.userId) => {
     const req = request(app).get(`/api/organizations/${orgId}/members`);
+
     return caller ? req.set(asUser("", caller)) : req.set(asOrg(""));
   };
 
   const listAvailable = (orgId: string, caller: string | null = t.userId) => {
     const req = request(app).get(`/api/organizations/${orgId}/available-users`);
+
     return caller ? req.set(asUser("", caller)) : req.set(asOrg(""));
   };
 
@@ -231,12 +241,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
     const res = await listMembers(t.organizationId);
 
     expect(res.status).toBe(200);
+
     // The roster is exactly this organization's membership rows, so the strongest
     // available check is against the table itself.
     const expected = await prisma.member.findMany({
       where: { organizationId: t.organizationId },
       select: { id: true, userId: true },
     });
+
     expect(res.body.map((m: { id: string }) => m.id).sort()).toEqual(
       expected.map((m) => m.id).sort()
     );
@@ -355,6 +367,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
     // database does not prevent it -- the last row is a perfectly valid one.
     const owner = await makeUser("solo", t.organizationId);
     const orgId = await makeOrg("solo-org", owner);
+
     const ownerMemberId = (await prisma.member.findFirstOrThrow({
       where: { organizationId: orgId },
       select: { id: true },
@@ -370,6 +383,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
     // A demotion can empty the owner set just as a removal can.
     const owner = await makeUser("solodemote", t.organizationId);
     const orgId = await makeOrg("demote-org", owner);
+
     const ownerMemberId = (await prisma.member.findFirstOrThrow({
       where: { organizationId: orgId },
       select: { id: true },
@@ -387,10 +401,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
   it("lets a second owner be removed while another remains", async () => {
     const staying = await makeUser("staying", t.organizationId);
     const orgId = await makeOrg("two-org", staying);
+
     const stayingId = (await prisma.member.findFirstOrThrow({
       where: { organizationId: orgId },
       select: { id: true },
     })).id;
+
     const leaving = await makeUser("leaving", t.organizationId);
     const leavingId = await give(orgId, leaving, "owner");
 
@@ -431,10 +447,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2k — Member API", () => {
     // manage through the API again.
     const first = await makeUser("pair1", t.organizationId);
     const orgId = await makeOrg("pair-org", first);
+
     const firstId = (await prisma.member.findFirstOrThrow({
       where: { organizationId: orgId },
       select: { id: true },
       })).id;
+
     const second = await makeUser("pair2", t.organizationId);
     const secondId = await give(orgId, second, "owner");
 

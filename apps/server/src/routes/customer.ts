@@ -21,10 +21,12 @@ customerRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = customerListQuerySchema.parse(req.query);
+
     const result = await getCustomers({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -33,6 +35,7 @@ customerRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const customer = await getCustomerById(req.params.id, req.auth.organizationId);
+
     if (!customer) throw notFound("Customer not found", "CUSTOMER_NOT_FOUND");
     res.json(customer);
   })
@@ -43,11 +46,13 @@ customerRouter.get(
   "/:id/ledger",
   asyncHandler(async (req, res) => {
     const query = customerLedgerQuerySchema.parse(req.query);
+
     const ledger = await getCustomerLedger({
       customerId: req.params.id,
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(ledger);
   })
 );
@@ -65,11 +70,13 @@ customerRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = CustomerUpdateSchema.parse(req.body);
+
     const customer = await updateCustomer(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(customer);
   })
 );

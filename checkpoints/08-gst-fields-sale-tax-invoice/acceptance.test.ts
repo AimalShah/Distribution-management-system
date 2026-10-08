@@ -4,8 +4,8 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
-import { ProductSchema, SaleInvoiceSchema } from "@dms/shared";
-import { calculateSaleBreakdown, createSale } from "../../apps/server/src/services/sale";
+import { ProductSchema, SaleInvoiceSchema, calculateSaleBreakdown } from "@dms/shared";
+import { createSale } from "../../apps/server/src/services/sale";
 import { renderSaleInvoiceHtml } from "../../apps/server/src/services/sale-invoice-template";
 import { hasDatabase, prisma, unique } from "../support/parity-db";
 
@@ -153,6 +153,7 @@ describe("Checkpoint 8 — GST Fields", () => {
       invoiceType: "tax",
       totalAmount: 100,
     });
+
     expect(taxHtml).toContain("Tax Invoice");
     expect(taxHtml).toContain("Official GST Tax Invoice");
 
@@ -163,6 +164,7 @@ describe("Checkpoint 8 — GST Fields", () => {
       invoiceType: "regular",
       totalAmount: 100,
     });
+
     expect(regularHtml).toContain("Regular Invoice");
     expect(regularHtml).not.toContain("Official GST Tax Invoice");
   });
@@ -204,21 +206,32 @@ describe("Checkpoint 8 — GST Fields", () => {
 
     const orgId = unique("org");
     const userId = unique("usr");
+    const at = new Date();
 
     await prisma.organization.create({
-      data: { id: orgId, name: `Org ${orgId}`, code: orgId },
+      data: { id: orgId, name: `Org ${orgId}`, createdAt: at },
     });
     await prisma.user.create({
-      data: { id: userId, email: `${userId}@example.com`, name: "Tester" },
+      data: {
+        id: userId,
+        email: `${userId}@example.com`,
+        name: "Tester",
+        emailVerified: true,
+        createdAt: at,
+        updatedAt: at,
+      },
     });
+
     const cat = await prisma.category.create({
       data: { name: "GST Cat", organizationId: orgId },
     });
+
     const brand = await prisma.brand.create({
-      data: { name: "GST Brand", organizationId: orgId },
+      data: { name: "GST Brand", organizationId: orgId, categoryId: cat.id },
     });
+
     const cust = await prisma.customer.create({
-      data: { name: "GST Customer", organizationId: orgId },
+      data: { name: "GST Customer", organizationId: orgId, customerCode: unique("CUST") },
     });
 
     const prod = await prisma.product.create({
@@ -273,6 +286,7 @@ describe("Checkpoint 8 — GST Fields", () => {
     expect(reloaded).not.toBeNull();
     expect(reloaded?.invoiceType).toBe("tax");
     expect(reloaded?.isInterState).toBe(false);
+    expect(reloaded?.totalAmount).toBe(236);
     expect(reloaded?.cgstAmount).toBe(18);
     expect(reloaded?.sgstAmount).toBe(18);
     expect(reloaded?.igstAmount).toBe(0);

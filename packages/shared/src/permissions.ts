@@ -16,6 +16,7 @@ export const PERMISSION_STATEMENT = {
 } as const;
 
 export type PermissionResource = keyof typeof PERMISSION_STATEMENT;
+
 export type PermissionAction<R extends PermissionResource = PermissionResource> =
   (typeof PERMISSION_STATEMENT)[R][number];
 
@@ -140,5 +141,7 @@ export const updateRolePermissionsSchema = z.object({
 });
 
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
+
 export type UpdateRolePermissionsInput = z.infer<typeof updateRolePermissionsSchema>;

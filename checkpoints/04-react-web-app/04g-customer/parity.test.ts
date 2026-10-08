@@ -36,6 +36,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -81,6 +82,7 @@ describe("Checkpoint 4g — Customer Page", () => {
       "Status",
       "Actions",
     ];
+
     for (const header of expectedHeaders) {
       expect(listSrc, `CustomerList must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -120,9 +122,11 @@ describe("Checkpoint 4g — Customer Page", () => {
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
+
       for (const cust of res.body.data) {
         const matches =
           cust.name.includes("Parity") || cust.customerCode.includes("Parity");
+
         expect(matches).toBe(true);
       }
     }
@@ -161,11 +165,13 @@ describe("Checkpoint 4g — Customer Page", () => {
     const noNameResult = CustomerSchema.safeParse({
       customerCode: "CUST-1",
     });
+
     expect(noNameResult.success).toBe(false);
 
     const noCodeResult = CustomerSchema.safeParse({
       name: "Acme",
     });
+
     expect(noCodeResult.success).toBe(false);
 
     const badEmailResult = CustomerSchema.safeParse({
@@ -173,6 +179,7 @@ describe("Checkpoint 4g — Customer Page", () => {
       name: "Acme",
       email: "not-an-email",
     });
+
     expect(badEmailResult.success).toBe(false);
 
     const validResult = CustomerSchema.safeParse({
@@ -183,10 +190,12 @@ describe("Checkpoint 4g — Customer Page", () => {
       creditLimit: 5000,
       isActive: true,
     });
+
     expect(validResult.success).toBe(true);
 
     if (hasDatabase && t) {
       const code = unique("CUST_ADD");
+
       const res = await request(app)
         .post("/api/customers")
         .set(asOrg(t.organizationId))
@@ -222,6 +231,7 @@ describe("Checkpoint 4g — Customer Page", () => {
 
     if (hasDatabase && t) {
       const code = unique("CUST_EDT");
+
       const created = await request(app)
         .post("/api/customers")
         .set(asOrg(t.organizationId))
@@ -275,18 +285,22 @@ describe("Checkpoint 4g — Customer Page", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -296,6 +310,7 @@ describe("Checkpoint 4g — Customer Page", () => {
 
     if (hasDatabase && t) {
       const code = unique("CUST_DEL");
+
       const created = await request(app)
         .post("/api/customers")
         .set(asOrg(t.organizationId))

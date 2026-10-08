@@ -27,7 +27,8 @@ import {
   USER_HEADER,
 } from "../support/parity-db";
 import { createPurchase } from "../../apps/server/src/services/purchase";
-import { createSale } from "../../apps/server/src/services/sale";
+import { createSale, deleteSale } from "../../apps/server/src/services/sale";
+import { createReturn, deleteReturn } from "../../apps/server/src/services/return";
 import {
   getExpiringSoonBatches,
   getStockBatchById,
@@ -40,6 +41,7 @@ const root = path.resolve(__dirname, "../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -69,6 +71,7 @@ describe("Checkpoint 7 — Batch/Lot Inventory (Contract & Static)", () => {
       expiringWithinDays: "30",
       search: "BATCH-001",
     });
+
     expect(validQuery.success).toBe(true);
 
     // Valid create input
@@ -78,6 +81,7 @@ describe("Checkpoint 7 — Batch/Lot Inventory (Contract & Static)", () => {
       quantity: 50,
       unitCost: 12.5,
     });
+
     expect(validCreate.success).toBe(true);
 
     // Negative quantity fails
@@ -86,6 +90,7 @@ describe("Checkpoint 7 — Batch/Lot Inventory (Contract & Static)", () => {
       batchNumber: "B-2026-01",
       quantity: -5,
     });
+
     expect(invalidCreate.success).toBe(false);
   });
 
@@ -137,40 +142,54 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
 
   beforeAll(async () => {
     app = createApp({ authMode: "header" });
+    const at = new Date();
 
     // Create org
     const org = await prisma.organization.create({
       data: {
+        id: unique("org"),
         name: unique("Batch Org"),
         slug: unique("batch-org").toLowerCase(),
+        createdAt: at,
       },
     });
+
     orgId = org.id;
 
     // Create user
     const user = await prisma.user.create({
       data: {
+        id: unique("usr"),
         name: "Batch Manager",
         email: `${unique("batch-mgr")}@example.test`.toLowerCase(),
+        emailVerified: true,
+        createdAt: at,
+        updatedAt: at,
       },
     });
+
     userId = user.id;
 
     await prisma.member.create({
       data: {
+        id: unique("mem"),
         organizationId: orgId,
         userId: userId,
         role: "adminRole",
+        createdAt: at,
       },
     });
 
     // Create supplier
     const supplier = await prisma.supplier.create({
       data: {
+        supplierCode: unique("SUPP"),
+        contactPerson: "Contact Person",
         companyName: unique("Pharma Supply"),
         organizationId: orgId,
       },
     });
+
     supplierId = supplier.id;
 
     // Create customer
@@ -181,6 +200,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
         organizationId: orgId,
       },
     });
+
     customerId = customer.id;
 
     // Create category & brand
@@ -190,6 +210,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
         organizationId: orgId,
       },
     });
+
     categoryId = cat.id;
 
     const brand = await prisma.brand.create({
@@ -199,6 +220,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
         organizationId: orgId,
       },
     });
+
     brandId = brand.id;
 
     // Create product
@@ -214,11 +236,16 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
         organizationId: orgId,
       },
     });
+
     productId = prod.id;
   });
 
   afterAll(async () => {
     if (orgId) {
+      // Return lines reference products, and that foreign key refuses to
+      // delete a product they still point at, so the returns go first.
+      await prisma.returnItem.deleteMany({ where: { return: { organizationId: orgId } } });
+      await prisma.return.deleteMany({ where: { organizationId: orgId } });
       await prisma.saleItem.deleteMany({ where: { product: { organizationId: orgId } } });
       await prisma.sale.deleteMany({ where: { organizationId: orgId } });
       await prisma.stockBatch.deleteMany({ where: { organizationId: orgId } });
@@ -234,6 +261,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
       await prisma.member.deleteMany({ where: { organizationId: orgId } });
       await prisma.organization.delete({ where: { id: orgId } }).catch(() => {});
     }
+
     if (userId) {
       await prisma.user.delete({ where: { id: userId } }).catch(() => {});
     }
@@ -383,5 +411,71 @@ describe.skipIf(!hasDatabase)("Checkpoint 7 — Batch/Lot Inventory (Live Databa
     expect(item).toBeDefined();
     expect(item?.quantityRemaining).toBe(10);
     expect(item?.purchasedQuantity).toBe(10);
+  });
+
+  it("moves the batches when a return moves the stock", async () => {
+    const fefoSale = await prisma.sale.findFirst({
+      where: { organizationId: orgId },
+      select: { id: true },
+    });
+
+    expect(fefoSale).not.toBeNull();
+
+    // A SALE return hands 5 units back: they land in the lots that are short
+    // of what they received — latest expiry first, the reverse of FEFO.
+    const created = await createReturn(
+      {
+        returnCode: unique("RET-BATCH"),
+        returnType: "SALE",
+        saleId: fefoSale!.id,
+        returnDate: new Date(),
+        reason: "Customer handed 5 boxes back",
+        items: [{ productId, quantity: 5, unitPrice: 25.0, taxAmount: 0, discount: 0 }],
+      },
+      orgId,
+      userId
+    );
+
+    const afterCreate = await listStockBatches(orgId, { productId });
+    const lateAfterCreate = afterCreate.data.find((b) => b.batchNumber === "LOT-LATE-02");
+    const earlyAfterCreate = afterCreate.data.find((b) => b.batchNumber === "LOT-EARLY-01");
+    expect(lateAfterCreate?.quantityRemaining).toBe(45);
+    expect(earlyAfterCreate?.quantityRemaining).toBe(0);
+
+    // Deleting the return takes those 5 units back out: FEFO reaches for the
+    // lot nearest expiry that still has stock — LOT-URGENT-03.
+    await deleteReturn(created.id, orgId, userId);
+
+    const afterDelete = await listStockBatches(orgId, { productId });
+    const lateAfterDelete = afterDelete.data.find((b) => b.batchNumber === "LOT-LATE-02");
+    const urgentAfterDelete = afterDelete.data.find((b) => b.batchNumber === "LOT-URGENT-03");
+    expect(lateAfterDelete?.quantityRemaining).toBe(45);
+    expect(urgentAfterDelete?.quantityRemaining).toBe(5);
+  });
+
+  it("restores the batches when the sale they were drawn from is deleted", async () => {
+    const fefoSale = await prisma.sale.findFirst({
+      where: { organizationId: orgId },
+      include: { items: { select: { batchId: true } } },
+    });
+
+    expect(fefoSale).not.toBeNull();
+
+    const batches = await listStockBatches(orgId, { productId });
+    const early = batches.data.find((b) => b.batchNumber === "LOT-EARLY-01");
+
+    // The sale line names the lot its units were drawn from (FEFO).
+    expect(fefoSale!.items[0]?.batchId).toBe(early?.id);
+
+    // The return above was soft-deleted, so nothing is left to block this.
+    await deleteSale(fefoSale!.id, orgId, userId);
+
+    const restored = await listStockBatches(orgId, { productId });
+    const earlyRestored = restored.data.find((b) => b.batchNumber === "LOT-EARLY-01");
+    const lateRestored = restored.data.find((b) => b.batchNumber === "LOT-LATE-02");
+    const urgentRestored = restored.data.find((b) => b.batchNumber === "LOT-URGENT-03");
+    expect(earlyRestored?.quantityRemaining).toBe(30);
+    expect(lateRestored?.quantityRemaining).toBe(50);
+    expect(urgentRestored?.quantityRemaining).toBe(10);
   });
 });

@@ -16,5 +16,7 @@ const statement = {
 export const ac = createAccessControl(statement);
 
 export const member = ac.newRole({ project: ["create"] });
+
 export const adminRole = ac.newRole({ project: ["create", "update"] });
+
 export const owner = ac.newRole({ project: ["create", "update", "delete"] });

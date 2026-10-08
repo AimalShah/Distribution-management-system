@@ -95,6 +95,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2a — Product API", () => {
     const page1 = await request(app)
       .get("/api/products?page=1&pageSize=2")
       .set(asOrg(t.organizationId));
+
     const page2 = await request(app)
       .get("/api/products?page=2&pageSize=2")
       .set(asOrg(t.organizationId));
@@ -110,6 +111,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2a — Product API", () => {
       ...(page1.body.data as { id: string }[]).map((p) => p.id),
       ...(page2.body.data as { id: string }[]).map((p) => p.id),
     ];
+
     expect(new Set(ids).size).toBe(4);
   });
 
@@ -119,6 +121,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2a — Product API", () => {
       .post("/api/products")
       .set(asOrg(t.organizationId))
       .send({ ...validBody(), unitCost: "12.34", unitPrice: "56.78" });
+
     const asNumber = await request(app)
       .post("/api/products")
       .set(asOrg(t.organizationId))
@@ -133,10 +136,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2a — Product API", () => {
 
   it("rejects a duplicate productCode with 409 UNIQUE_CONSTRAINT", async () => {
     const code = unique("SKU");
+
     const first = await request(app)
       .post("/api/products")
       .set(asOrg(t.organizationId))
       .send({ ...validBody(), productCode: code });
+
     expect(first.status).toBe(201);
 
     const second = await request(app)
@@ -244,6 +249,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2a — Product API", () => {
     const res = await request(app)
       .delete(`/api/products/${t.productId}`)
       .set(asOrg(t.organizationId));
+
     expect(res.status).toBe(204);
 
     expect(await prisma.product.findUnique({ where: { id: t.productId } })).toBeNull();

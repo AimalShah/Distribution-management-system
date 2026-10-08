@@ -45,7 +45,9 @@ const isPlainFunction = (value: unknown): value is (...args: unknown[]) => unkno
 
 const normalizeArgs = (args: unknown): unknown[] => {
   if (args === undefined || args === null) return [];
+
   if (!Array.isArray(args)) return [args];
+
   return args.slice(0, MAX_ARGS);
 };
 
@@ -66,11 +68,13 @@ harnessRouter.post("/call", async (req, res) => {
 
   if (typeof service !== "string" || !SERVICE_PATTERN.test(service)) {
     res.status(400).json({ success: false, error: "Invalid service name" });
+
     return;
   }
 
   if (typeof fn !== "string" || !isServiceFunctionName(fn)) {
     res.status(400).json({ success: false, error: "Invalid function name" });
+
     return;
   }
 
@@ -83,6 +87,7 @@ harnessRouter.post("/call", async (req, res) => {
         success: false,
         error: `services/${service} does not export a function "${fn}"`,
       });
+
       return;
     }
 

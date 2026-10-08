@@ -6,7 +6,7 @@
  * 2. Shared validation schemas: ProductSchema, SaleInvoiceSchema, SaleInvoiceItemSchema, SaleUpdateSchema.
  * 3. Service calculation logic: Intra-state (CGST/SGST) vs Inter-state (IGST) split and totals.
  * 4. Express API route: GET /api/sales/:id/invoice endpoint returns invoice breakdown.
- * 5. Invoice templates & skeletons: HTML template, React invoice skeleton, and PDF generator.
+ * 5. Invoice documents: HTML template, React invoice skeleton, and the server-side PDF adapter.
  * 6. Web UI forms: ProductForm and SaleInvoiceForm GST integration.
  * 7. Live DB tests (when database is available): End-to-end creation and persistence of tax invoices.
  */
@@ -15,18 +15,14 @@ import * as fs from "fs";
 import * as path from "path";
 import request from "supertest";
 import {
+  calculateSaleBreakdown,
   ProductSchema,
   SaleInvoiceSchema,
   SaleInvoiceItemSchema,
   SaleUpdateSchema,
 } from "@dms/shared";
 import { createApp } from "../../apps/server/src/app";
-import {
-  calculateSaleBreakdown,
-  calculateSaleTotal,
-  createSale,
-  getSaleInvoiceData,
-} from "../../apps/server/src/services/sale";
+import { createSale } from "../../apps/server/src/services/sale";
 import { renderSaleInvoiceHtml } from "../../apps/server/src/services/sale-invoice-template";
 import {
   hasDatabase,
@@ -41,6 +37,7 @@ const root = path.resolve(__dirname, "../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -81,6 +78,7 @@ describe("Checkpoint 8 — GST Fields & Tax Invoice (Contract & Static)", () => 
       gstApplicable: true,
       gstRate: 18,
     });
+
     expect(productParsed.gstApplicable).toBe(true);
     expect(productParsed.gstRate).toBe(18);
 
@@ -97,6 +95,7 @@ describe("Checkpoint 8 — GST Fields & Tax Invoice (Contract & Static)", () => 
       sgstAmount: 90,
       igstAmount: 0,
     });
+
     expect(itemParsed.cgstRate).toBe(9);
     expect(itemParsed.sgstRate).toBe(9);
     expect(itemParsed.cgstAmount).toBe(90);
@@ -115,6 +114,7 @@ describe("Checkpoint 8 — GST Fields & Tax Invoice (Contract & Static)", () => 
       taxAmount: 180,
       items: [itemParsed],
     });
+
     expect(saleParsed.invoiceType).toBe("tax");
     expect(saleParsed.isInterState).toBe(true);
     expect(saleParsed.igstAmount).toBe(180);
@@ -123,6 +123,7 @@ describe("Checkpoint 8 — GST Fields & Tax Invoice (Contract & Static)", () => 
     const updateParsed = SaleUpdateSchema.parse({
       status: "Completed",
     });
+
     expect(updateParsed.invoiceType).toBeUndefined();
     expect(updateParsed.isInterState).toBeUndefined();
   });
@@ -264,12 +265,15 @@ describe("Checkpoint 8 — GST Fields & Tax Invoice (Contract & Static)", () => 
     expect(skeletonCode).toContain("Tax Invoice");
   });
 
-  it("generateInvoicePdf includes tax invoice title and GST columns", () => {
-    const pdfCode = read("apps/web/src/utils/generateInvoicePdf.ts");
-    expect(pdfCode).toContain("Tax Invoice");
-    expect(pdfCode).toContain("cgstAmount");
-    expect(pdfCode).toContain("sgstAmount");
-    expect(pdfCode).toContain("igstAmount");
+  it("invoice PDF is rendered by the server adapter, not the browser", () => {
+    expect(fs.existsSync(path.join(root, "apps/web/src/utils/generateInvoicePdf.ts"))).toBe(false);
+
+    const pdfCode = read("apps/server/src/services/sale-pdf.ts");
+    expect(pdfCode).toContain("generateSalePdf");
+    expect(pdfCode).toContain("renderSaleInvoiceHtml");
+
+    const pdfRouteCode = read("apps/server/src/routes/sale.ts");
+    expect(pdfRouteCode).toMatch(/saleRouter\.get\(\s*["']\/:id\/pdf["']/);
   });
 
   it("ProductForm and SaleInvoiceForm provide GST UI inputs", () => {
@@ -305,12 +309,15 @@ describe("Checkpoint 8 — GST Fields (Live DB & API)", () => {
     await prisma.user.create({
       data: { id: userId, email: `${userId}@test.com`, name: "Tester" },
     });
+
     const cat = await prisma.category.create({
       data: { name: "Cat GST", organizationId: orgId },
     });
+
     const brand = await prisma.brand.create({
       data: { name: "Brand GST", organizationId: orgId },
     });
+
     const cust = await prisma.customer.create({
       data: { name: "Customer GST", organizationId: orgId },
     });

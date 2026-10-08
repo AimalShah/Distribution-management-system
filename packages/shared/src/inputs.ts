@@ -30,10 +30,13 @@ export const optionalText = (message: string) =>
  */
 const blankToNull = (value: unknown) => {
   if (value === null) return null;
+
   if (typeof value === "string") {
     const trimmed = value.trim();
+
     return trimmed === "" ? null : trimmed;
   }
+
   return undefined;
 };
 
@@ -85,9 +88,11 @@ export const nullableMoneyInput = (label: string) =>
     (value) => {
       if (typeof value === "string") {
         const trimmed = value.trim();
+
         // `Number("abc")` is NaN, which the number check below rejects.
         return trimmed === "" ? null : Number(trimmed);
       }
+
       return value;
     },
     z

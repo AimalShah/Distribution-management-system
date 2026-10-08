@@ -13,6 +13,7 @@ export const prisma = baseClient.$extends({
         if (!shouldTrack) return query(args);
 
         const start = Date.now();
+
         try {
           return await query(args);
         } finally {

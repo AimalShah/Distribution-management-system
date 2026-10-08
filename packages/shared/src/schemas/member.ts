@@ -27,4 +27,5 @@ export const updateMemberRoleSchema = z.object({
 });
 
 export type AddMemberInput = z.output<typeof addMemberSchema>;
+
 export type UpdateMemberRoleInput = z.output<typeof updateMemberRoleSchema>;

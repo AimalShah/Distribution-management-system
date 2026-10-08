@@ -65,6 +65,7 @@ const ChartContainer = React.forwardRef<
     </ChartContext.Provider>
   )
 })
+
 ChartContainer.displayName = "Chart"
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
@@ -88,6 +89,7 @@ ${colorConfig
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
+
     return color ? `  --color-${key}: ${color};` : null
   })
   .join("\n")}
@@ -141,6 +143,7 @@ const ChartTooltipContent = React.forwardRef<
       const [item] = payload
       const key = `${labelKey || item?.dataKey || item?.name || "value"}`
       const itemConfig = getPayloadConfigFromPayload(config, item, key)
+
       const value =
         !labelKey && typeof label === "string"
           ? config[label as keyof typeof config]?.label || label
@@ -256,6 +259,7 @@ const ChartTooltipContent = React.forwardRef<
     )
   }
 )
+
 ChartTooltipContent.displayName = "ChartTooltip"
 
 const ChartLegend = RechartsPrimitive.Legend
@@ -318,6 +322,7 @@ const ChartLegendContent = React.forwardRef<
     )
   }
 )
+
 ChartLegendContent.displayName = "ChartLegend"
 
 // Helper to extract item config from a payload.

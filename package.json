@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "turbo run lint",
+    "lint": "turbo run lint && oxlint",
     "test": "turbo run test",
     "test:parity": "vitest run",
     "test:parity:all": "vitest run --config vitest.parity-all.config.ts",
@@ -18,9 +18,12 @@
     "debug": "tsx packages/devtools/src/cli.ts"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.87.0",
     "@types/papaparse": "^5.5.2",
     "@types/supertest": "^6.0.2",
+    "oxlint": "1.87.0",
     "papaparse": "^5.7.0",
+    "playwright": "1.62.1",
     "supertest": "^7.3.0",
     "tsx": "^4.20.3",
     "turbo": "^2.0.0",

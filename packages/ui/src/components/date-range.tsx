@@ -90,6 +90,8 @@ export function DateRangePicker({
  */
 function formatRangeLabel(range: DateRange | undefined, placeholder: string): string {
   if (!range?.from) return placeholder;
+
   if (!range.to || range.to < range.from) return `${format(range.from, "MMM d")} â€“`;
+
   return `${format(range.from, "MMM d")} â€“ ${format(range.to, "MMM d, yyyy")}`;
 }

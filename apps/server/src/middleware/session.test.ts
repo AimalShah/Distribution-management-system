@@ -8,12 +8,14 @@ import { sessionAuthContext, sessionBootstrapAuthContext } from "./session";
 
 const { memberModel, dbStub } = vi.hoisted(() => {
   const member = { findUnique: vi.fn() };
+
   return { memberModel: member, dbStub: { member } };
 });
 
 vi.mock("@dms/db", () => ({ default: dbStub, prisma: dbStub }));
 
 const getSession = vi.fn();
+
 const auth = { api: { getSession } } as unknown as Auth;
 
 const session = (activeOrganizationId: string | null = "org_1") => ({
@@ -26,6 +28,7 @@ const buildApp = (): Express => {
   app.get("/strict", sessionAuthContext(auth), (req, res) => res.json(req.auth));
   app.get("/bootstrap", sessionBootstrapAuthContext(auth), (req, res) => res.json(req.auth));
   app.use(errorHandler);
+
   return app;
 };
 

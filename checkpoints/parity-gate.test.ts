@@ -18,6 +18,7 @@ import path from "node:path";
 import { GATE, GATED_DIRS, PENDING_DIRS, parityTestGlobs } from "./parity-gate";
 
 const root = path.resolve(__dirname, "..");
+
 const checkpointsDir = path.join(root, "checkpoints");
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
@@ -25,14 +26,17 @@ const toPosix = (p: string) => p.split(path.sep).join("/");
 /** Every `parity.test.ts` under `checkpoints/`, as a repo-relative POSIX path. */
 function findParityTests(dir: string = checkpointsDir): string[] {
   const found: string[] = [];
+
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       found.push(...findParityTests(full));
     } else if (entry.name === "parity.test.ts") {
       found.push(toPosix(path.relative(root, full)));
     }
   }
+
   return found.sort();
 }
 
@@ -46,9 +50,11 @@ function findParityTests(dir: string = checkpointsDir): string[] {
  */
 function owningDir(testPath: string): string {
   const relative = testPath.replace(/^checkpoints\//, "");
+
   const entries = [...GATED_DIRS, ...PENDING_DIRS].sort(
     (a, b) => b.length - a.length
   );
+
   return entries.find((dir) => relative.startsWith(`${dir}/`)) ?? "";
 }
 
@@ -109,6 +115,7 @@ describe("checkpoint parity gate", () => {
       const matches = parityTests.filter(
         (t) => owningDir(t) === dir
       );
+
       expect(
         matches.length,
         `"${dir}" is gated but ${parityTestGlobs()

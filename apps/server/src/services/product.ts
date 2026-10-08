@@ -1,7 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { ProductInput, ProductUpdateInput } from "@dms/shared";
-import { unprocessable } from "../http";
+import { notFound, unprocessable } from "../http";
 
 /**
  * A product may only point at a category or a brand its own tenant owns.
@@ -88,16 +88,18 @@ export async function getProducts({
 }: ProductListArgs) {
   const where: Prisma.ProductWhereInput = {
     organizationId,
-    ...(isActive === undefined ? {} : { isActive }),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { productCode: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : {}),
   };
+
+  if (isActive !== undefined) {
+    where.isActive = isActive;
+  }
+
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { productCode: { contains: search, mode: "insensitive" } },
+    ];
+  }
 
   const [data, total] = await Promise.all([
     prisma.product.findMany({
@@ -114,10 +116,16 @@ export async function getProducts({
 }
 
 export async function getProductById(id: string, organizationId: string) {
-  return prisma.product.findFirst({
+  const product = await prisma.product.findFirst({
     where: { id, organizationId },
     include: detailInclude,
   });
+
+  if (!product) {
+    throw notFound("Product not found", "PRODUCT_NOT_FOUND");
+  }
+
+  return product;
 }
 
 export async function addProduct(data: ProductInput, organizationId: string) {
@@ -146,6 +154,7 @@ export async function updateProduct(
   const updateData: Prisma.ProductUncheckedUpdateInput = { ...fields };
 
   if (category !== undefined) updateData.categoryId = category;
+
   if (brand !== undefined) updateData.brandId = brand;
 
   // Only the references this update actually touches are checked. An update that

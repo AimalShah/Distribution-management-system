@@ -50,12 +50,14 @@ const root = path.resolve(__dirname, "../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
 describe("Checkpoint 6 — RBAC Rebuild (Contract & Unit)", () => {
   it("defines permission statements for all 12 DMS resources", () => {
     const resources = Object.keys(PERMISSION_STATEMENT);
+
     const expectedResources: PermissionResource[] = [
       "inventory",
       "sales",
@@ -132,18 +134,21 @@ describe("Checkpoint 6 — RBAC Rebuild (Contract & Unit)", () => {
       description: "Audits inventory counts",
       permissions: [{ resource: "inventory", action: "view" }],
     });
+
     expect(valid.success).toBe(true);
 
     // Missing name fails
     const missingName = createRoleSchema.safeParse({
       permissions: [],
     });
+
     expect(missingName.success).toBe(false);
 
     // Empty name fails
     const emptyName = createRoleSchema.safeParse({
       name: "   ",
     });
+
     expect(emptyName.success).toBe(false);
   });
 
@@ -189,6 +194,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 6 — RBAC Rebuild (Live Database)", (
         slug: unique("rbac-org").toLowerCase(),
       },
     });
+
     orgId = org.id;
 
     // Create user
@@ -198,6 +204,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 6 — RBAC Rebuild (Live Database)", (
         email: `${unique("rbac-user")}@example.test`.toLowerCase(),
       },
     });
+
     userId = user.id;
 
     // Create member
@@ -208,6 +215,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 6 — RBAC Rebuild (Live Database)", (
         role: "member",
       },
     });
+
     memberId = member.id;
   });
 
@@ -220,6 +228,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 6 — RBAC Rebuild (Live Database)", (
       await prisma.role.deleteMany({ where: { organizationId: orgId } });
       await prisma.organization.delete({ where: { id: orgId } }).catch(() => {});
     }
+
     if (userId) {
       await prisma.user.delete({ where: { id: userId } }).catch(() => {});
     }
@@ -273,6 +282,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 6 — RBAC Rebuild (Live Database)", (
         { resource: "inventory", action: "view" },
       ],
     });
+
     expect(updated.permissions.length).toBe(3);
 
     // Delete custom role

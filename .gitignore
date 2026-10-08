@@ -15,16 +15,10 @@ node_modules/
 
 # build output
 dist/
+build/
 
 # testing
 /coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
 
 # misc
 .DS_Store
@@ -36,22 +30,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
-# The template is the one env file meant to be tracked, so a fresh clone knows
-# what DATABASE_URL to set. Everything else stays ignored.
 !.env.example
-
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
-
-/src/generated/prisma
-
-/src/prisma
 
 # prisma generated client
 /packages/db/prisma/generated/

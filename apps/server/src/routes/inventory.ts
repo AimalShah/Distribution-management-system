@@ -8,13 +8,14 @@ import {
   inventoryLogsQuerySchema,
   lowStockQuerySchema,
 } from "@dms/shared";
-import { asyncHandler, badRequest, notFound } from "../http";
+import { asyncHandler, badRequest } from "../http";
 import {
   getExpiringSoonBatches,
   getStockBatchById,
   listStockBatches,
 } from "../services/batch";
 import Papa from "papaparse";
+import { z } from "zod";
 import {
   adjustInventory,
   bulkImportInventory,
@@ -25,6 +26,7 @@ import {
   getLowStock,
   updateInventorySettings,
 } from "../services/inventory";
+import { requireUserId } from "../middleware/auth-context";
 
 export const inventoryRouter: Router = Router();
 
@@ -32,10 +34,12 @@ inventoryRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const query = inventoryListQuerySchema.parse(req.query);
+
     const result = await getInventory({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -46,10 +50,12 @@ inventoryRouter.get(
   "/logs",
   asyncHandler(async (req, res) => {
     const query = inventoryLogsQuerySchema.parse(req.query);
+
     const result = await getInventoryLogs({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -58,10 +64,12 @@ inventoryRouter.get(
   "/low-stock",
   asyncHandler(async (req, res) => {
     const query = lowStockQuerySchema.parse(req.query);
+
     const result = await getLowStock({
       organizationId: req.auth.organizationId,
       ...query,
     });
+
     res.json(result);
   })
 );
@@ -107,22 +115,12 @@ inventoryRouter.post(
   asyncHandler(async (req, res) => {
     const data = InventoryAdjustSchema.parse(req.body);
 
-    // Every adjustment writes an `InventoryLog`, whose `userId` is required.
-    // Until Checkpoint 3 replaces this middleware with a real session, the
-    // caller has to say who they are.
-    if (!req.auth.userId) {
-      throw badRequest(
-        "Missing user context. Send the x-user-id header so the inventory log " +
-          "can be attributed.",
-        "USER_REQUIRED"
-      );
-    }
+    // Every adjustment writes an `InventoryLog`, whose `userId` is required, so
+    // the caller has to say who they are.
+    const userId = requireUserId(req.auth.userId);
 
-    const inventory = await adjustInventory(
-      data,
-      req.auth.organizationId,
-      req.auth.userId
-    );
+    const inventory = await adjustInventory(data, req.auth.organizationId, userId);
+
     res.json(inventory);
   })
 );
@@ -131,16 +129,19 @@ inventoryRouter.post(
   "/bulk-import",
   asyncHandler(async (req, res) => {
     let rows: any[] = [];
+
     if (Array.isArray(req.body)) {
       rows = req.body;
     } else if (req.body && Array.isArray(req.body.rows)) {
       rows = req.body.rows;
     } else if (typeof req.body === "string" || (req.body && typeof req.body.csv === "string")) {
       const csvStr = typeof req.body === "string" ? req.body : req.body.csv;
+
       const parsed = Papa.parse<Record<string, any>>(csvStr, {
         header: true,
         skipEmptyLines: "greedy",
       });
+
       rows = parsed.data.map((r) => ({
         productCode: r.productCode || r.product_code || r.code || r.sku,
         productName: r.productName || r.product_name || r.name,
@@ -167,7 +168,7 @@ inventoryRouter.get(
       req.params.id,
       req.auth.organizationId
     );
-    if (!inventory) throw notFound("Inventory record not found", "INVENTORY_NOT_FOUND");
+
     res.json(inventory);
   })
 );
@@ -176,11 +177,13 @@ inventoryRouter.put(
   "/:id/settings",
   asyncHandler(async (req, res) => {
     const data = InventorySettingsSchema.parse(req.body);
+
     const inventory = await updateInventorySettings(
       req.params.id,
       data,
       req.auth.organizationId
     );
+
     res.json(inventory);
   })
 );

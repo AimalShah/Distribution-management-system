@@ -54,7 +54,9 @@ export const setActiveOrganizationSchema = z.object({
 });
 
 export type OrganizationCreateInput = z.output<typeof organizationCreateSchema>;
+
 export type SetActiveOrganizationInput = z.output<
   typeof setActiveOrganizationSchema
 >;
+
 export type MemberRole = z.output<typeof memberRoleSchema>;

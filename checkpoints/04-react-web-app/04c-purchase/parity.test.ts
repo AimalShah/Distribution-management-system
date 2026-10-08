@@ -36,6 +36,7 @@ const root = path.resolve(__dirname, "../../..");
 const read = (relative: string) => {
   const full = path.join(root, relative);
   expect(fs.existsSync(full), `${relative} should exist`).toBe(true);
+
   return fs.readFileSync(full, "utf-8");
 };
 
@@ -72,6 +73,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
 
     // Must define all required table columns
     const expectedHeaders = ["Code", "Supplier", "Date", "Items", "Total", "Status", "Actions"];
+
     for (const header of expectedHeaders) {
       expect(listSrc, `PurchaseList must define header "${header}"`).toContain(
         `header: "${header}"`
@@ -119,6 +121,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
       status: "Pending",
       items: [],
     });
+
     expect(noItemsResult.success).toBe(false);
 
     // Schema validation: invalid item quantity (< 1) fails
@@ -135,6 +138,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
         },
       ],
     });
+
     expect(badQtyResult.success).toBe(false);
 
     // Schema validation: valid purchase passes
@@ -155,6 +159,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
         },
       ],
     });
+
     expect(validResult.success).toBe(true);
   });
 
@@ -211,6 +216,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
 
     if (hasDatabase && t) {
       const code = unique("PO");
+
       const res = await request(app)
         .post("/api/purchases")
         .set(asOrg(t.organizationId))
@@ -267,18 +273,22 @@ describe("Checkpoint 4c — Purchase Pages", () => {
     // Legacy unbacked field names check across apps/web/src
     const webSrc = path.join(root, "apps/web/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name)) {
           const source = fs.readFileSync(full, "utf-8");
+
           if (/invoiceNumber|purchaseOrderNumber/.test(source)) {
             offenders.push(path.relative(root, full));
           }
         }
       }
     };
+
     walk(webSrc);
 
     expect(
@@ -289,6 +299,7 @@ describe("Checkpoint 4c — Purchase Pages", () => {
     if (hasDatabase && t) {
       // Create a purchase order to edit
       const code = unique("PO_EDT");
+
       const created = await request(app)
         .post("/api/purchases")
         .set(asOrg(t.organizationId))

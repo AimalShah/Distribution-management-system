@@ -32,6 +32,7 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
+
 const daysAhead = (n: number) => new Date(Date.now() + n * DAY);
 
 describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
@@ -111,6 +112,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
         brandId: brandId ?? (mine ? t.brandId : t.otherBrandId),
       },
     });
+
     const row = await prisma.inventory.create({
       data: {
         id: `inv_${unique("inv")}`,
@@ -122,12 +124,14 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
       },
       select: { id: true },
     });
+
     if (mine) {
       products[label] = productId;
       inventory[label] = row.id;
     } else {
       otherProducts[label] = productId;
     }
+
     return productId;
   };
 
@@ -208,6 +212,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
         createdAt: purchaseDate,
       },
     });
+
     for (const item of items) {
       await prisma.purchaseItem.create({
         data: {
@@ -222,21 +227,27 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
         },
       });
     }
+
     return purchaseId;
   };
 
   const basic = (orgId: string, query = "") =>
     request(app).get(`/api/reports/inventory/basic${query}`).set(asOrg(orgId));
+
   const movements = (orgId: string, query = "") =>
     request(app).get(`/api/reports/inventory/movements${query}`).set(asOrg(orgId));
+
   const lowStock = (orgId: string, query = "") =>
     request(app).get(`/api/reports/inventory/low-stock${query}`).set(asOrg(orgId));
+
   const valuation = (orgId: string, query = "") =>
     request(app)
       .get(`/api/reports/inventory/stock-valuation${query}`)
       .set(asOrg(orgId));
+
   const expiry = (orgId: string, query = "") =>
     request(app).get(`/api/reports/inventory/expiry${query}`).set(asOrg(orgId));
+
   const full = (orgId: string, query = "") =>
     request(app).get(`/api/reports/inventory/full${query}`).set(asOrg(orgId));
 
@@ -260,6 +271,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
       reorderLevel: 10,
       maxStockLevel: 100,
     });
+
     await log("in100", {
       productId: moving,
       inventoryId: inventory.moving,
@@ -332,6 +344,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
       onHand: 10,
       reorderLevel: 20,
     });
+
     await log("cog-in100", {
       productId: cog,
       inventoryId: inventory.cog,
@@ -410,16 +423,19 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     // The other tenant gets a full parallel set, so every scoping assertion has
     // something of its own to be wrong about.
     const theirs = t.otherOrganizationId;
+
     const theirMoving = await makeProduct("their-moving", {
       orgId: theirs,
       unitCost: 5,
       onHand: 7,
       reorderLevel: 10,
     });
+
     const theirRow = await prisma.inventory.findFirstOrThrow({
       where: { productId: theirMoving },
       select: { id: true },
     });
+
     await log("their-in", {
       productId: theirMoving,
       inventoryId: theirRow.id,
@@ -537,9 +553,11 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const res = await movements(t.organizationId);
 
     expect(res.status).toBe(200);
+
     const mine = res.body.filter(
       (row: { product: { id: string } }) => row.product.id === products.moving
     );
+
     expect(mine).toHaveLength(4);
 
     // Newest first, and the audit trail is intact: `quantity` alone would say four
@@ -586,10 +604,12 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const productId = products.cog;
     const start = new Date("2026-03-01T00:00:00.000Z");
     const end = new Date("2026-03-31T00:00:00.000Z");
+
     const row = await prisma.inventory.findFirstOrThrow({
       where: { productId },
       select: { id: true },
     });
+
     await log("edge-start", {
       productId,
       inventoryId: row.id,
@@ -629,6 +649,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const mine = res.body.filter(
       (r: { product: { id: string } }) => r.product.id === productId
     );
+
     expect(mine.map((r: { movementType: string }) => r.movementType).sort()).toEqual([
       "IN",
       "OUT",
@@ -739,6 +760,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     for (const item of res.body.items) {
       expect(item.averageUnitCost).toBeLessThan(99);
     }
+
     expect(rowFor(res.body.items, otherProducts["their-cog"])).toBeUndefined();
   });
 
@@ -746,6 +768,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const res = await expiry(t.organizationId, "?daysUntilExpiry=3650");
 
     expect(res.status).toBe(200);
+
     const mine = res.body.filter(
       (row: { productId: string }) => row.productId === products.sprocket
     );
@@ -813,6 +836,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const batches = res.body
       .filter((r: { productId: string }) => r.productId === products.sprocket)
       .map((r: { batchNumber: string }) => r.batchNumber);
+
     expect(batches).not.toContain("B-OLD");
     expect(batches).toContain("B-SOON");
     expect(batches).toContain("B-LATER");
@@ -839,6 +863,7 @@ describe.skipIf(!hasDatabase)("Checkpoint 2m — Inventory Reports API", () => {
     const productIds = new Set(
       res.body.map((r: { productId: string }) => r.productId)
     );
+
     expect(productIds.has(otherProducts["their-moving"])).toBe(false);
     expect(productIds.has(otherProducts["their-cog"])).toBe(false);
 

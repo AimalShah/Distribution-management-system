@@ -17,6 +17,7 @@ describe("Checkpoint 1 — Shared packages", () => {
   it("packages/db has prisma schema with all models", () => {
     const schema = fs.readFileSync(path.join(root, "packages/db/prisma/schema.prisma"), "utf-8");
     const models = ["User", "Session", "Account", "Verification", "Organization", "Member", "Invitation", "Supplier", "Customer", "Product", "Purchase", "PurchaseItem", "Sale", "SaleItem", "Category", "Brand", "Inventory", "InventoryLog", "Return", "ReturnItem"];
+
     for (const model of models) {
       expect(schema, `schema should contain model ${model}`).toContain(`model ${model}`);
     }
@@ -31,6 +32,7 @@ describe("Checkpoint 1 — Shared packages", () => {
   it("packages/shared has entity schemas", () => {
     const schemasDir = path.join(root, "packages/shared/src/schemas");
     const expected = ["product", "purchase", "sale", "return", "customer", "supplier", "category", "brand", "auth", "inventory"];
+
     for (const schema of expected) {
       expect(fs.existsSync(path.join(schemasDir, `${schema}.ts`)), `${schema}.ts should exist`).toBe(true);
     }
@@ -43,6 +45,7 @@ describe("Checkpoint 1 — Shared packages", () => {
   it("packages/ui has shadcn components", () => {
     const componentsDir = path.join(root, "packages/ui/src/components");
     const expected = ["button", "input", "label", "select", "table", "dialog", "dropdown-menu", "tabs", "card", "badge", "form", "popover", "calendar", "sheet", "avatar", "separator", "skeleton", "sonner", "tooltip", "checkbox", "switch", "textarea", "date-range", "accordion", "alert", "progress", "sidebar", "chart"];
+
     for (const comp of expected) {
       expect(fs.existsSync(path.join(componentsDir, `${comp}.tsx`)), `${comp}.tsx should exist`).toBe(true);
     }
@@ -53,6 +56,7 @@ describe("Checkpoint 1 — Shared packages", () => {
     // and nothing else fails: the typecheck skips it and the build never sees it.
     const componentsDir = path.join(root, "packages/ui/src/components");
     const barrel = fs.readFileSync(path.join(root, "packages/ui/src/index.ts"), "utf-8");
+
     for (const file of fs.readdirSync(componentsDir)) {
       if (!file.endsWith(".tsx")) continue;
       const name = file.replace(/\.tsx$/, "");
@@ -70,9 +74,11 @@ describe("Checkpoint 1 — Shared packages", () => {
     // works this way; this keeps the shadcn CLI output from drifting back.
     const srcDir = path.join(root, "packages/ui/src");
     const offenders: string[] = [];
+
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+
         if (entry.isDirectory()) {
           walk(full);
         } else if (/\.tsx?$/.test(entry.name) && /from\s+["']@\//.test(fs.readFileSync(full, "utf-8"))) {
@@ -80,6 +86,7 @@ describe("Checkpoint 1 — Shared packages", () => {
         }
       }
     };
+
     walk(srcDir);
     expect(offenders, `these files import via "@/" and break consumers: ${offenders.join(", ")}`).toEqual([]);
   });
