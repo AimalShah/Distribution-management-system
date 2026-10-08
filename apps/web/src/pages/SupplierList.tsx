@@ -225,7 +225,7 @@ export default function SupplierList() {
               <RefreshCw className="size-3.5 mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleOpenCreate} className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
+            <Button size="sm" onClick={handleOpenCreate} className="h-9 rounded-md shadow-sm cursor-pointer transition-all bg-amber-500 hover:bg-amber-600 text-stone-900">
               <Plus className="size-4 mr-2" />
               Add Supplier
             </Button>
@@ -322,7 +322,7 @@ export default function SupplierList() {
                 : "Start registering wholesale suppliers and vendors."}
             </p>
             {!search && statusFilter === "all" && (
-              <Button size="sm" onClick={handleOpenCreate} className="h-9 rounded-md">
+              <Button size="sm" onClick={handleOpenCreate} className="h-9 rounded-md bg-amber-500 hover:bg-amber-600 text-stone-900">
                 <Plus className="size-4 mr-2" />
                 Add Supplier
               </Button>

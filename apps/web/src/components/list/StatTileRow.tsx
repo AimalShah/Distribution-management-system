@@ -24,6 +24,7 @@ const iconTone: Record<StatTileTone, string> = {
   warning: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
 };
 
+/** @deprecated — replaced by inline KPI pattern */
 export function StatTileRow({ tiles }: { tiles: StatTile[] }) {
   return (
     <div className="rounded-md border border-border bg-card p-0 divide-y sm:divide-y-0 sm:divide-x divide-border flex flex-col sm:flex-row items-stretch overflow-hidden">

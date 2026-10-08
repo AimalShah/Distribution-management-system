@@ -3,27 +3,16 @@ import useSWR from "swr";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  Boxes,
   CircleDollarSign,
-  Clock,
   Download,
   FilePlus,
-  PackageCheck,
-  PlusCircle,
   Receipt,
-  RefreshCw,
   ShoppingCart,
   SlidersHorizontal,
-  TrendingUp,
   Truck,
   Users,
 } from "lucide-react";
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
   Button,
   Card,
@@ -34,21 +23,67 @@ import {
   Skeleton,
 } from "@dms/ui";
 import { failureMessage, fetcher } from "../lib/api";
-import { formatDate, formatTotal, formatMoney } from "../lib/format";
+import { formatTotal } from "../lib/format";
 import type {
-  CustomerSalesRow,
   DashboardStats,
   LowStockRow,
   ProductSalesRow,
   PurchaseBasicReport,
   SalesBasicReport,
 } from "../lib/dashboard";
+import type { CustomerSalesRow } from "../lib/dashboard";
 import { ExpiringSoonCard } from "../components/dashboard/ExpiringSoonCard";
 import { RecentActivities } from "../components/dashboard/RecentActivities";
-import { LowStockAlert } from "../components/dashboard/LowStockAlert";
 import { InventoryChart } from "../components/dashboard/InventoryChart";
 import { SalesChart } from "../components/dashboard/SalesChart";
 import { TopProducts } from "../components/dashboard/TopProducts";
+
+// Simple KPI tile with optional loading skeleton
+function KpiCard({
+  label,
+  value,
+  sublabel,
+  icon: Icon,
+  accent,
+  loading,
+}: {
+  label: string;
+  value: string;
+  sublabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: "amber" | "blue" | "orange" | "red";
+  loading?: boolean;
+}) {
+  const accentClass = {
+    amber: "bg-amber-50 text-amber-600",
+    blue: "bg-blue-50 text-blue-600",
+    orange: "bg-orange-50 text-orange-600",
+    red: "bg-red-50 text-red-600",
+  }[accent];
+
+  return (
+    <Card className="border-stone-200">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">{label}</p>
+            <div className="text-xl font-bold text-stone-900 mt-1">
+              {loading ? (
+                <Skeleton className="h-6 w-20" />
+              ) : (
+                value
+              )}
+            </div>
+            <p className="text-xs text-stone-400 mt-0.5">{sublabel}</p>
+          </div>
+          <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${accentClass}`}>
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 type WindowMode = "30d" | "mtd" | "ytd";
 
@@ -88,6 +123,8 @@ interface LowStockApiResponse {
   total: number;
 }
 
+// Dashboard page — redesigned layout using same data hooks
+// Keeps all existing SWR fetchers, drops old page wrapper.
 export default function Dashboard() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<WindowMode>("30d");
@@ -144,282 +181,172 @@ export default function Dashboard() {
   const urgentStockCount = lowRows.length;
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header & Quick Action Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
+    <div>
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Distribution Operations Hub
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Real-time commercial activity, inventory alerts, and financial overview for {range.label}.
+          <h1 className="text-xl font-semibold tracking-tight text-stone-900">Dashboard</h1>
+          <p className="text-sm text-stone-500 mt-0.5">
+            {range.label} — sales, purchases, and stock overview
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Window Range Selector */}
-          <div className="inline-flex rounded-lg border border-border p-1 bg-muted/40">
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-stone-200 p-0.5 bg-stone-100">
             {(["30d", "mtd", "ytd"] as const).map((key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setMode(key)}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                   mode === key
-                    ? "bg-background text-foreground shadow-xs font-bold"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-white text-stone-900 shadow-sm"
+                    : "text-stone-500 hover:text-stone-700"
                 }`}
               >
                 {MODE_LABELS[key]}
               </button>
             ))}
           </div>
-
-          <Button variant="outline" size="sm" onClick={handleExport} className="gap-2 text-xs">
-            <Download className="size-3.5" />
-            Export CSV
+          <Button variant="outline" size="sm" onClick={handleExport} className="h-8 text-xs">
+            <Download className="h-3.5 w-3.5 mr-1" />
+            Export
           </Button>
         </div>
       </div>
 
-      {/* Quick Actions Bar */}
-      <Card className="bg-card shadow-xs border-border">
-        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <TrendingUp className="size-4 text-primary" />
-            <span>Quick Actions</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => navigate("/sales/new")}
-              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-xs shadow-xs"
-            >
-              <FilePlus className="size-3.5" />
-              New Sale Invoice
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => navigate("/purchases/new")}
-              className="gap-2 text-xs font-medium"
-            >
-              <Truck className="size-3.5 text-primary" />
-              Receive Stock
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => navigate("/inventory")}
-              className="gap-2 text-xs font-medium"
-            >
-              <SlidersHorizontal className="size-3.5" />
-              Stock Correction
-            </Button>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => navigate("/customers")}
-              className="gap-2 text-xs font-medium"
-            >
-              <Users className="size-3.5" />
-              Customer Statement
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 4 Headline KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Sales & Revenue */}
-        <Card className="shadow-xs border-border">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Sales & Revenue
-            </CardTitle>
-            <CircleDollarSign className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {salesReport.isLoading ? (
-              <Skeleton className="h-7 w-28" />
-            ) : (
-              <div className="text-2xl font-bold tracking-tight text-foreground">
-                {formatTotal(salesTotal)}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center">
-                <ArrowUpRight className="size-3 inline" /> {salesReport.data?.totalOrders ?? 0}
-              </span>
-              completed invoices in {range.label.split("–")[0].trim()}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* KPI 2: Stock Purchases */}
-        <Card className="shadow-xs border-border">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Stock Purchases
-            </CardTitle>
-            <ShoppingCart className="size-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            {purchaseReport.isLoading ? (
-              <Skeleton className="h-7 w-28" />
-            ) : (
-              <div className="text-2xl font-bold tracking-tight text-foreground">
-                {formatTotal(purchaseTotal)}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className="font-semibold">{purchaseReport.data?.totalOrders ?? 0} bills</span>
-              received from suppliers
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* KPI 3: Outstanding Balances */}
-        <Card className="shadow-xs border-border">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Outstanding Balances
-            </CardTitle>
-            <Receipt className="size-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            {stats.isLoading ? (
-              <Skeleton className="h-7 w-28" />
-            ) : (
-              <div className="text-2xl font-bold tracking-tight text-foreground">
-                {formatTotal(outstandingBalances)}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Uncollected customer receivables
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* KPI 4: Urgent Stock Attention */}
-        <Card className="shadow-xs border-border">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Urgent Stock Attention
-            </CardTitle>
-            <AlertTriangle className="size-4 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            {lowStockApi.isLoading ? (
-              <Skeleton className="h-7 w-28" />
-            ) : (
-              <div className="text-2xl font-bold tracking-tight text-rose-600 dark:text-rose-400">
-                {urgentStockCount} Items
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              {outOfStockRows.length} out of stock, {lowStockRows.length} low
-            </p>
-          </CardContent>
-        </Card>
+      {/* Quick actions */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <Button
+          size="sm"
+          onClick={() => navigate("/sales/new")}
+          className="h-9 bg-amber-500 hover:bg-amber-600 text-stone-900 font-medium"
+        >
+          <FilePlus className="h-3.5 w-3.5 mr-1.5" />
+          New Sale
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/purchases/new")}
+          className="h-9"
+        >
+          <Truck className="h-3.5 w-3.5 mr-1.5" />
+          Receive Stock
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/inventory")}
+          className="h-9"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+          Stock Correction
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => navigate("/customers")}
+          className="h-9"
+        >
+          <Users className="h-3.5 w-3.5 mr-1.5" />
+          Customers
+        </Button>
       </div>
 
-      {/* Visual Analytics Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8">
-          <SalesChart
-            className="h-full"
-            data={salesReport.data?.dailyTotals}
-            loading={salesReport.isLoading}
-            error={
-              salesReport.error
-                ? failureMessage(salesReport.error, "Sales trend unavailable")
-                : null
-            }
-            onRetry={retrySalesReport}
-            rangeLabel={range.label}
-          />
-        </div>
-
-        <div className="lg:col-span-4">
-          <InventoryChart
-            className="h-full"
-            data={statsData?.topInventory}
-            loading={stats.isLoading}
-            error={statsError}
-            onRetry={retryStats}
-          />
-        </div>
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <KpiCard
+          label="Sales Revenue"
+          value={formatTotal(salesTotal)}
+          sublabel={`${salesReport.data?.totalOrders ?? 0} invoices`}
+          icon={CircleDollarSign}
+          accent="amber"
+          loading={salesReport.isLoading}
+        />
+        <KpiCard
+          label="Purchases"
+          value={formatTotal(purchaseTotal)}
+          sublabel={`${purchaseReport.data?.totalOrders ?? 0} orders`}
+          icon={ShoppingCart}
+          accent="blue"
+          loading={purchaseReport.isLoading}
+        />
+        <KpiCard
+          label="Outstanding"
+          value={formatTotal(outstandingBalances)}
+          sublabel="Unpaid receivables"
+          icon={Receipt}
+          accent="orange"
+          loading={stats.isLoading}
+        />
+        <KpiCard
+          label="Low Stock"
+          value={`${urgentStockCount} items`}
+          sublabel={`${outOfStockRows.length} out of stock`}
+          icon={AlertTriangle}
+          accent="red"
+          loading={lowStockApi.isLoading}
+        />
       </div>
 
-      {/* Operational Attention: Low Stock & Expiring Batches */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Low Stock Items List */}
-        <Card className="lg:col-span-8 shadow-xs border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle className="text-base font-semibold">Low Stock Inventory</CardTitle>
-              <CardDescription className="text-xs">
-                Items currently at or below minimum threshold
-              </CardDescription>
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <SalesChart
+          className="lg:col-span-2 border-stone-200"
+          data={salesReport.data?.dailyTotals ?? []}
+          loading={salesReport.isLoading}
+          error={salesReport.error ? failureMessage(salesReport.error, "Sales trend unavailable") : null}
+          onRetry={retrySalesReport}
+          rangeLabel={range.label}
+        />
+        <InventoryChart
+          className="border-stone-200"
+          data={statsData?.topInventory ?? []}
+          loading={stats.isLoading}
+          error={statsError}
+          onRetry={retryStats}
+        />
+      </div>
+
+      {/* Low stock + expiring */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Card className="lg:col-span-2 border-stone-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold">Low Stock</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/inventory")} className="h-7 text-xs">
+                View all
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/inventory")}
-              className="text-xs"
-            >
-              View All
-            </Button>
           </CardHeader>
           <CardContent className="p-0">
             {lowRows.length === 0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                All inventory levels are healthy.
-              </div>
+              <div className="p-4 text-center text-sm text-stone-400">All stock levels healthy</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-muted/50 border-b border-border text-muted-foreground">
+                <table className="w-full text-xs">
+                  <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-semibold">
                     <tr>
-                      <th className="px-4 py-2.5 font-medium">Product</th>
-                      <th className="px-4 py-2.5 font-medium">SKU</th>
-                      <th className="px-4 py-2.5 font-medium text-right">On Hand</th>
-                      <th className="px-4 py-2.5 font-medium text-right">Min Stock</th>
-                      <th className="px-4 py-2.5 font-medium text-right">Action</th>
+                      <th className="px-3 py-2 text-left">Product</th>
+                      <th className="px-3 py-2 text-left">SKU</th>
+                      <th className="px-3 py-2 text-right">On Hand</th>
+                      <th className="px-3 py-2 text-right">Min</th>
+                      <th className="px-3 py-2 text-right"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-stone-100">
                     {lowRows.slice(0, 5).map((row) => (
-                      <tr key={row.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          {row.product?.name ?? "Product"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {row.product?.productCode ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Badge
-                            variant={row.quantityOnHand <= 0 ? "destructive" : "secondary"}
-                            className="text-[11px]"
-                          >
-                            {row.quantityOnHand} units
+                      <tr key={row.id} className="hover:bg-stone-50">
+                        <td className="px-3 py-2 font-medium">{row.product?.name ?? "—"}</td>
+                        <td className="px-3 py-2 text-stone-500 font-mono">{row.product?.productCode ?? "—"}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Badge variant={row.quantityOnHand <= 0 ? "destructive" : "secondary"} className="text-[10px]">
+                            {row.quantityOnHand}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">
-                          {row.reorderLevel}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate("/purchases/new")}
-                            className="h-7 text-xs px-2.5"
-                          >
+                        <td className="px-3 py-2 text-right text-stone-500">{row.reorderLevel}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => navigate("/purchases/new")}>
                             Reorder
                           </Button>
                         </td>
@@ -431,37 +358,26 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-
-        {/* Expiring Soon Card */}
-        <div className="lg:col-span-4">
-          <ExpiringSoonCard />
-        </div>
+        <ExpiringSoonCard />
       </div>
 
-      {/* Rankings & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-6">
-          <TopProducts
-            data={topProducts.data}
-            loading={topProducts.isLoading}
-            error={
-              topProducts.error
-                ? failureMessage(topProducts.error, "Top products unavailable")
-                : null
-            }
-            onRetry={() => void topProducts.mutate()}
-            rangeLabel={range.label}
-          />
-        </div>
-
-        <div className="lg:col-span-6">
-          <RecentActivities
-            purchases={statsData?.recentPurchases}
-            loading={stats.isLoading}
-            error={statsError}
-            onRetry={retryStats}
-          />
-        </div>
+      {/* Rankings & activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TopProducts
+          className="border-stone-200"
+          data={topProducts.data}
+          loading={topProducts.isLoading}
+          error={topProducts.error ? failureMessage(topProducts.error, "Top products unavailable") : null}
+          onRetry={() => void topProducts.mutate()}
+          rangeLabel={range.label}
+        />
+        <RecentActivities
+          className="border-stone-200"
+          purchases={statsData?.recentPurchases}
+          loading={stats.isLoading}
+          error={statsError}
+          onRetry={retryStats}
+        />
       </div>
     </div>
   );

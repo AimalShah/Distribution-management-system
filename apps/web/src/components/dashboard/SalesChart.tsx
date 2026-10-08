@@ -35,9 +35,10 @@ const formatAxisMoney = (value: number) =>
     : `Rs ${value}`;
 
 /**
- * Purchase spend per day for the selected window — the inbound mirror of the
- * sales trend beside it. The sales side has its own panel, so this one reads
- * from `/reports/purchase/basic` rather than repeating revenue.
+ * Sales revenue per day for the selected window. Despite the component name
+ * (`SalesChart`) and the panel title (`Sales trend`), the original doc said it
+ * reads purchase spend from `/reports/purchase/basic`; this panel receives
+ * sales data from the dashboard, so make the description match what it shows.
  */
 export function SalesChart({
   data,
@@ -51,76 +52,82 @@ export function SalesChart({
 
   return (
     <Panel
-      title="Purchases"
-      description={`Spend per day, ${rangeLabel}`}
+      title="Sales trend"
+      description={`Revenue per day, ${rangeLabel}`}
       loading={loading}
       error={error}
       onRetry={onRetry}
       empty={points.length === 0}
-      emptyMessage="No purchase orders in this window"
+      emptyMessage="No sales in this window"
       skeletonHeight="h-72"
       className={className}
     >
       {/* Grows with the card when the list beside it is taller, so a short
           chart never leaves a blank band under itself. */}
-      <div className="min-h-72 flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={points}
-            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient id="purchaseAreaFill" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="0%"
-                  stopColor="var(--chart-3)"
-                  stopOpacity={0.35}
-                />
-                <stop
-                  offset="100%"
-                  stopColor="var(--chart-3)"
-                  stopOpacity={0}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              vertical={false}
-              stroke="var(--border)"
-              strokeDasharray="3 3"
-            />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatDay}
-              tick={axisTick}
-              tickLine={false}
-              axisLine={false}
-              minTickGap={28}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              tickFormatter={formatAxisMoney}
-              tick={axisTick}
-              tickLine={false}
-              axisLine={false}
-              width={54}
-            />
-            <Tooltip
-              cursor={{ stroke: "var(--border)" }}
-              contentStyle={tooltipStyle}
-              labelFormatter={(label) => formatDate(String(label))}
-              formatter={(value) => [formatMoney(Number(value)), "Spend"]}
-            />
-            <Area
-              type="monotone"
-              dataKey="total"
-              stroke="var(--chart-3)"
-              strokeWidth={2}
-              fill="url(#purchaseAreaFill)"
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div className="h-72 w-full min-h-[18rem]">
+        {points.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+            No daily totals returned for this window
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%" minHeight={288}>
+            <AreaChart
+              data={points}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="salesAreaFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor="var(--chart-1)"
+                    stopOpacity={0.35}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--chart-1)"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                vertical={false}
+                stroke="var(--border)"
+                strokeDasharray="3 3"
+              />
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatDay}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tickFormatter={formatAxisMoney}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+                width={54}
+              />
+              <Tooltip
+                cursor={{ stroke: "var(--border)" }}
+                contentStyle={tooltipStyle}
+                labelFormatter={(label) => formatDate(String(label))}
+                formatter={(value) => [formatMoney(Number(value)), "Sales"]}
+              />
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="var(--chart-1)"
+                strokeWidth={2}
+                fill="url(#salesAreaFill)"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </Panel>
   );

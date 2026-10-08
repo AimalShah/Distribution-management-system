@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { toFailure } from "../lib/api";
+import { Button } from "@dms/ui";
 
 interface LocationState {
   from?: string;
@@ -45,47 +46,34 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="auth-body">
-      <div className="auth-bg-shape auth-bg-shape-1" />
-      <div className="auth-bg-shape auth-bg-shape-2" />
-      <div className="auth-bg-shape auth-bg-shape-3" />
+    <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center p-6">
+      {/* Subtle background motif */}
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-2xl bg-[radial-gradient(ellipse_at_top_right,_var(--primary)/12%,_transparent_60%)] dark:bg-[radial-gradient(ellipse_at_top_right,_var(--primary)/12%,_transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="inline-block h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted/30 blur-3xl" />
+      </div>
 
-      <div className="auth-card" style={{ width: "100%", maxWidth: "420px" }}>
-        <div style={{ textAlign: "center", marginBottom: "24px" }}>
-          <div
-            className="auth-logo-wrap"
-            style={{ margin: "0 auto 16px", display: "inline-flex" }}
-          >
-            <ShieldCheck size={22} color="var(--primary-strong)" />
-            <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--text)" }}>
-              DMS
-            </span>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-lg bg-primary/10 p-3">
+            <ShieldCheck className="text-primary" size={22} />
+            <span className="font-semibold text-primary-foreground">DMS</span>
           </div>
-          <h1 className="auth-title">Welcome back</h1>
-          <p className="auth-subtitle">Sign in to manage inventory and sales</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Sign in to manage inventory and sales</p>
         </div>
 
-        <form onSubmit={onSubmit} noValidate>
-          <div style={{ marginBottom: "16px" }}>
-            <label className="form-label" htmlFor="login-username">
-              Username <span className="required">*</span>
+        <form onSubmit={onSubmit} noValidate className="rounded-xl border bg-card p-6 shadow-sm">
+          {/* Username */}
+          <div className="mb-4">
+            <label className="mb-1.5 block text-sm font-medium text-muted-foreground" htmlFor="login-username">
+              Username <span className="text-destructive" aria-label="required">*</span>
             </label>
-            <div style={{ position: "relative" }}>
-              <User
-                size={16}
-                style={{
-                  position: "absolute",
-                  left: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--muted)",
-                  pointerEvents: "none",
-                }}
-              />
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="login-username"
-                className="form-input"
-                style={{ paddingLeft: "36px" }}
+                className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 type="text"
                 autoComplete="username"
                 autoFocus
@@ -97,26 +85,16 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div style={{ marginBottom: "8px" }}>
-            <label className="form-label" htmlFor="login-password">
-              Password <span className="required">*</span>
+          {/* Password */}
+          <div className="mb-2">
+            <label className="mb-1.5 block text-sm font-medium text-muted-foreground" htmlFor="login-password">
+              Password <span className="text-destructive" aria-label="required">*</span>
             </label>
-            <div style={{ position: "relative" }}>
-              <Lock
-                size={16}
-                style={{
-                  position: "absolute",
-                  left: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--muted)",
-                  pointerEvents: "none",
-                }}
-              />
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="login-password"
-                className="form-input"
-                style={{ paddingLeft: "36px", paddingRight: "38px" }}
+                className="h-10 w-full rounded-md border bg-background pl-9 pr-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 type={revealPassword ? "text" : "password"}
                 autoComplete="current-password"
                 placeholder="Enter your password"
@@ -126,20 +104,9 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setRevealPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 aria-label={revealPassword ? "Hide password" : "Show password"}
-                style={{
-                  position: "absolute",
-                  right: "8px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--muted)",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                }}
+                onClick={() => setRevealPassword((prev) => !prev)}
               >
                 {revealPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -147,35 +114,27 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <p
-              role="alert"
-              style={{
-                color: "var(--danger)",
-                fontSize: "13px",
-                margin: "8px 0 0",
-              }}
-            >
-              {error}
-            </p>
+            <div className="mt-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 shrink-0 h-4 w-4" />
+              <span>{error}</span>
+            </div>
           )}
 
-          <button
+          <Button
             type="submit"
-            className="btn btn-primary btn-lg"
-            style={{ width: "100%", marginTop: "20px", justifyContent: "center" }}
+            className="mt-6 w-full justify-center"
             disabled={submitting}
           >
-            <LogIn size={16} />
+            <LogIn className="mr-2 h-4 w-4" />
             {submitting ? "Signing in…" : "Sign In"}
-          </button>
+          </Button>
         </form>
 
-        {/*<div className="auth-demo-box">
-          <div className="auth-demo-box-title">Default credentials</div>
-          <div className="auth-demo-box-text">
-            Username: <strong>{DEFAULT_CREDENTIALS.username}</strong> · Password:{" "}
-            <strong>{DEFAULT_CREDENTIALS.password}</strong>
-          </div>
+        {/*<div className="mt-6 rounded-lg bg-muted/40 p-4 text-center text-sm">
+          <p className="mb-1 font-medium text-foreground">Default credentials</p>
+          <p className="text-muted-foreground">
+            Username: <strong>{useAuth.DESKTOP_USERNAME}</strong> · Password: <strong>{useAuth.DESKTOP_PASSWORD}</strong>
+          </p>
         </div>*/}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Skeleton } from "@dms/ui";
 import { useAuth } from "../../lib/auth";
 
 /**
@@ -13,10 +14,10 @@ export function RequireAuth() {
 
   if (status === "loading") {
     return (
-      <div className="auth-body">
-        <div className="auth-card" style={{ textAlign: "center" }}>
-          <div className="auth-title">Signing you in…</div>
-          <div className="auth-subtitle">Checking your session</div>
+      <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <Skeleton className="mb-4 h-10 w-3/4 mx-auto" />
+          <p className="text-sm text-muted-foreground">Checking your session</p>
         </div>
       </div>
     );

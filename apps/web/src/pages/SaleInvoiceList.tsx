@@ -469,7 +469,7 @@ export default function SaleInvoiceList() {
               Refresh
             </Button>
             <Link to="/sales/new">
-              <Button size="sm" className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
+              <Button size="sm" className="h-9 text-black bg-amber-500 hover:bg-amber-600 rounded-md shadow-sm cursor-pointer transition-all">
                 <Plus className="size-4 mr-2" />
                 New Sale Invoice
               </Button>
@@ -594,7 +594,7 @@ export default function SaleInvoiceList() {
             </p>
             {view === "active" && !search && statusFilter === "all" && (
               <Link to="/sales/new">
-                <Button size="sm" className="h-9 rounded-md">
+                <Button size="sm" className="h-9 rounded-md bg-amber-500 hover:bg-amber-600 text-stone-900">
                   <Plus className="size-4 mr-2" />
                   New Sale Invoice
                 </Button>

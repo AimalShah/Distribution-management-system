@@ -25,7 +25,7 @@ import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { generateCode } from "../lib/code";
-import { ListPageHeader } from "../components/list/ListPageHeader";
+import { PageHead } from "../components/list/PageHead";
 import { StatTileRow } from "../components/list/StatTileRow";
 import type { PaymentMethodValue } from "@dms/shared";
 
@@ -203,7 +203,9 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-5 animate-slideInUp">
-      <ListPageHeader
+      <PageHead
+        title="Payments"
+        subtitle="Money received against invoices and on account"
         breadcrumb={
           <>
             <Link to="/" className="hover:text-primary transition-colors">
@@ -213,15 +215,13 @@ export default function PaymentsPage() {
             <span className="text-foreground font-semibold">Payments</span>
           </>
         }
-        title="Payments"
-        subtitle="Money received against invoices and on account"
         actions={
           <>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setDeletedView((v) => !v)}
-              className="btn-secondary h-9 rounded-md cursor-pointer"
+              className="h-9 rounded-md cursor-pointer"
             >
               {deletedView ? "Active payments" : "Corrected payments"}
             </Button>
@@ -230,7 +230,7 @@ export default function PaymentsPage() {
               size="sm"
               onClick={() => void mutate()}
               disabled={isLoading}
-              className="btn-secondary h-9 rounded-md cursor-pointer"
+              className="h-9 rounded-md cursor-pointer"
             >
               <RefreshCw className="size-3.5 mr-2" />
               Refresh
@@ -238,7 +238,7 @@ export default function PaymentsPage() {
             <Button
               size="sm"
               onClick={() => setDialogOpen(true)}
-              className="btn-primary h-9 rounded-md shadow-sm cursor-pointer"
+              className="h-9 rounded-md shadow-sm cursor-pointer"
             >
               <Plus className="size-4 mr-2" />
               Record payment
@@ -513,14 +513,14 @@ export default function PaymentsPage() {
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
                 disabled={saving}
-                className="btn-secondary h-9 rounded-md cursor-pointer"
+                className="h-9 rounded-md cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 onClick={() => void handleCreate()}
                 disabled={!canSubmit}
-                className="btn-primary h-9 rounded-md shadow-sm cursor-pointer"
+                className="h-9 rounded-md shadow-sm cursor-pointer"
               >
                 {saving ? "Recording…" : "Record payment"}
               </Button>

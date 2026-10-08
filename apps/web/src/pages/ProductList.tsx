@@ -10,7 +10,6 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -31,9 +30,9 @@ import {
 import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatMoney } from "../lib/format";
-import { ListPageHeader } from "../components/list/ListPageHeader";
-import { StatTileRow } from "../components/list/StatTileRow";
+import { PageHead } from "../components/list/PageHead";
 import { ListTablePanel } from "../components/list/ListTablePanel";
+import { StatChip } from "../components/list/StatChip";
 
 export interface ProductItem {
   id: string;
@@ -253,20 +252,16 @@ export default function ProductList() {
   return (
     <div className="space-y-5 animate-slideInUp">
       {/* Operational Breadcrumb & Action Header */}
-      <ListPageHeader
-        breadcrumb={
-          <>
-            <Link to="/" className="hover:text-primary transition-colors">
-              Dashboard
-            </Link>
-            <span>/</span>
-            <span className="text-muted-foreground">Stock & Catalog</span>
-            <span>/</span>
-            <span className="text-foreground font-semibold">Products</span>
-          </>
-        }
+      <PageHead
         title="Product Catalog"
         subtitle="Manage inventory catalog items, pricing, SKUs, and stock visibility"
+        breadcrumb={
+          <>
+            <Link to="/" className="hover:text-amber-600 transition-colors">Dashboard</Link>
+            <span>/</span>
+            <span className="text-stone-400">Stock &amp; Catalog</span>
+          </>
+        }
         actions={
           <>
             <Button
@@ -274,14 +269,14 @@ export default function ProductList() {
               size="sm"
               onClick={() => mutate()}
               disabled={isLoading}
-              className="btn-secondary h-9 rounded-md cursor-pointer"
+              className="h-8"
             >
-              <RefreshCw className="size-3.5 mr-2" />
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
               Refresh
             </Button>
             <Link to="/products/new">
-              <Button size="sm" className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
-                <Plus className="size-4 mr-2" />
+              <Button size="sm" className="h-8 bg-amber-500 hover:bg-amber-600 text-stone-900">
+                <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Product
               </Button>
             </Link>
@@ -289,31 +284,12 @@ export default function ProductList() {
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
-      <StatTileRow
-        tiles={[
-          {
-            label: "Total Products",
-            value: isLoading ? "—" : totalProducts,
-            sublabel: "In product catalog",
-            icon: <Package className="size-6" />,
-          },
-          {
-            label: "Active Products",
-            value: isLoading ? "—" : activeProducts,
-            sublabel: "Ready for distribution",
-            icon: <TrendingUp className="size-6" />,
-            tone: "success",
-            sublabelTone: "success",
-          },
-          {
-            label: "Product Categories",
-            value: categories.length,
-            sublabel: "Active classifications",
-            icon: <Filter className="size-6" />,
-          },
-        ]}
-      />
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <StatChip label="Total Products" value={isLoading ? "—" : totalProducts} />
+        <StatChip label="Active" value={isLoading ? "—" : activeProducts} accent="green" />
+        <StatChip label="Categories" value={isLoading ? "—" : categories.length} />
+      </div>
 
       {/* Filter and Table Card */}
       <ListTablePanel
@@ -399,7 +375,7 @@ export default function ProductList() {
             </p>
             {!search && statusFilter === "all" && categoryFilter === "all" && (
               <Link to="/products/new">
-                <Button size="sm" className="h-9 rounded-md">
+                <Button size="sm" className="h-9 rounded-md bg-amber-500 hover:bg-amber-600 text-stone-900">
                   <Plus className="size-4 mr-2" />
                   Add Your First Product
                 </Button>

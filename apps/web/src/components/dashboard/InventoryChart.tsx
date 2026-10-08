@@ -70,9 +70,9 @@ export function InventoryChart({
       {/* `flex-1` is what keeps this card from showing a hundred empty pixels
           under the chart when the row it sits in is sized by a taller
           neighbour. `min-h` is the floor when it is the taller one. */}
-      <div className="flex min-h-64 flex-1 flex-col gap-4">
-        <div className="min-h-0 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
+      <div className="flex h-72 w-full flex-col gap-4">
+        <div className="h-60 w-full min-h-[15rem]">
+          <ResponsiveContainer width="100%" height="100%" minHeight={240}>
             <BarChart
               data={points}
               margin={{ top: 8, right: 8, left: 24, bottom: 0 }}
@@ -105,7 +105,7 @@ export function InventoryChart({
                 width={44}
               />
               <Tooltip
-                cursor={{ fill: "var(--muted)" }}
+                cursor={{ fill: "var(--muted-foreground)" }}
                 contentStyle={tooltipStyle}
                 formatter={(value, name) => [
                   Number(value).toLocaleString(),

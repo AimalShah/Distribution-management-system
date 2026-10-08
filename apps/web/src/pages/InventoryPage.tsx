@@ -27,9 +27,31 @@ import { formatDate } from "../lib/format";
 import { AdjustStockDialog, type InventoryItemSummary } from "../components/inventory/AdjustStockDialog";
 import { AddInventoryDialog } from "../components/inventory/AddInventoryDialog";
 import { Batches } from "./inventory/Batches";
-import { ListPageHeader } from "../components/list/ListPageHeader";
-import { StatTileRow } from "../components/list/StatTileRow";
+import { PageHead } from "../components/list/PageHead";
 import { ListTablePanel } from "../components/list/ListTablePanel";
+
+function StatChip({
+  label,
+  value,
+  accent = "neutral",
+}: {
+  label: string;
+  value: string | number;
+  accent?: "neutral" | "amber" | "green" | "red";
+}) {
+  const colors = {
+    neutral: "bg-stone-100 text-stone-600",
+    amber: "bg-amber-50 text-amber-700",
+    green: "bg-emerald-50 text-emerald-700",
+    red: "bg-red-50 text-red-700",
+  };
+  return (
+    <div className={`p-3 rounded-lg border border-stone-200 ${colors[accent]}`}>
+      <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
+      <p className="text-lg font-bold mt-0.5">{value}</p>
+    </div>
+  );
+}
 
 export interface InventoryRow {
   id: string;
@@ -331,20 +353,16 @@ export default function InventoryPage() {
   return (
     <div className="space-y-5 animate-slideInUp">
       {/* Operational Breadcrumb & Action Header */}
-      <ListPageHeader
-        breadcrumb={
-          <>
-            <Link to="/" className="hover:text-primary transition-colors cursor-pointer">
-              Dashboard
-            </Link>
-            <span>/</span>
-            <span className="text-muted-foreground">Stock &amp; Catalog</span>
-            <span>/</span>
-            <span className="text-foreground font-semibold">Stock Adjustments</span>
-          </>
-        }
+      <PageHead
         title="Stock &amp; Inventory"
         subtitle="Monitor product availability, adjust stock levels, and review movement audits"
+        breadcrumb={
+          <>
+            <Link to="/" className="hover:text-amber-600 transition-colors">Dashboard</Link>
+            <span>/</span>
+            <span className="text-stone-400">Stock &amp; Catalog</span>
+          </>
+        }
         actions={
           <>
             <Button
@@ -352,45 +370,25 @@ export default function InventoryPage() {
               size="sm"
               onClick={handleRefresh}
               disabled={inventoryLoading || logsLoading}
-              className="btn-secondary h-9 rounded-md cursor-pointer"
+              className="h-8"
             >
-              <RefreshCw className="size-3.5 mr-2" />
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)} className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
-              <Plus className="size-4 mr-2" />
+            <Button size="sm" onClick={() => setAddOpen(true)} className="h-8">
+              <Plus className="h-3.5 w-3.5 mr-1" />
               Add Inventory
             </Button>
           </>
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
-      <StatTileRow
-        tiles={[
-          {
-            label: "Tracked Products",
-            value: inventoryLoading ? "—" : totalStockItems,
-            sublabel: "Active catalog inventory",
-            icon: <Boxes className="size-6" />,
-          },
-          {
-            label: "Low Stock Warnings",
-            value: inventoryLoading ? "—" : lowStockCount,
-            sublabel: "Under reorder threshold",
-            icon: <AlertTriangle className="size-6" />,
-            tone: "warning",
-          },
-          {
-            label: "Healthy Stock",
-            value: inventoryLoading ? "—" : Math.max(0, totalStockItems - lowStockCount),
-            sublabel: "Optimal warehouse stock",
-            icon: <Boxes className="size-6" />,
-            tone: "success",
-            sublabelTone: "success",
-          },
-        ]}
-      />
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <StatChip label="Tracked Products" value={inventoryLoading ? "—" : totalStockItems} />
+        <StatChip label="Low Stock" value={inventoryLoading ? "—" : lowStockCount} accent="amber" />
+        <StatChip label="Healthy" value={inventoryLoading ? "—" : Math.max(0, totalStockItems - lowStockCount)} accent="green" />
+      </div>
 
       {/* Main Tabs Container */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

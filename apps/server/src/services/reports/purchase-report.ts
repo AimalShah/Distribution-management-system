@@ -100,7 +100,7 @@ export async function getBasicPurchaseReport(
     // only because the query sorted by date; the ordering was a side effect of
     // something else and would have inverted the moment that sort changed.
     dailyTotals: [...dailyTotals.entries()]
-      .map(([date, total]) => ({ date, total }))
+      .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date)),
     // `status` is a free-text column with a comment reading "e.g. 'Pending',
     // 'Completed'", and no report applied a filter on it, so pending orders were

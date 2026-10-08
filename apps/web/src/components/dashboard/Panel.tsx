@@ -77,18 +77,22 @@ export function Panel({
             <div className="space-y-1">
               <p className="text-sm font-medium">Couldn&apos;t load this panel</p>
               <p className="text-xs text-muted-foreground">{error}</p>
-            </div>
-            {onRetry ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onRetry}
-              >
-                <RefreshCw className="size-3.5" />
-                Retry
-              </Button>
-            ) : null}
+            </div>              {onRetry ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRetry}
+                >
+                  <RefreshCw className="size-3.5" />
+                  Retry
+                </Button>
+              ) : null}
+              {error ? (
+                <pre className="mt-2 text-left text-[11px] font-mono text-destructive max-w-full overflow-auto">
+                  {error}
+                </pre>
+              ) : null}
           </div>
         ) : empty ? (
           <p className="py-8 text-center text-sm text-muted-foreground">

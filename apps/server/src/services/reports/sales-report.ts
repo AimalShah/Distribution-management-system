@@ -113,7 +113,7 @@ export async function getBasicSalesReport(
     // Sorted rather than left in insertion order, which depended on the query
     // happening to sort by date.
     dailyTotals: [...dailyTotals.entries()]
-      .map(([date, total]) => ({ date, total }))
+      .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date)),
     // `status` is free text and nothing filtered on it, so pending invoices were
     // summed into the same "total sales" as completed ones. Report the split

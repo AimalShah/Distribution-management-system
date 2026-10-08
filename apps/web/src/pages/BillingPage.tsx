@@ -12,9 +12,9 @@ export default function BillingPage() {
           <span>/</span>
           <span className="text-muted-foreground">Admin</span>
           <span>/</span>
-          <span className="text-foreground font-semibold">{"Billing & Plans"}</span>
+          <span className="text-foreground font-semibold">Billing &amp; Plans</span>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{"Billing & Plans"}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Billing &amp; Plans</h1>
         <p className="text-xs text-muted-foreground mt-1">
           Subscription management, billing tiers, and invoicing records
         </p>

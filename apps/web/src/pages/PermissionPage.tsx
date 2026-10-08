@@ -238,7 +238,7 @@ export default function PermissionPage() {
             <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleOpenCreate} className="gap-2">
+          <Button size="sm" onClick={handleOpenCreate} className="gap-2 bg-amber-500 hover:bg-amber-600 text-stone-900">
             <Plus className="size-4" />
             Create Custom Role
           </Button>

@@ -16,6 +16,8 @@ export interface ListTablePanelProps {
   empty: React.ReactNode;
 }
 
+// ListTablePanel kept as-is for existing callers
+// (DataTable + search + filter + pagination)
 export function ListTablePanel({ search, filters, isLoading, isEmpty, skeleton, table, empty }: ListTablePanelProps) {
   return (
     <div className="card p-0 overflow-hidden">

@@ -283,7 +283,7 @@ export default function ReturnList() {
               Refresh
             </Button>
             <Link to="/returns/new">
-              <Button size="sm" className="h-9 rounded-md shadow-sm cursor-pointer transition-all">
+              <Button size="sm" className="h-9 rounded-md shadow-sm cursor-pointer transition-all bg-amber-500 hover:bg-amber-600 text-stone-900">
                 <Plus className="size-4 mr-2" />
                 New Return
               </Button>
@@ -413,7 +413,7 @@ export default function ReturnList() {
             </p>
             {view === "active" && !search && typeFilter === "all" && (
               <Link to="/returns/new">
-                <Button size="sm" className="h-9 rounded-md">
+                <Button size="sm" className="h-9 rounded-md bg-amber-500 hover:bg-amber-600 text-stone-900">
                   <Plus className="size-4 mr-2" />
                   New Return
                 </Button>

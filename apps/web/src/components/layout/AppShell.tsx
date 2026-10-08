@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { Toaster, toast } from "sonner";
 import { api } from "../../lib/api";
 import { AppSidebar } from "./AppSidebar";
-import { Topbar, type TopbarSale, type TopbarProduct } from "./Topbar";
+import { Topbar } from "./Topbar";
 import { initialNotifications, type NotificationItem } from "../../data/mockData";
+import { cn } from "@dms/ui";
 
 export function AppShell() {
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("dms-theme") === "dark" || localStorage.getItem("sf_theme") === "dark";
+      return localStorage.getItem("dms-theme") === "dark";
     } catch {
       return false;
     }
@@ -22,8 +23,8 @@ export function AppShell() {
   useSWR("/dashboard/stats", (url) => api.get(url));
   const { data: lowStockApiData } = useSWR("/inventory/low-stock?page=1&pageSize=5", (url) => api.get(url));
 
-  const [sales] = useState<TopbarSale[]>([]);
-  const [lowStock] = useState<TopbarProduct[]>([]);
+  const [sales] = useState<any[]>([]);
+  const [lowStock] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
 
   useEffect(() => {
@@ -33,20 +34,18 @@ export function AppShell() {
         title: "Low Stock Alert",
         desc: `${item.product?.name || "Product"} is down to ${item.quantityOnHand} units`,
         time: `${(idx + 1) * 12}m ago`,
-        type: "warning",
+        type: "warning" as const,
         unread: true,
       }));
 
       setNotifications((prev) => {
         const existingIds = new Set(prev.map((n) => n.id));
         const toAdd = realAlerts.filter((a) => !existingIds.has(a.id));
-
         return toAdd.length > 0 ? [...toAdd, ...prev] : prev;
       });
     }
   }, [lowStockApiData]);
 
-  // Apply dark mode to documentElement
   useEffect(() => {
     try {
       if (isDark) {
@@ -89,45 +88,47 @@ export function AppShell() {
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
-      {/* Sidebar Navigation */}
+    <div className="min-h-screen bg-stone-50 text-stone-900 flex">
+      {/* Sidebar */}
       <AppSidebar
         isCollapsed={isCollapsed}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
       />
 
-      {/* Mobile Backdrop Overlay */}
+      {/* Mobile overlay */}
       {isMobileOpen && (
         <div
-          id="mobile-overlay"
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
-      {/* Main Content Wrapper */}
+      {/* Main wrapper */}
       <div
-        id="main-wrapper"
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
-          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[260px]"
-        }`}
+        className={cn(
+          "flex-1 flex flex-col min-w-0 transition-all duration-200",
+          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[240px]"
+        )}
       >
-        {/* Topbar Header */}
+        {/* Topbar */}
         <Topbar
           onToggleSidebar={toggleSidebar}
           isDark={isDark}
           onToggleDarkMode={toggleDarkMode}
           notifications={notifications}
           onMarkNotificationsRead={handleMarkNotificationsRead}
+          unreadCount={unreadCount}
           sales={sales}
           lowStock={lowStock}
           onShowToast={showToast}
         />
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 md:p-6 max-w-[1400px] w-full mx-auto">
+        {/* Content */}
+        <main className="flex-1 p-5 md:p-8 max-w-[1280px] w-full mx-auto">
           <Outlet
             context={{
               sales,
@@ -138,14 +139,11 @@ export function AppShell() {
         </main>
 
         {/* Footer */}
-        <footer className="app-footer border-t border-border py-4 px-6 text-center text-xs text-muted-foreground">
-          <div className="app-footer-text">
-            Copyright &copy; 2026 DMS - Distribution Management System. All rights reserved.
-          </div>
+        <footer className="border-t border-stone-200 py-3 px-6 text-center text-xs text-stone-400">
+          DistroManager &copy; 2026
         </footer>
       </div>
 
-      {/* Accessible Toast Notifications via Sonner */}
       <Toaster position="top-right" richColors />
     </div>
   );

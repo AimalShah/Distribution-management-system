@@ -1,28 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import type { NotificationItem } from "../../data/mockData";
 import { useAuth } from "../../lib/auth";
 import { ThemeSwitch } from "./ThemeSwitch";
-
-export interface TopbarSale {
-  id: string;
-  saleCode: string;
-  customerName: string;
-  total?: number;
-  amount?: number;
-  date?: string;
-  status?: string;
-}
-
-export interface TopbarProduct {
-  id: string;
-  name: string;
-  sku: string;
-  price?: number;
-  category?: string;
-  image?: string;
-  currentStock?: number;
-}
+import type { NotificationItem } from "../../data/mockData";
 
 interface TopbarProps {
   onToggleSidebar?: () => void;
@@ -30,11 +10,10 @@ interface TopbarProps {
   onToggleDarkMode?: () => void;
   notifications?: NotificationItem[];
   onMarkNotificationsRead?: () => void;
-  onSelectSearchResult?: (type: "invoice" | "product" | "page", id: string) => void;
-  sales?: TopbarSale[];
-  lowStock?: TopbarProduct[];
-  onShowToast?: (title: string, message: string, type: "info" | "success") => void;
-  onOpenQuickReport?: () => void;
+  unreadCount?: number;
+  sales?: any[];
+  lowStock?: any[];
+  onShowToast?: (title: string, message: string) => void;
 }
 
 export function Topbar({
@@ -43,60 +22,44 @@ export function Topbar({
   onToggleDarkMode = () => {},
   notifications = [],
   onMarkNotificationsRead = () => {},
-  onSelectSearchResult,
+  unreadCount = 0,
   sales = [],
   lowStock = [],
   onShowToast = () => {},
-  onOpenQuickReport,
 }: TopbarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
+  const [showUser, setShowUser] = useState(false);
 
-  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
-        setShowSearchDropdown(false);
-      }
-
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setShowNotifications(false);
-      }
-
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
+    const outside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowSearch(false);
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotif(false);
+      if (userRef.current && !userRef.current.contains(e.target as Node)) setShowUser(false);
     };
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", outside);
+    return () => document.removeEventListener("mousedown", outside);
   }, []);
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
-
-  // The signed-in account is the source of truth; the literals are what the
-  // shell falls back to before a session resolves.
-  const displayName = user?.name ?? "IJAZ";
-
+  const displayName = user?.name ?? "User";
   const initials = displayName
     .split(/\s+/)
-    .map((part: string) => part[0])
+    .map((p: string) => p[0])
     .join("")
-    .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase()
+    .slice(0, 2);
 
   const filteredSales = sales.filter(
     (s) =>
       s.saleCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+      (s.customerName && s.customerName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const filteredProducts = lowStock.filter(
@@ -106,228 +69,132 @@ export function Topbar({
   );
 
   return (
-    <header id="app-header">
-      {/* Sidebar Toggle Button */}
+    <header className="sticky w-full  top-0 z-30 flex items-center justify-between gap-3 h-14 px-4 border-b border-stone-200 bg-white/90 backdrop-blur-sm">
+      {/* Burger */}
       <button
-        id="sidebar-toggle-btn"
-        className="p-2 rounded-lg hover:bg-[var(--background)] transition-colors cursor-pointer border-none bg-transparent flex-shrink-0"
-        style={{ color: "var(--muted)" }}
-        aria-label="Toggle Sidebar"
+        className="p-2 rounded-lg hover:bg-stone-100 transition-colors"
         onClick={onToggleSidebar}
+        aria-label="Toggle sidebar"
       >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-500">
           <line x1="3" y1="12" x2="21" y2="12" />
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
 
-      {/* Global Search */}
-      <div className="flex-1 max-w-md relative search-box" id="global-search-box" ref={searchBoxRef}>
-        <svg
-          className="search-icon"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        <input
-          type="text"
-          id="global-search-input"
-          placeholder="Search inventory, sales, products... (Ctrl+K)"
-          aria-label="Global search"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setShowSearchDropdown(e.target.value.trim().length > 0);
-          }}
-          onFocus={() => {
-            if (searchQuery.trim().length > 0) setShowSearchDropdown(true);
-          }}
-          className="search-input"
-        />
-
-        {showSearchDropdown && (
-          <div
-            id="search-results-dropdown"
-            className="search-dropdown rounded-md border border-border bg-popover shadow-md"
-            style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: "360px",
-              overflowY: "auto",
-              padding: "6px",
+      {/* Search */}
+      <div className="flex-1 max-w-md relative" ref={searchRef}>
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearch(e.target.value.trim().length > 0);
             }}
-          >
+            onFocus={() => setShowSearch(true)}
+            placeholder="Search orders, products, customers..."
+            className="w-full h-9 pl-9 pr-3 text-sm border border-stone-200 rounded-lg bg-stone-50 text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          />
+        </div>
+
+        {showSearch && (searchQuery.trim().length > 0) && (
+          <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-stone-200 bg-white shadow-lg overflow-hidden z-40">
             {filteredProducts.length > 0 && (
-              <div className="mb-2">
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--muted)", padding: "4px 8px", textTransform: "uppercase" }}>
-                  Products
-                </div>
-                {filteredProducts.slice(0, 4).map((p) => (
+              <div className="border-b border-stone-100">
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase text-stone-400">Products</div>
+                {filteredProducts.slice(0, 4).map((p: any) => (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => {
-                      setShowSearchDropdown(false);
-                      setSearchQuery("");
-
-                      if (onSelectSearchResult) onSelectSearchResult("product", p.id);
-                      else navigate("/products");
-                    }}
-                    className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] flex items-center justify-between cursor-pointer border-none bg-transparent"
+                    className="w-full text-left px-3 py-2 hover:bg-stone-50 flex items-center justify-between text-sm"
+                    onClick={() => { setShowSearch(false); setSearchQuery(""); navigate("/products"); }}
                   >
-                    <div className="flex items-center gap-2">
-                      <img src={p.image} alt={p.name} className="w-7 h-7 rounded-md object-cover bg-slate-100" />
-                      <div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>{p.name}</div>
-                        <div style={{ fontSize: "12px", color: "var(--muted)" }}>SKU: {p.sku}</div>
-                      </div>
+                    <div>
+                      <div className="font-medium text-stone-900">{p.name}</div>
+                      <div className="text-xs text-stone-400">SKU: {p.sku}</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400">{p.currentStock} left</span>
+                    <span className="text-xs font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full">{p.currentStock} left</span>
                   </button>
                 ))}
               </div>
             )}
-
             {filteredSales.length > 0 && (
               <div>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--muted)", padding: "4px 8px", textTransform: "uppercase" }}>
-                  Sales &amp; Invoices
-                </div>
-                {filteredSales.slice(0, 4).map((s) => (
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase text-stone-400">Recent Sales</div>
+                {filteredSales.slice(0, 4).map((s: any) => (
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => {
-                      setShowSearchDropdown(false);
-                      setSearchQuery("");
-
-                      if (onSelectSearchResult) onSelectSearchResult("invoice", s.id);
-                      else navigate("/sales");
-                    }}
-                    className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] flex items-center justify-between cursor-pointer border-none bg-transparent"
+                    className="w-full text-left px-3 py-2 hover:bg-stone-50 flex items-center justify-between text-sm"
+                    onClick={() => { setShowSearch(false); setSearchQuery(""); navigate("/sales"); }}
                   >
                     <div>
-                      <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>{s.saleCode}</div>
-                      <div style={{ fontSize: "12px", color: "var(--muted)" }}>{s.customerName} • {s.date}</div>
+                      <div className="font-medium text-stone-900">{s.saleCode}</div>
+                      <div className="text-xs text-stone-400">{s.customerName}</div>
                     </div>
-                    <span className="font-bold text-sm text-primary-strong">Rs {(s.amount ?? s.total ?? 0).toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-amber-600">Rs {(s.amount ?? s.total ?? 0).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
             )}
-
             {filteredProducts.length === 0 && filteredSales.length === 0 && (
-              <div className="p-4 text-center text-sm text-[var(--muted)]">
-                No matching products or sales found.
-              </div>
+              <div className="p-4 text-center text-sm text-stone-400">No results found</div>
             )}
           </div>
         )}
       </div>
 
-      {/* Header Actions */}
-      <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-        {onOpenQuickReport && (
-          <button
-            type="button"
-            className="hidden md:flex items-center gap-2 btn btn-primary btn-sm cursor-pointer"
-            onClick={onOpenQuickReport}
-            aria-label="Generate Quick Report PDF"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            Quick Report
-          </button>
-        )}
+      {/* Actions */}
+      <div className="flex items-center gap-1">
 
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
-            id="notifications-btn"
-            type="button"
-            className="btn btn-ghost btn-icon relative cursor-pointer"
-            aria-label="View notifications"
-            onClick={() => setShowNotifications((prev) => !prev)}
+            className="relative p-2 rounded-lg hover:bg-stone-100 transition-colors"
+            onClick={() => setShowNotif(!showNotif)}
           >
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-stone-500">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {unreadCount > 0 && <span className="notification-dot" />}
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-amber-500 text-[10px] font-bold text-white flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
           </button>
 
-          {showNotifications && (
-            <div
-              id="notifications-dropdown"
-              className="rounded-md border border-border bg-popover shadow-md"
-              style={{
-                position: "absolute",
-                top: "calc(100% + 6px)",
-                right: 0,
-                width: "320px",
-                zIndex: 100,
-                overflow: "hidden",
-              }}
-            >
-              <div className="p-3 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
-                <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>Notifications</span>
+          {showNotif && (
+            <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-stone-200 bg-white shadow-lg overflow-hidden z-40">
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-stone-100">
+                <span className="text-sm font-semibold text-stone-900">Notifications</span>
                 {unreadCount > 0 && (
                   <button
-                    type="button"
+                    className="text-xs text-amber-600 hover:text-amber-700 font-medium"
                     onClick={onMarkNotificationsRead}
-                    className="text-xs text-primary-strong hover:underline cursor-pointer border-none bg-transparent"
                   >
-                    Mark all as read
+                    Mark all read
                   </button>
                 )}
               </div>
-              <div className="max-h-72 overflow-y-auto">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`p-3 border-b flex items-start gap-3 transition-colors ${
-                      n.unread ? "bg-[var(--primary-light)]/40" : ""
-                    }`}
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <div className="mt-1.5">
-                      <span className="size-2 rounded-full bg-primary inline-block" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)" }}>{n.title}</div>
-                      <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>{n.message}</div>
-                      <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>{n.time}</div>
+              <div className="max-h-64 overflow-y-auto">
+                {notifications.map((n: NotificationItem) => (
+                  <div key={n.id} className={`px-3 py-2.5 border-b border-stone-50 flex items-start gap-3 text-sm ${
+                    n.unread ? "bg-amber-50/50" : ""
+                  }`}>
+                    <span className={`mt-0.5 h-2 w-2 rounded-full inline-block ${
+                      n.type === "warning" ? "bg-amber-500" : "bg-stone-400"
+                    }`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-stone-900">{n.title}</p>
+                      <p className="text-xs text-stone-500 mt-0.5">{n.desc}</p>
+                      <p className="text-xs text-stone-400 mt-0.5">{n.time}</p>
                     </div>
                   </div>
                 ))}
@@ -336,87 +203,54 @@ export function Topbar({
           )}
         </div>
 
-        {/* Theme Switch */}
-        <div id="theme-toggle-btn" className="flex items-center">
-          <ThemeSwitch />
-        </div>
-
-        {/* User Menu */}
-        <div className="relative" ref={userMenuRef}>
+        {/* User */}
+        <div className="relative" ref={userRef}>
           <button
-            type="button"
-            className="flex items-center gap-2 p-2 rounded-xl hover:bg-[var(--background)] transition-colors cursor-pointer border-none bg-transparent"
-            onClick={() => setShowUserMenu((prev) => !prev)}
-            aria-label="User account menu"
+            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+            onClick={() => setShowUser(!showUser)}
           >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-              style={{ background: "var(--primary)" }}
-            >
+            <div className="h-7 w-7 rounded-full bg-amber-500 text-stone-900 text-xs font-bold flex items-center justify-center">
               {initials}
             </div>
-            <span className="hidden sm:inline text-xs font-semibold text-[var(--text)]">{displayName}</span>
+            <span className="hidden sm:inline text-sm font-medium text-stone-700">{displayName}</span>
           </button>
 
-          {showUserMenu && (
-            <div
-              className="rounded-md border border-border bg-popover shadow-md"
-              style={{
-                position: "absolute",
-                top: "calc(100% + 6px)",
-                right: 0,
-                width: "200px",
-                zIndex: 100,
-                padding: "6px",
-              }}
-            >
-              <div className="p-2 border-b mb-1" style={{ borderColor: "var(--border)" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>{displayName}</div>
-                <div style={{ fontSize: "12px", color: "var(--muted)" }}>
-                  {user?.username ?? "alex.morgan@inventioo.test"}
-                </div>
+          {showUser && (
+            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-stone-200 bg-white shadow-lg overflow-hidden z-40">
+              <div className="px-3 py-2.5 border-b border-stone-100">
+                <p className="text-sm font-semibold text-stone-900">{displayName}</p>
+                <p className="text-xs text-stone-400">{user?.username ?? "user@example.com"}</p>
               </div>
               <button
-                type="button"
-                className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] text-xs text-[var(--text)] cursor-pointer border-none bg-transparent font-medium"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  navigate("/profile");
-                }}
+                className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 text-left"
+                onClick={() => { setShowUser(false); navigate("/profile"); }}
               >
-                Profile Information
+                Profile
               </button>
               <button
-                type="button"
-                className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] text-xs text-[var(--text)] cursor-pointer border-none bg-transparent font-medium"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  navigate("/users");
-                }}
+                className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 text-left"
+                onClick={() => { setShowUser(false); navigate("/users"); }}
               >
-                Team &amp; Users
+                Team & Users
               </button>
               <button
-                type="button"
-                className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] text-xs text-[var(--text)] cursor-pointer border-none bg-transparent font-medium"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  navigate("/billing");
-                }}
+                className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 text-left"
+                onClick={() => { setShowUser(false); navigate("/billing"); }}
               >
-                Billing &amp; Subscription
+                Billing
               </button>
-              <button
-                type="button"
-                className="w-full text-left p-2 rounded-lg hover:bg-[var(--background)] text-xs text-[var(--danger)] cursor-pointer border-none bg-transparent font-medium"
-                onClick={async () => {
-                  setShowUserMenu(false);
-                  await logout();
-                  navigate("/login", { replace: true });
-                }}
-              >
-                Sign Out
-              </button>
+              <div className="border-t border-stone-100">
+                <button
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left"
+                  onClick={async () => {
+                    setShowUser(false);
+                    await logout();
+                    navigate("/login", { replace: true });
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           )}
         </div>
