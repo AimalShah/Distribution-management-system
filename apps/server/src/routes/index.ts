@@ -111,4 +111,12 @@ apiRouter.use("/reports/purchase", purchaseReportRouter);
 
 apiRouter.use("/reports/sales", salesReportRouter);
 
+apiRouter.use("/reports/aging", (req, res, next) => {
+  const queryIndex = req.url.indexOf("?");
+  const queryPart = queryIndex >= 0 ? req.url.slice(queryIndex) : "";
+  req.url = `/aging${queryPart}`;
+  salesReportRouter(req, res, next);
+});
+
 apiRouter.use("/dashboard", dashboardRouter);
+

@@ -208,4 +208,29 @@ describe("GET /api/dashboard/stats", () => {
       supplier: { companyName: "Northwind Supply" },
     });
   });
+
+  it("computes outstanding as the real sum of unpaid balances (totalAmount - amountPaid)", async () => {
+    models.sale.aggregate.mockImplementation(async ({ where }: any) => {
+      if (where.status) {
+        // Outstanding query: totalAmount - amountPaid for non-cancelled sales
+        return {
+          _sum: {
+            totalAmount: 50_000,
+            amountPaid: 32_000,
+          },
+        };
+      }
+      return { _sum: { totalAmount: 50_000 } };
+    });
+
+    const res = await request(app).get("/api/dashboard/stats").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.outstanding).toBe(18_000);
+    expect(models.sale.aggregate).toHaveBeenCalledWith({
+      where: { organizationId: ORG, deletedAt: null, status: { not: "Cancelled" } },
+      _sum: { totalAmount: true, amountPaid: true },
+    });
+  });
 });
+

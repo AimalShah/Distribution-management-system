@@ -18,6 +18,7 @@ import { SalesReportTab } from "../components/reports/SalesReportTab";
 import { PurchaseReportTab } from "../components/reports/PurchaseReportTab";
 import { InventoryReportTab } from "../components/reports/InventoryReportTab";
 import { BrandReportTab } from "../components/reports/BrandReportTab";
+import { AgingReportTab } from "../components/reports/AgingReportTab";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { fetcher } from "../lib/api";
 import useSWR from "swr";
@@ -186,6 +187,7 @@ export default function ReportsPage() {
           <TabsTrigger value="purchaseReport" className="rounded-lg text-xs font-medium px-4">Purchase Report</TabsTrigger>
           <TabsTrigger value="inventoryReport" className="rounded-lg text-xs font-medium px-4">Inventory Report</TabsTrigger>
           <TabsTrigger value="brandReport" className="rounded-lg text-xs font-medium px-4">Brand Report</TabsTrigger>
+          <TabsTrigger value="agingReport" className="rounded-lg text-xs font-medium px-4">Aging Report</TabsTrigger>
         </TabsList>
 
         <TabsContent value="salesReport">
@@ -203,7 +205,12 @@ export default function ReportsPage() {
         <TabsContent value="brandReport">
           <BrandReportTab queryString={queryString} />
         </TabsContent>
+
+        <TabsContent value="agingReport">
+          <AgingReportTab queryString={queryString} />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
+

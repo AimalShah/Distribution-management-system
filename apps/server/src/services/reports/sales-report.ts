@@ -1,5 +1,5 @@
 import prisma from "@dms/db";
-import type { SalesReportQuery } from "@dms/shared";
+import type { SalesReportQuery, SalesAgingQuery } from "@dms/shared";
 import { customerScope, productScope, reportWindow, saleItemScope, saleScope, type ScopeInput } from "../scope";
 
 /**
@@ -347,3 +347,223 @@ export async function getFullSalesReport(
 
   return { basic, byCustomer, byProduct, byBrand, generatedAt: new Date() };
 }
+
+/**
+ * Aging report (ADR 0009): buckets overdue balances (0-30 / 31-60 / 61-90 / 90+)
+ * by due date. Soft-deleted and cancelled sales are excluded. Fully paid invoices
+ * (balance <= 0) do not age.
+ */
+export async function getSalesAgingReport(
+  organizationId: string,
+  query: SalesAgingQuery
+) {
+  const scope: ScopeInput = {
+    organizationId,
+    window: reportWindow(query),
+    brandId: query.brandId,
+  };
+
+  const where = {
+    ...saleScope(scope),
+    status: { not: "Cancelled" },
+  };
+
+  const asOfDate = query.asOfDate ?? query.endDate ?? new Date();
+
+  const sales = await prisma.sale.findMany({
+    where,
+    select: {
+      id: true,
+      saleCode: true,
+      customerId: true,
+      saleDate: true,
+      dueDate: true,
+      totalAmount: true,
+      amountPaid: true,
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          customerCode: true,
+        },
+      },
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  const buckets = {
+    "0-30": 0,
+    "31-60": 0,
+    "61-90": 0,
+    "90+": 0,
+  };
+  let current = 0;
+  let totalOverdue = 0;
+  let totalOutstanding = 0;
+
+  const customerMap = new Map<
+    string,
+    {
+      customerId: string;
+      customerName: string;
+      customerCode?: string;
+      totalOutstanding: number;
+      totalOverdue: number;
+      current: number;
+      buckets: {
+        "0-30": number;
+        "31-60": number;
+        "61-90": number;
+        "90+": number;
+      };
+      invoices: Array<{
+        id: string;
+        saleCode: string;
+        saleDate: Date;
+        dueDate: Date | null;
+        totalAmount: number;
+        amountPaid: number;
+        balance: number;
+        daysOverdue: number;
+        bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+      }>;
+    }
+  >();
+
+  const invoices: Array<{
+    id: string;
+    saleCode: string;
+    customerId: string;
+    customerName: string;
+    customerCode?: string;
+    saleDate: Date;
+    dueDate: Date | null;
+    totalAmount: number;
+    amountPaid: number;
+    balance: number;
+    daysOverdue: number;
+    bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+  }> = [];
+
+  for (const sale of sales) {
+    const rawBalance = sale.totalAmount - (sale.amountPaid ?? 0);
+    if (rawBalance <= 0.005) {
+      continue;
+    }
+
+    const balance = Math.round(rawBalance * 100) / 100;
+    const effectiveDueDate = sale.dueDate ?? sale.saleDate;
+    const diffTime = asOfDate.getTime() - effectiveDueDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    let bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+    if (diffDays < 0) {
+      bucket = "current";
+    } else if (diffDays <= 30) {
+      bucket = "0-30";
+    } else if (diffDays <= 60) {
+      bucket = "31-60";
+    } else if (diffDays <= 90) {
+      bucket = "61-90";
+    } else {
+      bucket = "90+";
+    }
+
+    totalOutstanding += balance;
+
+    if (bucket === "current") {
+      current += balance;
+    } else {
+      buckets[bucket] += balance;
+      totalOverdue += balance;
+    }
+
+    const invoiceEntry = {
+      id: sale.id,
+      saleCode: sale.saleCode,
+      customerId: sale.customerId,
+      customerName: sale.customer?.name ?? "Unknown",
+      customerCode: sale.customer?.customerCode,
+      saleDate: sale.saleDate,
+      dueDate: sale.dueDate,
+      totalAmount: sale.totalAmount,
+      amountPaid: sale.amountPaid ?? 0,
+      balance,
+      daysOverdue: Math.max(0, diffDays),
+      bucket,
+    };
+
+    invoices.push(invoiceEntry);
+
+    const custId = sale.customerId;
+    let customerEntry = customerMap.get(custId);
+    if (!customerEntry) {
+      customerEntry = {
+        customerId: custId,
+        customerName: sale.customer?.name ?? "Unknown",
+        customerCode: sale.customer?.customerCode,
+        totalOutstanding: 0,
+        totalOverdue: 0,
+        current: 0,
+        buckets: {
+          "0-30": 0,
+          "31-60": 0,
+          "61-90": 0,
+          "90+": 0,
+        },
+        invoices: [],
+      };
+      customerMap.set(custId, customerEntry);
+    }
+
+    customerEntry.totalOutstanding += balance;
+    if (bucket === "current") {
+      customerEntry.current += balance;
+    } else {
+      customerEntry.buckets[bucket] += balance;
+      customerEntry.totalOverdue += balance;
+    }
+    customerEntry.invoices.push(invoiceEntry);
+  }
+
+  const roundMoney = (v: number) => Math.round(v * 100) / 100;
+
+  const roundedBuckets = {
+    "0-30": roundMoney(buckets["0-30"]),
+    "31-60": roundMoney(buckets["31-60"]),
+    "61-90": roundMoney(buckets["61-90"]),
+    "90+": roundMoney(buckets["90+"]),
+  };
+
+  const byCustomer = Array.from(customerMap.values()).map((c) => ({
+    ...c,
+    totalOutstanding: roundMoney(c.totalOutstanding),
+    totalOverdue: roundMoney(c.totalOverdue),
+    current: roundMoney(c.current),
+    buckets: {
+      "0-30": roundMoney(c.buckets["0-30"]),
+      "31-60": roundMoney(c.buckets["31-60"]),
+      "61-90": roundMoney(c.buckets["61-90"]),
+      "90+": roundMoney(c.buckets["90+"]),
+    },
+  }));
+
+  const summary = {
+    totalOutstanding: roundMoney(totalOutstanding),
+    totalOverdue: roundMoney(totalOverdue),
+    current: roundMoney(current),
+    buckets: roundedBuckets,
+  };
+
+  return {
+    asOfDate: asOfDate.toISOString(),
+    totalOutstanding: roundMoney(totalOutstanding),
+    totalOverdue: roundMoney(totalOverdue),
+    current: roundMoney(current),
+    buckets: roundedBuckets,
+    summary,
+    byCustomer,
+    invoices,
+  };
+}
+

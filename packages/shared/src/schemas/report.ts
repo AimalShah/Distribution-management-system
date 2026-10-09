@@ -94,6 +94,10 @@ export const salesByBrandQuerySchema = reportRangeQuerySchema;
 
 export const salesFullQuerySchema = reportRangeQuerySchema;
 
+export const salesAgingQuerySchema = reportRangeQuerySchema.extend({
+  asOfDate: z.coerce.date().optional(),
+});
+
 export type ReportRangeQuery = z.output<typeof reportRangeQuerySchema>;
 
 export type InventoryReportQuery = z.output<typeof reportRangeQuerySchema>;
@@ -103,3 +107,5 @@ export type InventoryExpiryQuery = z.output<typeof reportExpiryQuerySchema>;
 export type PurchaseReportQuery = z.output<typeof reportRangeQuerySchema>;
 
 export type SalesReportQuery = z.output<typeof reportRangeQuerySchema>;
+
+export type SalesAgingQuery = z.output<typeof salesAgingQuerySchema>;

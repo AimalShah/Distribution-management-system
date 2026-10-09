@@ -5,11 +5,13 @@ import {
   salesByCustomerQuerySchema,
   salesByProductQuerySchema,
   salesFullQuerySchema,
+  salesAgingQuerySchema,
 } from "@dms/shared";
 import { asyncHandler } from "../../http";
 import {
   getBasicSalesReport,
   getFullSalesReport,
+  getSalesAgingReport,
   getSalesByBrand,
   getSalesByCustomer,
   getSalesByProduct,
@@ -61,3 +63,12 @@ salesReportRouter.get(
     res.json(await getFullSalesReport(req.auth.organizationId, query));
   })
 );
+
+salesReportRouter.get(
+  "/aging",
+  asyncHandler(async (req, res) => {
+    const query = salesAgingQuerySchema.parse(req.query);
+    res.json(await getSalesAgingReport(req.auth.organizationId, query));
+  })
+);
+

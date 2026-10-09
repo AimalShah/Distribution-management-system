@@ -808,3 +808,186 @@ describe("GET /api/reports/sales/full", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("GET /api/reports/sales/aging (issue #50, ADR 0009)", () => {
+  it("rejects an unscoped request without touching the database", async () => {
+    const res = await request(app).get("/api/reports/sales/aging");
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("ORGANIZATION_REQUIRED");
+    expect(saleModel.findMany).not.toHaveBeenCalled();
+  });
+
+  it("scopes the query to the tenant, non-deleted, and non-cancelled sales", async () => {
+    saleModel.findMany.mockResolvedValue([]);
+
+    const res = await asTenant(request(app).get("/api/reports/sales/aging"));
+
+    expect(res.status).toBe(200);
+    expect(saleModel.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG,
+        deletedAt: null,
+        status: { not: "Cancelled" },
+      },
+      select: expect.objectContaining({
+        id: true,
+        saleCode: true,
+        customerId: true,
+        saleDate: true,
+        dueDate: true,
+        totalAmount: true,
+        amountPaid: true,
+      }),
+      orderBy: { dueDate: "asc" },
+    });
+  });
+
+  it("buckets overdue balances (0-30 / 31-60 / 61-90 / 90+) by due date relative to asOfDate", async () => {
+    const asOf = "2026-06-01T00:00:00.000Z";
+
+    // As of 2026-06-01:
+    // sale_1: due 2026-05-20 (12 days overdue) -> bucket 0-30, unpaid: 100
+    // sale_2: due 2026-04-20 (42 days overdue) -> bucket 31-60, unpaid: 200
+    // sale_3: due 2026-03-20 (73 days overdue) -> bucket 61-90, unpaid: 300
+    // sale_4: due 2026-01-20 (132 days overdue) -> bucket 90+, unpaid: 400
+    // sale_5: due 2026-06-15 (-14 days, future) -> current, unpaid: 500
+    // sale_6: due 2026-04-01 (overdue, but fully paid) -> balance: 0, excluded
+    saleModel.findMany.mockResolvedValue([
+      saleFixture({
+        id: "sale_1",
+        saleCode: "INV-001",
+        totalAmount: 150,
+        amountPaid: 50,
+        dueDate: new Date("2026-05-20T00:00:00.000Z"),
+      }),
+      saleFixture({
+        id: "sale_2",
+        saleCode: "INV-002",
+        totalAmount: 250,
+        amountPaid: 50,
+        dueDate: new Date("2026-04-20T00:00:00.000Z"),
+      }),
+      saleFixture({
+        id: "sale_3",
+        saleCode: "INV-003",
+        totalAmount: 300,
+        amountPaid: 0,
+        dueDate: new Date("2026-03-20T00:00:00.000Z"),
+      }),
+      saleFixture({
+        id: "sale_4",
+        saleCode: "INV-004",
+        totalAmount: 400,
+        amountPaid: 0,
+        dueDate: new Date("2026-01-20T00:00:00.000Z"),
+      }),
+      saleFixture({
+        id: "sale_5",
+        saleCode: "INV-005",
+        totalAmount: 500,
+        amountPaid: 0,
+        dueDate: new Date("2026-06-15T00:00:00.000Z"),
+      }),
+      saleFixture({
+        id: "sale_6",
+        saleCode: "INV-006",
+        totalAmount: 350,
+        amountPaid: 350,
+        dueDate: new Date("2026-04-01T00:00:00.000Z"),
+      }),
+    ]);
+
+    const res = await asTenant(
+      request(app).get(`/api/reports/sales/aging?asOfDate=${asOf}`)
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.buckets).toEqual({
+      "0-30": 100,
+      "31-60": 200,
+      "61-90": 300,
+      "90+": 400,
+    });
+    expect(res.body.current).toBe(500);
+    expect(res.body.totalOverdue).toBe(1000);
+    expect(res.body.totalOutstanding).toBe(1500);
+
+    // Summary matches top-level fields
+    expect(res.body.summary).toEqual({
+      totalOutstanding: 1500,
+      totalOverdue: 1000,
+      current: 500,
+      buckets: {
+        "0-30": 100,
+        "31-60": 200,
+        "61-90": 300,
+        "90+": 400,
+      },
+    });
+
+    // Invoices list contains the unpaid invoices
+    expect(res.body.invoices).toHaveLength(5);
+    expect(res.body.invoices[0]).toMatchObject({
+      saleCode: "INV-001",
+      balance: 100,
+      bucket: "0-30",
+    });
+
+    // Customer grouping includes customer totals
+    expect(res.body.byCustomer).toHaveLength(1);
+    expect(res.body.byCustomer[0]).toMatchObject({
+      customerName: "Acme Retail",
+      totalOutstanding: 1500,
+      totalOverdue: 1000,
+      current: 500,
+      buckets: {
+        "0-30": 100,
+        "31-60": 200,
+        "61-90": 300,
+        "90+": 400,
+      },
+    });
+  });
+
+  it("passes date window parameters to scope", async () => {
+    saleModel.findMany.mockResolvedValue([]);
+
+    await asTenant(
+      request(app).get(
+        "/api/reports/sales/aging?startDate=2026-01-01&endDate=2026-06-30"
+      )
+    );
+
+    expect(saleModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          saleDate: {
+            gte: new Date("2026-01-01"),
+            lte: new Date("2026-06-30"),
+          },
+        }),
+      })
+    );
+  });
+
+  it("400s on invalid date window", async () => {
+    const res = await asTenant(
+      request(app).get(
+        "/api/reports/sales/aging?startDate=2026-06-30&endDate=2026-01-01"
+      )
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("also responds on the /api/reports/aging alias", async () => {
+    saleModel.findMany.mockResolvedValue([]);
+
+    const res = await asTenant(request(app).get("/api/reports/aging"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.buckets).toBeDefined();
+  });
+});
+
