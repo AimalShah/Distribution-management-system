@@ -99,7 +99,13 @@ export function createAuth(options: AuthOptions = {}) {
         });
       },
     },
-    trustedOrigins: trustedOrigins.length > 0 ? trustedOrigins : [...allowedOrigins],
+    // The union of both knobs, not one replacing the other. CORS and
+    // better-auth have to agree about who may call this API; when they
+    // disagreed the browser's preflight passed, the request was sent, and the
+    // server then refused it as an invalid origin -- a failure with no obvious
+    // cause. `TRUSTED_ORIGINS` names extra origins to allow, not the whole
+    // list, so setting it can no longer shrink what CORS already permits.
+    trustedOrigins: [...new Set([...allowedOrigins, ...trustedOrigins])],
     plugins: [
       organization({ organizationLimit: 5, ac, roles: { owner, adminRole, member } }),
       // `defaultRole: "user"`, not the legacy's `"admin"`. The admin plugin's

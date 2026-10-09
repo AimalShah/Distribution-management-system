@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { toFailure } from "../lib/api";
 import { Button } from "@dms/ui";
 
 interface LocationState {
@@ -36,10 +35,14 @@ export default function LoginPage() {
     try {
       await login(username, password);
       navigate(from, { replace: true });
-    } catch (err: any) {
-      const failure = toFailure(err, "Sign in failed");
-
-      setError(failure.origin === "network" ? "Cannot reach the server" : failure.message);
+    } catch (err: unknown) {
+      // `login` throws better-auth's own refusal, so its message is what the
+      // user reads: "Invalid email or password" beats a generic apology.
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Sign in failed"
+      );
 
       setSubmitting(false);
     }
@@ -64,20 +67,20 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={onSubmit} noValidate className="rounded-xl border bg-card p-6 shadow-sm">
-          {/* Username */}
+          {/* Email — better-auth signs in by the account's email address. */}
           <div className="mb-4">
             <label className="mb-1.5 block text-sm font-medium text-muted-foreground" htmlFor="login-username">
-              Username <span className="text-destructive" aria-label="required">*</span>
+              Email <span className="text-destructive" aria-label="required">*</span>
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="login-username"
                 className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                type="text"
-                autoComplete="username"
+                type="email"
+                autoComplete="email"
                 autoFocus
-                placeholder="Enter your username"
+                placeholder="Enter your email"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 required

@@ -3,6 +3,7 @@
 // builds a PrismaClient from it. See `./load-env`.
 import "./load-env";
 import prisma from "../src/client";
+import { hashPassword } from "better-auth/crypto";
 import { faker } from "@faker-js/faker";
 import type { InventoryMovement } from "./generated/client";
 
@@ -97,6 +98,34 @@ async function main() {
         userId: owner.id,
         role: "owner",
         createdAt: new Date(),
+      },
+    });
+  }
+
+  // Give the owner a stored password so better-auth can actually sign them in.
+  //
+  // Without this row the only working login was the legacy `/auth/login`, whose
+  // credentials come from environment variables and therefore have nothing to
+  // change: `update-user` and `change-password` both refused the app's own
+  // bearer token because it was never a better-auth session. Hashing here with
+  // better-auth's own helper keeps the format in step with what it verifies.
+  const ownerPassword = process.env.DMS_OWNER_PASSWORD?.trim() || "admin123";
+
+  const ownerCredential = await prisma.account.findFirst({
+    where: { userId: owner.id, providerId: "credential" },
+  });
+
+  if (!ownerCredential) {
+    await prisma.account.create({
+      data: {
+        id: "account_" + faker.string.alphanumeric(20),
+        // better-auth keys a credential account by the user id it belongs to.
+        accountId: owner.id,
+        providerId: "credential",
+        userId: owner.id,
+        password: await hashPassword(ownerPassword),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     });
   }

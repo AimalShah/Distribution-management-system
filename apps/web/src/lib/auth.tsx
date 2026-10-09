@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api } from "./api";
+import { authClient } from "./auth-client";
 
 export interface AuthUser {
   username: string;
@@ -28,99 +28,67 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
-const TOKEN_KEY = "auth_token";
-
 /**
- * What the server accepts before anyone has touched `DMS_AUTH_USERNAME` /
- * `DMS_AUTH_PASSWORD`. Shown on the login page so a first run needs no
- * read-through of the env docs to get in.
+ * The operator the seed creates, shown on the login page so a first run needs
+ * no read-through of the env docs to get in. `username` is the account's email
+ * address: better-auth signs in by email, so the field that used to be called a
+ * username is one.
  */
 export const DEFAULT_CREDENTIALS = {
-  username: "admin",
+  username: "owner@test.com",
   password: "admin123",
 } as const;
 
 /** localStorage throws in a sandboxed iframe; auth must degrade, not crash. */
-const readToken = (): string | null => {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const writeToken = (token: string | null): void => {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* nothing to do: the token simply will not persist */
-  }
-};
-
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(readToken);
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // better-auth owns the session: it holds the token, refreshes it, and is the
+  // only thing that can say whether it is still good. The page asks it rather
+  // than reading storage and asking the server separately.
+  const { data, isPending } = authClient.useSession();
 
-  const [status, setStatus] = useState<AuthStatus>(() =>
-    readToken() ? "loading" : "anonymous"
-  );
+  const [status, setStatus] = useState<AuthStatus>("loading");
 
-  // A stored token is a claim, not a fact. `/auth/me` is what makes it one, and
-  // an expired or tampered token has to end the session here rather than
-  // leaving the UI to render on top of a session the server will reject.
   useEffect(() => {
-    if (!token) {
-      setUser(null);
-      setStatus("anonymous");
+    if (isPending) {
+      setStatus("loading");
 
       return;
     }
 
-    let cancelled = false;
-    api
-      .get("/auth/me")
-      .then((body) => {
-        if (cancelled) return;
-        setUser(body.user);
-        setStatus("authenticated");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        writeToken(null);
-        setToken(null);
-      });
+    setStatus(data?.user ? "authenticated" : "anonymous");
+  }, [data, isPending]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const user: AuthUser | null = data?.user
+    ? { name: data.user.name ?? "", username: data.user.email }
+    : null;
 
   const login = useCallback(async (username: string, password: string) => {
-    const body = await api.post("/auth/login", { username, password });
-    const nextUser: AuthUser = body.user;
+    const { error, data: body } = await authClient.signIn.email({
+      email: username,
+      password,
+    });
 
-    writeToken(body.token);
-    setUser(nextUser);
-    setToken(body.token);
-    setStatus("authenticated");
+    if (error) {
+      throw new Error(error.message ?? "Invalid username or password");
+    }
 
-    return nextUser;
+    const signedIn = body?.user;
+
+    if (!signedIn) {
+      throw new Error("Invalid username or password");
+    }
+
+    return { name: signedIn.name ?? "", username: signedIn.email };
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await api.post("/auth/logout");
+      await authClient.signOut();
     } catch {
-      /* the token is dropped either way */
+      /* the session is gone server-side or not; the client drops it either way */
     }
-
-    writeToken(null);
-    setToken(null);
-    setUser(null);
-    setStatus("anonymous");
   }, []);
 
   const value = useMemo(
