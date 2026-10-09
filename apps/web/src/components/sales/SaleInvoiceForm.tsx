@@ -3,7 +3,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   calculateSaleBreakdown,
@@ -18,6 +18,12 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Form,
   FormControl,
   FormField,
@@ -56,6 +62,12 @@ export function SaleInvoiceForm({
 }: SaleInvoiceFormProps) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [creditLimitWarning, setCreditLimitWarning] = useState<{
+    outstanding: number;
+    limit: number;
+    projected: number;
+    pendingPayload: any;
+  } | null>(null);
 
   // Fetch customers and products for dropdowns
   const { data: customersData } = useSWR("/customers?page=1&pageSize=100", fetcher);
@@ -218,6 +230,7 @@ export function SaleInvoiceForm({
     if (invalidTotal) return;
 
     setSubmitting(true);
+    let createPayload: any = null;
 
     try {
       if (isEditing && saleId) {
@@ -236,7 +249,7 @@ export function SaleInvoiceForm({
         await api.put(`/sales/${saleId}`, updatePayload);
         toast.success("Sale invoice updated successfully");
       } else {
-        const createPayload = {
+        createPayload = {
           customerId: values.customerId,
           saleCode: values.saleCode,
           saleDate: values.saleDate,
@@ -263,11 +276,49 @@ export function SaleInvoiceForm({
 
       navigate("/sales");
     } catch (err: any) {
-      // The refusal carries { shortages }: one line per product, in the caller's words.
       const failure = toFailure(err, "Failed to save sale invoice");
+
+      if (failure.code === "CREDIT_LIMIT_EXCEEDED" && failure.details) {
+        const details = failure.details as {
+          outstanding: number;
+          limit: number;
+          projected: number;
+        };
+
+        setCreditLimitWarning({
+          outstanding: details.outstanding,
+          limit: details.limit,
+          projected: details.projected,
+          pendingPayload: createPayload,
+        });
+
+        return;
+      }
+
+      // The refusal carries { shortages }: one line per product, in the caller's words.
       const label = (id: string) => products.find((p) => p.id === id)?.name ?? id;
 
       toast.error(`${failure.message}${shortfallLine(failure, label)}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOverrideSubmit = async () => {
+    if (!creditLimitWarning) return;
+    setSubmitting(true);
+
+    try {
+      await api.post("/sales", {
+        ...creditLimitWarning.pendingPayload,
+        overrideCreditLimit: true,
+      });
+      toast.success("Sale invoice created with credit limit override");
+      setCreditLimitWarning(null);
+      navigate("/sales");
+    } catch (err: any) {
+      const failure = toFailure(err, "Failed to override credit limit");
+      toast.error(failure.message);
     } finally {
       setSubmitting(false);
     }
@@ -679,6 +730,54 @@ export function SaleInvoiceForm({
           </Button>
         </div>
       </form>
+
+      {creditLimitWarning && (
+        <Dialog open={true} onOpenChange={(open) => !open && setCreditLimitWarning(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600">
+                <AlertTriangle className="size-5" />
+                Credit Limit Warning
+              </DialogTitle>
+              <DialogDescription>
+                This sale will exceed the customer's credit limit.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-3 text-sm" data-testid="credit-limit-warning-details">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Current Outstanding:</span>
+                <span className="font-semibold">{formatMoney(creditLimitWarning.outstanding)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Credit Limit:</span>
+                <span className="font-semibold">{formatMoney(creditLimitWarning.limit)}</span>
+              </div>
+              <div className="flex justify-between text-destructive font-semibold">
+                <span>Projected Balance:</span>
+                <span>{formatMoney(creditLimitWarning.projected)}</span>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreditLimitWarning(null)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleOverrideSubmit}
+                disabled={submitting}
+              >
+                {submitting ? "Processing..." : "Override & Proceed"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Form>
   );
 }

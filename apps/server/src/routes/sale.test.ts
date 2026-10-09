@@ -5,7 +5,7 @@ import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/au
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
-    member: { findFirst: async () => ({ role: "owner" }) },
+    member: { findFirst: vi.fn(async () => ({ role: "owner" })) },
     sale: {
       findMany: vi.fn(),
       count: vi.fn(),
@@ -13,6 +13,7 @@ const { models, transaction } = vi.hoisted(() => {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      aggregate: vi.fn(),
     },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
@@ -105,12 +106,14 @@ const prismaError = (code: string, meta?: Record<string, unknown>) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  models.member.findFirst.mockResolvedValue({ role: "owner" });
   models.sale.findMany.mockResolvedValue([saleFixture()]);
   models.sale.count.mockResolvedValue(1);
   models.sale.findFirst.mockResolvedValue(saleFixture());
   models.sale.create.mockResolvedValue(saleFixture());
   models.sale.update.mockResolvedValue(saleFixture());
   models.sale.delete.mockResolvedValue(saleFixture());
+  models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 0, amountPaid: 0 } });
   models.customer.findFirst.mockResolvedValue({ id: "cus_1" });
   models.product.findMany.mockResolvedValue([{ id: "prod_1" }]);
   models.return.count.mockResolvedValue(0);
@@ -624,6 +627,57 @@ describe("POST /api/sales", () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("INVENTORY_ROW_MISSING");
     expect(models.inventoryLog.create).not.toHaveBeenCalled();
+  });
+
+  describe("credit limit enforcement (issue #49)", () => {
+    it("refuses an over-limit sale with current outstanding, limit, and projected balance", async () => {
+      // Customer has creditLimit of 100
+      models.customer.findFirst.mockResolvedValue({ id: "cus_1", creditLimit: 100 });
+      // Existing ledger has 80 totalAmount and 10 amountPaid -> outstanding = 70
+      // New sale total is 50 -> projected = 120 > 100
+      models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 80, amountPaid: 10 } });
+
+      const res = await request(app).post("/api/sales").set(auth()).send(validBody);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("CREDIT_LIMIT_EXCEEDED");
+      expect(res.body.details).toEqual({
+        outstanding: 70,
+        limit: 100,
+        projected: 120,
+      });
+      expect(models.sale.create).not.toHaveBeenCalled();
+    });
+
+    it("allows an over-limit sale when overrideCreditLimit is true and caller has permission", async () => {
+      models.customer.findFirst.mockResolvedValue({ id: "cus_1", creditLimit: 100 });
+      models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 80, amountPaid: 10 } });
+      // Caller has role owner -> has override permission
+      models.member.findFirst.mockResolvedValue({ role: "owner" });
+
+      const res = await request(app)
+        .post("/api/sales")
+        .set(auth())
+        .send({ ...validBody, overrideCreditLimit: true });
+
+      expect(res.status).toBe(201);
+      expect(models.sale.create).toHaveBeenCalled();
+    });
+
+    it("blocks an override attempt when the caller lacks the override permission", async () => {
+      // Caller has role sales -> can create sales, but lacks override_credit_limit permission
+      models.member.findFirst.mockResolvedValue({ role: "sales" });
+
+      const res = await request(app)
+        .post("/api/sales")
+        .set(auth())
+        .send({ ...validBody, overrideCreditLimit: true });
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe("CREDIT_LIMIT_OVERRIDE_FORBIDDEN");
+      expect(res.body.error).toContain("permission to override a customer's credit limit");
+      expect(models.sale.create).not.toHaveBeenCalled();
+    });
   });
 });
 
