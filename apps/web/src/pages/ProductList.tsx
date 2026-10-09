@@ -55,6 +55,7 @@ export default function ProductList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [brandFilter, setBrandFilter] = useState<string>("all");
 
   // Query params
   const queryString = useMemo(() => {
@@ -73,8 +74,12 @@ export default function ProductList() {
       params.set("isActive", "false");
     }
 
+    if (brandFilter && brandFilter !== "all") {
+      params.set("brandId", brandFilter);
+    }
+
     return params.toString();
-  }, [page, pageSize, search, statusFilter]);
+  }, [page, pageSize, search, statusFilter, brandFilter]);
 
   const { data, isLoading, mutate } = useSWR(
     `/products?${queryString}`,
@@ -84,6 +89,10 @@ export default function ProductList() {
   // Categories list for filter dropdown
   const { data: categoriesData } = useSWR("/categories?page=1&pageSize=100", fetcher);
   const categories: { id: string; name: string }[] = categoriesData?.data ?? [];
+
+  // Brands list for filter dropdown
+  const { data: brandsData } = useSWR("/brands?page=1&pageSize=100", fetcher);
+  const brands: { id: string; name: string }[] = brandsData?.data ?? [];
 
   // Filter client-side by category if category filter is active (server supports isActive & search)
   const productList: ProductItem[] = useMemo(() => {
@@ -337,6 +346,26 @@ export default function ProductList() {
                 {categories.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={brandFilter}
+              onValueChange={(val) => {
+                setBrandFilter(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-9 text-xs rounded-lg bg-background" data-testid="brand-filter">
+                <SelectValue placeholder="Brand" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Brands</SelectItem>
+                {brands.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
                   </SelectItem>
                 ))}
               </SelectContent>

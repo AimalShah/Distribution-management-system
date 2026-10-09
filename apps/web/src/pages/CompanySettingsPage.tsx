@@ -20,6 +20,7 @@ import {
 import { useForm } from "react-hook-form";
 import { api, failureMessage } from "../lib/api";
 import { SkuFormatBuilder } from "../components/settings/SkuFormatBuilder";
+import { BrandManager } from "../components/settings/BrandManager";
 
 /** The shape `GET /api/settings` answers with (issue #39). */
 interface CompanySettingsView {
@@ -243,6 +244,18 @@ export function CompanySettingsPage() {
               Accept sale returns
             </Label>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Brands</CardTitle>
+          <CardDescription>
+            Manage product brands for this company (create and rename)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BrandManager />
         </CardContent>
       </Card>
     </div>
