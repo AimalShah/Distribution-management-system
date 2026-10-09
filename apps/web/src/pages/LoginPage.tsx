@@ -57,7 +57,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-lg bg-primary/10 p-3">
             <ShieldCheck className="text-primary" size={22} />
-            <span className="font-semibold text-primary-foreground">DMS</span>
+            <span className="font-semibold text-primary">DMS</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to manage inventory and sales</p>

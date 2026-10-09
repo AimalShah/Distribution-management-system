@@ -79,6 +79,15 @@ const sumByProduct = (lines: { productId: string; quantity: number }[]) => {
   return totals;
 };
 
+/**
+ * A Company with no settings row still gets the documented defaults (30-day
+ * window, returns on), matching `services/settings.ts`, so a policy check can
+ * never silently disable returns for an organization that predates the model.
+ */
+const DEFAULT_RETURN_POLICY = { returnWindowDays: 30, returnsEnabled: true };
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export async function getReturns({
   organizationId,
   page,
@@ -228,6 +237,33 @@ export async function createReturn(
    */
   return prisma.$transaction(
     async (tx) => {
+      // The Company's return policy is read inside the same transaction that
+      // enforces it, so the window checked is the window in force at write time.
+      if (returnType === "SALE") {
+        const policy =
+          (await tx.companySettings.findUnique({
+            where: { organizationId },
+            select: { returnWindowDays: true, returnsEnabled: true },
+          })) ?? DEFAULT_RETURN_POLICY;
+
+        if (!policy.returnsEnabled) {
+          throw conflict(
+            "Sale returns are disabled for this company",
+            "RETURNS_DISABLED"
+          );
+        }
+
+        // A sale return has to name the invoice it reverses (ADR 0008); the
+        // schema already demands it, but the service holds the same line so a
+        // caller that reaches it another way cannot slip past.
+        if (!saleId) {
+          throw badRequest(
+            "A sale return must reference the original invoice",
+            "SALE_REFERENCE_REQUIRED"
+          );
+        }
+      }
+
       // `ReturnItem.productId` is a plain foreign key with no organization
       // constraint, so the database would happily return another tenant's goods
       // and move its stock. Checked before anything is written.
@@ -252,6 +288,7 @@ export async function createReturn(
           where: { id: saleId, organizationId, deletedAt: null },
           select: {
             saleCode: true,
+            saleDate: true,
             items: { select: { productId: true, quantity: true } },
           },
         });
@@ -261,6 +298,32 @@ export async function createReturn(
             "The sale does not exist in this organization",
             "SALE_NOT_IN_ORGANIZATION",
             { saleId }
+          );
+        }
+
+        // The window runs from the original invoice's date, not the day the
+        // return is entered, so a return cannot be kept open by sitting on it.
+        const policy =
+          (await tx.companySettings.findUnique({
+            where: { organizationId },
+            select: { returnWindowDays: true },
+          })) ?? DEFAULT_RETURN_POLICY;
+
+        const expiresAt = new Date(
+          sale.saleDate.getTime() + policy.returnWindowDays * MS_PER_DAY
+        );
+
+        if (new Date() > expiresAt) {
+          throw conflict(
+            `This invoice is past its ${policy.returnWindowDays}-day return window`,
+            "RETURN_WINDOW_EXPIRED",
+            {
+              saleId,
+              saleCode: sale.saleCode,
+              saleDate: sale.saleDate,
+              returnWindowDays: policy.returnWindowDays,
+              expiresAt,
+            }
           );
         }
 
@@ -377,13 +440,24 @@ export async function createReturn(
               taxAmount: item.taxAmount,
               discount: item.discount,
               note: item.note,
+              condition: item.condition,
+              reason: item.reason,
             })),
           },
         },
         include: detailInclude,
       });
 
-      for (const [productId, quantity] of requested) {
+      // The condition gate (ADR 0008): a restockable line goes back on the
+      // shelf, a damaged one is credited and recorded but never put back on
+      // hand. Only SALE returns pass through the gate; a purchase return or a
+      // write-off moves every line the same way regardless of condition.
+      const restockable =
+        returnType === "SALE"
+          ? sumByProduct(data.items.filter((item) => item.condition === "RESTOCKABLE"))
+          : requested;
+
+      for (const [productId, quantity] of restockable) {
         // The stock row and the ledger row move together inside the module;
         // what stays here is the document's own words for a refusal.
         await applyStockMovement({

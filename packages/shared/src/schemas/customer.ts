@@ -27,6 +27,29 @@ const customerFields = {
    * "never recorded", which leaves 0 expressible as "no credit".
    */
   creditLimit: nullableMoneyInput("Credit limit"),
+  /**
+   * A per-customer override of the Company's default credit term (ADR 0009).
+   * Blank means "use the Company default", so it clears to `null` rather than
+   * being written as 0, which would make every sale due on the day it was made.
+   */
+  creditTermDays: z.preprocess(
+    (value) => {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+
+        return trimmed === "" ? null : Number(trimmed);
+      }
+
+      return value;
+    },
+    z
+      .number("Credit term must be a number")
+      .int("Credit term must be a whole number of days")
+      .min(0, "Credit term must be 0 or more days")
+      .max(3650, "Credit term cannot exceed 3650 days")
+      .nullable()
+      .optional()
+  ),
   isActive: z.boolean(),
 };
 

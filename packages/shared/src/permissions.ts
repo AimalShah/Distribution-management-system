@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const PERMISSION_STATEMENT = {
   inventory: ["view", "create", "update", "delete", "adjust", "export"],
-  sales: ["view", "create", "update", "delete", "export"],
+  sales: ["view", "create", "update", "delete", "export", "override_credit_limit"],
   purchases: ["view", "create", "update", "delete", "export"],
   returns: ["view", "create", "update", "delete"],
   customers: ["view", "create", "update", "delete"],

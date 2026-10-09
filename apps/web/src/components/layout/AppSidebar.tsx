@@ -69,6 +69,7 @@ export const navSections: NavGroup[] = [
     heading: "Settings",
     items: [
       { label: "Team", icon: Users, to: "/users" },
+      { label: "Company", icon: Box, to: "/settings/company" },
       { label: "Permissions", icon: ShieldCheck, to: "/permissions" },
       { label: "Profile", icon: Box, to: "/profile" },
     ],

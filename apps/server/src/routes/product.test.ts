@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { ORGANIZATION_HEADER } from "../middleware/auth-context";
 
-const { productModel, categoryModel, brandModel } = vi.hoisted(() => ({
+const { productModel, categoryModel, brandModel, companySettingsModel } = vi.hoisted(() => ({
   productModel: {
     findMany: vi.fn(),
     count: vi.fn(),
@@ -19,6 +19,7 @@ const { productModel, categoryModel, brandModel } = vi.hoisted(() => ({
   // reference.
   categoryModel: { findFirst: vi.fn() },
   brandModel: { findFirst: vi.fn() },
+  companySettingsModel: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn() },
 }));
 
 vi.mock("@dms/db", () => ({
@@ -27,12 +28,14 @@ vi.mock("@dms/db", () => ({
     product: productModel,
     category: categoryModel,
     brand: brandModel,
+    companySettings: companySettingsModel,
   },
   prisma: {
     member: { findFirst: async () => ({ role: "owner" }) },
     product: productModel,
     category: categoryModel,
     brand: brandModel,
+    companySettings: companySettingsModel,
   },
 }));
 
@@ -90,8 +93,16 @@ beforeEach(() => {
   productModel.delete.mockResolvedValue(productFixture());
   // Default: the tenant owns both referenced rows, so the reference check passes.
   // A test that wants a foreign reference overrides one of these with `null`.
-  categoryModel.findFirst.mockResolvedValue({ id: "cat_1" });
-  brandModel.findFirst.mockResolvedValue({ id: "brand_1" });
+  categoryModel.findFirst.mockResolvedValue({ id: "cat_1", name: "Beverages", shortCode: "BEV" });
+  brandModel.findFirst.mockResolvedValue({ id: "brand_1", name: "Acme", shortCode: "ACM" });
+  companySettingsModel.findUnique.mockResolvedValue({
+    organizationId: ORG,
+    skuFormat: "{BRAND}-{CATEGORY}-{SEQ:5}",
+    skuSeparator: "-",
+    skuSequence: 0,
+  });
+  companySettingsModel.upsert.mockResolvedValue({ organizationId: ORG, skuSequence: 0 });
+  companySettingsModel.update.mockResolvedValue({ organizationId: ORG, skuSequence: 1 });
 });
 
 describe("organization context", () => {
@@ -211,6 +222,25 @@ describe("GET /api/products", () => {
   it("rejects a non boolean isActive", async () => {
     const res = await request(app)
       .get("/api/products?isActive=maybe")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("filters the catalogue to a brand (issue #45)", async () => {
+    await request(app)
+      .get("/api/products?brandId=brand_1")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(productModel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: ORG, brandId: "brand_1" } })
+    );
+  });
+
+  it("rejects an empty brand filter instead of listing every product", async () => {
+    const res = await request(app)
+      .get("/api/products?brandId=")
       .set(ORGANIZATION_HEADER, ORG);
 
     expect(res.status).toBe(400);
@@ -358,6 +388,59 @@ describe("POST /api/products", () => {
     expect(res.body.details).toEqual({ target: ["productCode"] });
   });
 
+  // Issue #46: the SKU is generated server-side from the Company's format.
+  describe("SKU generation (issue #46)", () => {
+    const { productCode: _omitted, ...withoutCode } = validBody;
+
+    it("generates the SKU from the Company format when none is supplied", async () => {
+      // The collision pre-check finds nothing, so the first candidate wins.
+      productModel.findFirst.mockResolvedValue(null);
+
+      const res = await request(app)
+        .post("/api/products")
+        .set(ORGANIZATION_HEADER, ORG)
+        .send(withoutCode);
+
+      expect(res.status).toBe(201);
+      // Format {BRAND}-{CATEGORY}-{SEQ:5}, brand short code ACM, category short
+      // code BEV, first sequence value 1.
+      expect(productModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ productCode: "ACM-BEV-00001" }),
+        })
+      );
+    });
+
+    it("bumps the per-Company sequence by one so codes never repeat", async () => {
+      productModel.findFirst.mockResolvedValue(null);
+
+      await request(app)
+        .post("/api/products")
+        .set(ORGANIZATION_HEADER, ORG)
+        .send(withoutCode);
+
+      expect(companySettingsModel.update).toHaveBeenCalledWith({
+        where: { organizationId: ORG },
+        data: { skuSequence: { increment: 1 } },
+      });
+    });
+
+    it("keeps a caller-supplied product code rather than generating one", async () => {
+      const res = await request(app)
+        .post("/api/products")
+        .set(ORGANIZATION_HEADER, ORG)
+        .send(validBody);
+
+      expect(res.status).toBe(201);
+      expect(productModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ productCode: "TEST-001" }),
+        })
+      );
+      expect(companySettingsModel.update).not.toHaveBeenCalled();
+    });
+  });
+
   it("refuses a category or brand from another tenant", async () => {
     // The check runs before the write, so `create` is never reached. Previously
     // the foreign key was written straight from the body and the database caught
@@ -443,6 +526,19 @@ describe("PUT /api/products/:id", () => {
 
     const { data } = productModel.update.mock.calls[0][0];
     expect(data).not.toHaveProperty("isActive");
+  });
+
+  it("cannot rewrite the SKU after creation (issue #46)", async () => {
+    // The update schema omits productCode entirely, so a PUT carrying one has
+    // it stripped before the write: the code is immutable once assigned.
+    const res = await request(app)
+      .put("/api/products/prod_1")
+      .set(ORGANIZATION_HEADER, ORG)
+      .send({ name: "Renamed", productCode: "HIJACKED-1" });
+
+    expect(res.status).toBe(200);
+    const { data } = productModel.update.mock.calls[0][0];
+    expect(data).not.toHaveProperty("productCode");
   });
 
   it("maps category and brand to relation ids", async () => {

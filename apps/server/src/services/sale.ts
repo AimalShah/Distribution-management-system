@@ -22,6 +22,9 @@ const detailInclude = {
   items: { include: { product: true } },
 } satisfies Prisma.SaleInclude;
 
+/** Day length used to turn a credit term in days into a due date. */
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export type SaleListArgs = {
   organizationId: string;
   page: number;
@@ -207,7 +210,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
     // anything is written.
     const customer = await tx.customer.findFirst({
       where: { id: data.customerId, organizationId },
-      select: { id: true },
+      select: { id: true, creditLimit: true, creditTermDays: true },
     });
 
     if (!customer) {
@@ -216,6 +219,49 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         "CUSTOMER_NOT_IN_ORGANIZATION",
         { customerId: data.customerId }
       );
+    }
+
+    const saleDate = data.saleDate ?? new Date();
+
+    // Credit terms (ADR 0009): the due date is derived from the customer's own
+    // term when they have one, else the Company's default. A company that has
+    // never saved settings still falls back to net-30, the documented default.
+    const settings = await tx.companySettings.findUnique({
+      where: { organizationId },
+      select: { creditTermDays: true },
+    });
+
+    const creditTermDays = customer.creditTermDays ?? settings?.creditTermDays ?? 30;
+
+    const dueDate = new Date(saleDate.getTime() + creditTermDays * MS_PER_DAY);
+
+    // Credit-limit soft block (ADR 0005): a sale that would take the customer
+    // past their limit is refused *once* so the client can show the warning,
+    // then allowed when it comes back with `overrideCreditLimit`. Whether the
+    // caller is allowed to override is a permission question the route owns.
+    if (customer.creditLimit !== null && customer.creditLimit !== undefined) {
+      const ledger = await tx.sale.aggregate({
+        where: {
+          customerId: data.customerId,
+          organizationId,
+          deletedAt: null,
+          status: { not: "Cancelled" },
+        },
+        _sum: { totalAmount: true, amountPaid: true },
+      });
+
+      const outstanding =
+        (ledger._sum.totalAmount ?? 0) - (ledger._sum.amountPaid ?? 0);
+
+      const projected = outstanding + money.total;
+
+      if (projected > customer.creditLimit && !data.overrideCreditLimit) {
+        throw conflict(
+          "This sale would take the customer over their credit limit",
+          "CREDIT_LIMIT_EXCEEDED",
+          { outstanding, limit: customer.creditLimit, projected }
+        );
+      }
     }
 
     // The line rows come from the breakdown that was already checked: the line
@@ -307,7 +353,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
       data: {
         saleCode: data.saleCode,
         customerId: data.customerId,
-        saleDate: data.saleDate,
+        saleDate,
         totalAmount: money.total,
         discount: data.discount,
         taxAmount: money.taxAmount,
@@ -317,6 +363,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         sgstAmount: money.sgstAmount,
         igstAmount: money.igstAmount,
         status: data.status,
+        dueDate,
         organizationId,
         items: {
           create: saleItems.map((line, index) => ({ ...line, batchId: batchIds[index] })),

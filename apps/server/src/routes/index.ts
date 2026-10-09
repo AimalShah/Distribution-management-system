@@ -14,6 +14,7 @@ import { purchaseReportRouter } from "./reports/purchase";
 import { salesReportRouter } from "./reports/sales";
 import { roleRouter } from "./role";
 import { saleRouter } from "./sale";
+import { settingsRouter } from "./settings";
 import { supplierRouter } from "./supplier";
 
 export const apiRouter: Router = Router();
@@ -61,6 +62,7 @@ const PERMISSIONS: RoutePermissionTable = {
   suppliers: { resource: "suppliers" },
   categories: { resource: "categories" },
   brands: { resource: "brands" },
+  settings: { resource: "settings" },
   roles: {
     resource: "users",
     rules: [{ method: "POST", path: "/members/:memberId", action: "update" }],
@@ -98,6 +100,8 @@ apiRouter.use("/suppliers", supplierRouter);
 apiRouter.use("/categories", categoryRouter);
 
 apiRouter.use("/brands", brandRouter);
+
+apiRouter.use("/settings", settingsRouter);
 
 apiRouter.use("/roles", roleRouter);
 

@@ -34,6 +34,7 @@ export async function getDashboardStats(organizationId: string) {
     topInventory,
     expiringSoonCount,
     expiringBatches,
+    outstanding,
   ] = await Promise.all([
     prisma.product.count({ where: { organizationId } }),
     prisma.customer.count({ where: { organizationId } }),
@@ -112,6 +113,13 @@ export async function getDashboardStats(organizationId: string) {
       orderBy: { expiryDate: "asc" },
       take: 5,
     }),
+    // The real Outstanding figure (ADR 0009): the sum of what every active,
+    // non-cancelled invoice still owes. Replaces the old 25%-of-sales
+    // placeholder, which was a number with no relationship to the ledger.
+    prisma.sale.aggregate({
+      where: { organizationId, deletedAt: null, status: { not: "Cancelled" } },
+      _sum: { totalAmount: true, amountPaid: true },
+    }),
   ]);
 
   return {
@@ -128,5 +136,6 @@ export async function getDashboardStats(organizationId: string) {
     topInventory,
     expiringSoonCount,
     expiringBatches,
+    outstanding: (outstanding._sum.totalAmount ?? 0) - (outstanding._sum.amountPaid ?? 0),
   };
 }

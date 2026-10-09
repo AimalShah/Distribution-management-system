@@ -5,19 +5,49 @@ import { paginationQuerySchema } from "../pagination";
 export const ReturnTypes = ["SALE", "PURCHASE", "EXPIRED", "DAMAGED"] as const;
 
 /**
+ * The condition gate every returned line passes (ADR 0008). A restockable line
+ * goes back on the shelf; a damaged one is recorded for the credit and the
+ * customer's return history but is not put back on hand.
+ */
+export const ReturnConditions = ["RESTOCKABLE", "DAMAGED"] as const;
+
+/**
  * A line of goods coming back.
  *
  * `ReturnItem.unitPrice`, `.taxAmount` and `.discount` are NOT NULL columns, so
  * all three stay required; the legacy form posted them for every line.
+ *
+ * `condition` and `reason` are the per-line condition gate: the header's
+ * `reason` says why the return happened, and the line's says why *this* line is
+ * restockable or damaged. `condition` defaults to `RESTOCKABLE` so a client that
+ * has not been updated keeps the old "everything goes back on the shelf"
+ * behaviour.
  */
-export const ReturnItemSchema = z.object({
-  productId: z.string().trim().min(1, "Please select a product"),
-  quantity: z.number().int().min(1, "Quantity must be at least 1"),
-  unitPrice: z.number("Expected a number").min(0, "Unit price cannot be negative"),
-  taxAmount: z.number("Expected a number").min(0, "Tax amount cannot be negative"),
-  discount: z.number("Expected a number").min(0, "Discount cannot be negative"),
-  note: optionalText("Note cannot be empty"),
-});
+export const ReturnItemSchema = z
+  .object({
+    productId: z.string().trim().min(1, "Please select a product"),
+    quantity: z.number().int().min(1, "Quantity must be at least 1"),
+    unitPrice: z.number("Expected a number").min(0, "Unit price cannot be negative"),
+    taxAmount: z.number("Expected a number").min(0, "Tax amount cannot be negative"),
+    discount: z.number("Expected a number").min(0, "Discount cannot be negative"),
+    condition: z.enum(ReturnConditions).default("RESTOCKABLE"),
+    note: optionalText("Note cannot be empty"),
+    reason: optionalText("Reason cannot be empty"),
+  })
+  /**
+   * A damaged line never goes back on the shelf, so it needs a reason the
+   * client can act on; a restockable line does not (the header's reason covers
+   * why the goods came back at all). This is the condition gate's other half.
+   */
+  .superRefine((item, ctx) => {
+    if (item.condition === "DAMAGED" && !item.reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reason"],
+        message: "Explain why this line is damaged",
+      });
+    }
+  });
 
 /**
  * Which document a return is allowed to be tied to, per type.
@@ -134,6 +164,8 @@ export const returnListQuerySchema = paginationQuerySchema.extend({
 // Named `ReturnTypeValue` rather than `ReturnType`, which is a TypeScript
 // built-in utility type and would shadow it on every import.
 export type ReturnTypeValue = (typeof ReturnTypes)[number];
+
+export type ReturnConditionValue = (typeof ReturnConditions)[number];
 
 export type ReturnItemInput = z.output<typeof ReturnItemSchema>;
 

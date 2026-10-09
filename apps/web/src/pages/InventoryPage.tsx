@@ -29,29 +29,7 @@ import { AddInventoryDialog } from "../components/inventory/AddInventoryDialog";
 import { Batches } from "./inventory/Batches";
 import { PageHead } from "../components/list/PageHead";
 import { ListTablePanel } from "../components/list/ListTablePanel";
-
-function StatChip({
-  label,
-  value,
-  accent = "neutral",
-}: {
-  label: string;
-  value: string | number;
-  accent?: "neutral" | "amber" | "green" | "red";
-}) {
-  const colors = {
-    neutral: "bg-stone-100 text-stone-600",
-    amber: "bg-amber-50 text-amber-700",
-    green: "bg-emerald-50 text-emerald-700",
-    red: "bg-red-50 text-red-700",
-  };
-  return (
-    <div className={`p-3 rounded-lg border border-stone-200 ${colors[accent]}`}>
-      <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
-      <p className="text-lg font-bold mt-0.5">{value}</p>
-    </div>
-  );
-}
+import { StatChip } from "../components/list/StatChip";
 
 export interface InventoryRow {
   id: string;

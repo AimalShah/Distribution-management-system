@@ -51,6 +51,10 @@ A customer ledger rendered for a date range or as-of date, prepared to be sent t
 A sale invoice's money figures — subtotal, tax split (CGST/SGST/IGST), discount, and total — derived from its line items; one breakdown serves the invoice on screen, on paper, and in the form that creates it.
 _Avoid_: totals (that is just the total), calculation
 
+**Company**:
+A distribution business the user runs or distributes for; its products, stock, invoices, customers, and reports are isolated from every other company. One user may belong to several companies and switch between them. Stored as an `Organization`.
+_Avoid_: agency, brand (a Brand is a product-attribution inside a Company, not a tenant), account
+
 **Member**:
 One user's membership in one organization, carrying a role.
 
@@ -97,4 +101,48 @@ _Avoid_: RBAC administration, user permissions editor
 **Checkpoint**:
 A numbered engineering milestone under `checkpoints/` (plan + tests + `parity-gate.ts` entry) whose green gate is the proof that a feature is done.
 _Avoid_: approval (no approval workflow exists in the product), milestone
+
+## Credit & Returns
+
+**Return window**:
+The number of days after an invoice during which its items may be returned; configured per Company, 30 days by default. A return outside the window is refused.
+_Avoid_: return period, grace period
+
+**Store credit**:
+The value of a sale return applied against the customer's balance due instead of refunded in cash.
+_Avoid_: refund, credit note
+
+**Credit term**:
+The agreed number of days after an invoice on which its balance becomes payable; 30 days (net-30 by default), overridable per customer.
+_Avoid_: payment terms, due terms
+
+**Due date**:
+The calendar date a credit sale's balance becomes payable, derived from its credit term.
+_Avoid_: maturity date
+
+**Overdue**:
+A balance whose due date has passed without full settlement.
+_Avoid_: late, past due
+
+**Aging**:
+The classification of overdue balances into 0–30 / 31–60 / 61–90 / 90+ day buckets for collection.
+_Avoid_: bucket report
+
+**Credit limit**:
+The maximum outstanding balance a customer may carry; exceeding it warns rather than blocks, and the override is permission-gated.
+_Avoid_: spending cap, threshold
+
+## Catalog
+
+**SKU**:
+A product's unique, server-generated trading code, produced from the Company's SKU format and immutable after the product is created.
+_Avoid_: product code, item number, barcode
+
+**SKU format**:
+A per-Company template of tokens and separators (e.g. `{BRAND}-{CATEGORY}-{SEQ:5}`) from which every new product's SKU is generated; changing it affects only products created afterwards.
+_Avoid_: naming rule, code template
+
+**Brand**:
+A product-attribution label grouping a Company's products by manufacturer/maker; a catalog grouping, never a tenant boundary.
+_Avoid_: agency, company, label
 

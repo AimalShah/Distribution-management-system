@@ -1,7 +1,11 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
-import type { ProductInput, ProductUpdateInput } from "@dms/shared";
-import { notFound, unprocessable } from "../http";
+import { buildSku, codeFor, type ProductInput, type ProductUpdateInput } from "@dms/shared";
+import { conflict, notFound, unprocessable } from "../http";
+import { getCompanySettings } from "./settings";
+
+/** Just enough of a brand/category to resolve a SKU token. */
+type SkuRef = { id: string; name: string; shortCode: string | null };
 
 /**
  * A product may only point at a category or a brand its own tenant owns.
@@ -23,18 +27,18 @@ import { notFound, unprocessable } from "../http";
 async function assertRefsInOrganization(
   refs: { categoryId?: string | null; brandId?: string | null },
   organizationId: string
-) {
+): Promise<{ category: SkuRef | null; brand: SkuRef | null }> {
   const [category, brand] = await Promise.all([
     refs.categoryId
       ? prisma.category.findFirst({
           where: { id: refs.categoryId, organizationId },
-          select: { id: true },
+          select: { id: true, name: true, shortCode: true },
         })
       : null,
     refs.brandId
       ? prisma.brand.findFirst({
           where: { id: refs.brandId, organizationId },
-          select: { id: true },
+          select: { id: true, name: true, shortCode: true },
         })
       : null,
   ]);
@@ -52,6 +56,66 @@ async function assertRefsInOrganization(
       "BRAND_NOT_IN_ORGANIZATION"
     );
   }
+
+  return { category: category ?? null, brand: brand ?? null };
+}
+
+/**
+ * The next value of the Company's SKU sequence. It only ever moves forward
+ * (ADR 0007): the row is created if missing and then incremented in one
+ * statement, so a deleted product never frees its number for reuse.
+ */
+async function nextSkuSequence(organizationId: string): Promise<number> {
+  await prisma.companySettings.upsert({
+    where: { organizationId },
+    create: { organizationId },
+    update: {},
+  });
+
+  const updated = await prisma.companySettings.update({
+    where: { organizationId },
+    data: { skuSequence: { increment: 1 } },
+  });
+
+  return updated.skuSequence;
+}
+
+/**
+ * Build a unique SKU from the Company's format. Each attempt takes the next
+ * sequence value, so two products never share a code; the pre-check makes a
+ * collision retry rather than surfacing a raw unique-constraint error, and the
+ * `productCode` unique index remains the actual enforcement.
+ */
+async function generateProductCode(
+  organizationId: string,
+  refs: { category: SkuRef | null; brand: SkuRef | null },
+  name: string
+): Promise<string> {
+  const settings = await getCompanySettings(organizationId);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const sequence = await nextSkuSequence(organizationId);
+
+    const candidate = buildSku(settings.skuFormat, settings.skuSeparator, {
+      brand: codeFor(refs.brand?.shortCode, refs.brand?.name),
+      category: codeFor(refs.category?.shortCode, refs.category?.name),
+      name,
+      sequence,
+      date: new Date(),
+    });
+
+    const existing = await prisma.product.findFirst({
+      where: { productCode: candidate },
+      select: { id: true },
+    });
+
+    if (!existing) return candidate;
+  }
+
+  throw conflict(
+    "Could not generate a unique SKU. Adjust the SKU format in Company settings.",
+    "SKU_GENERATION_FAILED"
+  );
 }
 
 const listInclude = {
@@ -77,6 +141,7 @@ export type ProductListArgs = {
   pageSize: number;
   search?: string;
   isActive?: boolean;
+  brandId?: string;
 };
 
 export async function getProducts({
@@ -85,6 +150,7 @@ export async function getProducts({
   pageSize,
   search,
   isActive,
+  brandId,
 }: ProductListArgs) {
   const where: Prisma.ProductWhereInput = {
     organizationId,
@@ -92,6 +158,10 @@ export async function getProducts({
 
   if (isActive !== undefined) {
     where.isActive = isActive;
+  }
+
+  if (brandId) {
+    where.brandId = brandId;
   }
 
   if (search) {
@@ -129,13 +199,22 @@ export async function getProductById(id: string, organizationId: string) {
 }
 
 export async function addProduct(data: ProductInput, organizationId: string) {
-  const { category, brand, ...fields } = data;
+  const { category, brand, productCode, ...fields } = data;
 
-  await assertRefsInOrganization({ categoryId: category, brandId: brand }, organizationId);
+  const refs = await assertRefsInOrganization(
+    { categoryId: category, brandId: brand },
+    organizationId
+  );
+
+  // A caller that still supplies a code has it honoured (imports and legacy
+  // clients); otherwise the SKU is generated from the Company's format, and the
+  // `@unique` index is what actually enforces uniqueness either way.
+  const code = productCode ?? (await generateProductCode(organizationId, refs, fields.name));
 
   return prisma.product.create({
     data: {
       ...fields,
+      productCode: code,
       description: fields.description ?? "",
       categoryId: category,
       brandId: brand,

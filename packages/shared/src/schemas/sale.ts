@@ -38,6 +38,12 @@ export const SaleInvoiceSchema = z.object({
   cgstAmount: optionalMoney,
   sgstAmount: optionalMoney,
   igstAmount: optionalMoney,
+  /**
+   * Set by the client only after it has seen the credit-limit warning and the
+   * user asked to proceed anyway. The route requires `sales.override_credit_limit`
+   * when this is true, so the flag alone does not override anything (ADR 0005).
+   */
+  overrideCreditLimit: z.boolean().optional(),
   items: z.array(SaleInvoiceItemSchema).min(1, "A sale needs at least one item"),
 });
 
@@ -49,6 +55,9 @@ export const SaleInvoiceSchema = z.object({
 export const SaleUpdateSchema = SaleInvoiceSchema.partial()
   .omit({
     items: true,
+    // The override is a create-time decision, not a column; omitting it keeps
+    // the update body from carrying a field the service would try to write.
+    overrideCreditLimit: true,
   })
   .extend({
     invoiceType: z.enum(["regular", "tax"]).optional(),

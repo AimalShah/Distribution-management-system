@@ -163,6 +163,11 @@ export interface LedgerEntry {
   credit: number;
   /** What the customer owes after this line, in chronological order. */
   balance: number;
+  /**
+   * The date an invoice's balance is payable (ADR 0009); null on a credit entry
+   * or payment and on an invoice that predates due dates.
+   */
+  dueDate?: string | null;
 }
 
 export interface CustomerLedger {
@@ -221,7 +226,7 @@ export async function getCustomerLedger({
 
   const windowBound = statementWindow(from, to);
 
-  type SaleLine = { saleCode: string; saleDate: Date; totalAmount: number };
+  type SaleLine = { saleCode: string; saleDate: Date; totalAmount: number; dueDate: Date | null };
 
   type CreditLine = {
     returnCode: string;
@@ -231,7 +236,7 @@ export async function getCustomerLedger({
 
   type PaymentLine = { paymentCode: string; paidAt: Date; amount: number; method: string };
 
-  const saleSelect = { saleCode: true, saleDate: true, totalAmount: true } as const;
+  const saleSelect = { saleCode: true, saleDate: true, totalAmount: true, dueDate: true } as const;
 
   const returnSelect = {
     returnCode: true,
@@ -312,6 +317,7 @@ export async function getCustomerLedger({
       description: `Invoice ${s.saleCode}`,
       debit: s.totalAmount,
       credit: 0,
+      dueDate: s.dueDate ? s.dueDate.toISOString() : null,
     })),
     ...windowCredits.map((r) => ({
       date: r.returnDate.toISOString(),

@@ -26,6 +26,8 @@ const { models, transaction } = vi.hoisted(() => {
     },
     inventoryLog: { create: vi.fn() },
     stockBatch: { findMany: vi.fn(), update: vi.fn() },
+    // The Company's return policy (issue #47) is read inside the transaction.
+    companySettings: { findUnique: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -91,6 +93,9 @@ const returnFixture = (overrides: Record<string, unknown> = {}) => ({
 
 const saleFixture = (items = [{ productId: "prod_1", quantity: 5 }]) => ({
   saleCode: "SAL-001",
+  // Recent enough to be inside the default 30-day window; a test asserting the
+  // window refusal overrides this with an old date.
+  saleDate: new Date(),
   items,
 });
 
@@ -357,6 +362,70 @@ describe("POST /api/returns validation", () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("USER_REQUIRED");
     expect(models.return.create).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #47: the Company's return policy gates every sale return.
+describe("POST /api/returns policy (issue #47)", () => {
+  it("refuses a sale return when the Company has returns disabled", async () => {
+    models.companySettings.findUnique.mockResolvedValue({
+      returnWindowDays: 30,
+      returnsEnabled: false,
+    });
+
+    const res = await request(app).post("/api/returns").set(auth()).send(saleReturn());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("RETURNS_DISABLED");
+    expect(models.return.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sale return past the invoice's window", async () => {
+    models.companySettings.findUnique.mockResolvedValue({
+      returnWindowDays: 30,
+      returnsEnabled: true,
+    });
+    // The invoice was raised 40 days ago; the 30-day window closed 10 days ago.
+    // The window runs from the invoice date, not the day the return is entered.
+    models.sale.findFirst.mockResolvedValue({
+      ...saleFixture(),
+      saleDate: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+    });
+
+    const res = await request(app).post("/api/returns").set(auth()).send(saleReturn());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("RETURN_WINDOW_EXPIRED");
+    expect(models.return.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a sale return inside a shortened window", async () => {
+    models.companySettings.findUnique.mockResolvedValue({
+      returnWindowDays: 14,
+      returnsEnabled: true,
+    });
+    // Raised 10 days ago: outside a 7-day window, inside a 14-day one.
+    models.sale.findFirst.mockResolvedValue({
+      ...saleFixture(),
+      saleDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+    });
+
+    const res = await request(app).post("/api/returns").set(auth()).send(saleReturn());
+
+    expect(res.status).toBe(201);
+  });
+
+  it("falls back to the built-in 30-day default when no settings row exists", async () => {
+    models.companySettings.findUnique.mockResolvedValue(null);
+    // 20 days old: inside the 30-day default, outside any shorter window.
+    models.sale.findFirst.mockResolvedValue({
+      ...saleFixture(),
+      saleDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+    });
+
+    const res = await request(app).post("/api/returns").set(auth()).send(saleReturn());
+
+    expect(res.status).toBe(201);
   });
 });
 

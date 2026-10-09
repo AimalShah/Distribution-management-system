@@ -29,6 +29,8 @@ interface LedgerEntry {
   debit: number;
   credit: number;
   balance: number;
+  /** When an invoice's balance is payable (issue #48); null on other entries. */
+  dueDate?: string | null;
 }
 
 interface CustomerLedger {
@@ -325,6 +327,13 @@ export default function CustomerLedgerPage() {
                         <span className="block text-xs text-muted-foreground">
                           {entry.description}
                         </span>
+                        {/* An invoice's balance becomes payable on this date
+                            (ADR 0009); only invoice entries carry one. */}
+                        {entry.dueDate ? (
+                          <span className="block text-xs text-muted-foreground">
+                            Due {formatDate(entry.dueDate)}
+                          </span>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-primary">

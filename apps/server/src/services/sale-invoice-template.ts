@@ -12,11 +12,19 @@ export interface SaleInvoiceRenderData {
   cgstAmount?: number | null;
   sgstAmount?: number | null;
   igstAmount?: number | null;
+  /** The date this credit sale's balance is payable (ADR 0009); null on a cash sale. */
+  dueDate?: Date | string | null;
   customer?: {
     name: string;
     email?: string | null;
     phone?: string | null;
     address?: string | null;
+  } | null;
+  /** The Company's own profile, printed as the document issuer (issue #39). */
+  company?: {
+    name?: string | null;
+    address?: string | null;
+    gstin?: string | null;
   } | null;
   items?: {
     quantity: number;
@@ -38,6 +46,12 @@ export interface SaleInvoiceRenderData {
   }[];
 }
 
+/**
+ * The invoice document (ADR 0002). Monochrome black-on-white with restrained
+ * grey rules and no coloured chips or fills, per the client requirement: it has
+ * to print legibly on a plain office printer, where a coloured fill is a grey
+ * smear. Money renders as `Rs` everywhere.
+ */
 export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
   const formattedDate = new Date(sale.saleDate).toLocaleDateString("en-US", {
     year: "numeric",
@@ -45,11 +59,23 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     day: "numeric",
   });
 
+  const formattedDueDate = sale.dueDate
+    ? new Date(sale.dueDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+
   const isTaxInvoice = sale.invoiceType === "tax";
   const customerName = sale.customer?.name || "Cash Customer";
   const customerEmail = sale.customer?.email || "";
   const customerPhone = sale.customer?.phone || "";
   const customerAddress = sale.customer?.address || "";
+
+  const companyName = sale.company?.name?.trim() || "Distribution Management System";
+  const companyAddress = sale.company?.address?.trim() || "";
+  const companyGstin = sale.company?.gstin?.trim() || "";
 
   const items = sale.items || [];
 
@@ -90,21 +116,21 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       const sgst = item.sgstRate ?? 0;
       const igst = item.igstRate ?? 0;
 
-      const gstRate = (cgst > 0 || sgst > 0)
-        ? (cgst + sgst)
-        : (igst || item.taxPercent || item.product?.gstRate || 0);
+      const gstRate = cgst > 0 || sgst > 0
+        ? cgst + sgst
+        : igst || item.taxPercent || item.product?.gstRate || 0;
 
       return `
-        <tr class="border-b border-gray-100">
-          <td class="py-3 px-4 text-gray-500 font-mono text-xs">${idx + 1}</td>
-          <td class="py-3 px-4">
-            <span class="font-medium text-gray-900">${prodName}</span>
-            <span class="text-xs text-gray-500 ml-1">${prodCode}</span>
-            ${gstRate > 0 ? `<span class="block text-[11px] text-gray-400">GST: ${gstRate}%</span>` : ""}
+        <tr>
+          <td class="num">${idx + 1}</td>
+          <td>
+            <span class="item-name">${prodName}</span>
+            ${prodCode ? `<span class="item-code">${prodCode}</span>` : ""}
+            ${gstRate > 0 ? `<span class="item-gst">GST: ${gstRate}%</span>` : ""}
           </td>
-          <td class="py-3 px-4 text-center text-gray-700">${item.quantity}</td>
-          <td class="py-3 px-4 text-right text-gray-700">Rs ${item.unitPrice.toFixed(2)}</td>
-          <td class="py-3 px-4 text-right font-semibold text-gray-900">Rs ${lineTotal.toFixed(2)}</td>
+          <td class="num">${item.quantity}</td>
+          <td class="num">Rs ${item.unitPrice.toFixed(2)}</td>
+          <td class="num strong">Rs ${lineTotal.toFixed(2)}</td>
         </tr>
       `;
     })
@@ -116,115 +142,172 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${isTaxInvoice ? "Tax Invoice" : "Invoice"} ${sale.saleCode}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display: none; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 24px;
+      background: #ffffff;
+      color: #111111;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .sheet { max-width: 780px; margin: 0 auto; }
+    .doc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      border-bottom: 2px solid #111111;
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+    }
+    .issuer-name { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+    .issuer-line { margin: 2px 0 0; color: #444444; font-size: 12px; }
+    .doc-meta { text-align: right; }
+    .doc-type {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-bottom: 1px solid #111111;
+      padding-bottom: 2px;
+    }
+    .doc-code { font-size: 18px; font-weight: 700; margin: 8px 0 0; font-family: "SFMono-Regular", Menlo, monospace; }
+    .doc-date { margin: 2px 0 0; color: #444444; font-size: 12px; }
+    .parties { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 24px; }
+    .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #666666;
+      margin: 0 0 6px;
+    }
+    .party-name { font-size: 15px; font-weight: 700; margin: 0; }
+    .party-line { margin: 2px 0 0; color: #333333; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    thead th {
+      text-align: left;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #333333;
+      border-top: 1px solid #111111;
+      border-bottom: 1px solid #111111;
+      padding: 8px 8px;
+    }
+    tbody td { border-bottom: 1px solid #dddddd; padding: 9px 8px; vertical-align: top; }
+    .num { text-align: right; white-space: nowrap; }
+    .strong { font-weight: 700; }
+    .item-name { font-weight: 600; }
+    .item-code { color: #666666; font-size: 11px; margin-left: 4px; }
+    .item-gst { display: block; color: #777777; font-size: 11px; }
+    .totals { display: flex; justify-content: flex-end; }
+    .totals-table { width: 280px; border-collapse: collapse; }
+    .totals-table td { padding: 4px 0; }
+    .totals-table .gline td { border-top: 1px solid #111111; padding-top: 8px; font-size: 15px; font-weight: 700; }
+    .totals-table .lbl { color: #444444; }
+    .totals-table .amt { text-align: right; }
+    .footer {
+      border-top: 1px solid #dddddd;
+      margin-top: 28px;
+      padding-top: 12px;
+      text-align: center;
+      color: #888888;
+      font-size: 11px;
     }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased font-sans p-6 sm:p-10">
-  <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-8 sm:p-12">
-    <!-- Header -->
-    <div class="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
+<body>
+  <div class="sheet">
+    <div class="doc-header">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">${isTaxInvoice ? "Tax Invoice" : "Distribution Management System"}</h1>
-        <p class="text-xs text-gray-500 mt-1">${isTaxInvoice ? "Official GST Tax Invoice" : "Inventioo DMS Distribution Network"}</p>
+        <h1 class="issuer-name">${companyName}</h1>
+        ${companyAddress ? `<p class="issuer-line">${companyAddress}</p>` : ""}
+        ${companyGstin ? `<p class="issuer-line">GSTIN: ${companyGstin}</p>` : ""}
       </div>
-      <div class="text-right">
-        <span class="inline-block ${isTaxInvoice ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"} text-xs font-semibold px-2.5 py-1 rounded">
-          ${isTaxInvoice ? "TAX INVOICE" : sale.status.toUpperCase()}
-        </span>
-        <h2 class="text-xl font-bold text-gray-900 mt-2 font-mono">${sale.saleCode}</h2>
-        <p class="text-xs text-gray-500 mt-1">Date: ${formattedDate}</p>
+      <div class="doc-meta">
+        <div class="doc-type">${isTaxInvoice ? "Tax Invoice" : "Invoice"}</div>
+        <h2 class="doc-code">${sale.saleCode}</h2>
+        <p class="doc-date">Date: ${formattedDate}</p>
+        ${formattedDueDate ? `<p class="doc-date">Due: ${formattedDueDate}</p>` : ""}
+        <p class="doc-date">Status: ${sale.status}</p>
       </div>
     </div>
 
-    <!-- Bill To -->
-    <div class="grid grid-cols-2 gap-8 mb-8">
+    <div class="parties">
       <div>
-        <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Billed To</h3>
-        <p class="text-base font-bold text-gray-900">${customerName}</p>
-        ${customerAddress ? `<p class="text-xs text-gray-600 mt-1">${customerAddress}</p>` : ""}
-        ${customerPhone ? `<p class="text-xs text-gray-600 mt-0.5">Phone: ${customerPhone}</p>` : ""}
-        ${customerEmail ? `<p class="text-xs text-gray-600 mt-0.5">${customerEmail}</p>` : ""}
+        <p class="label">Billed To</p>
+        <p class="party-name">${customerName}</p>
+        ${customerAddress ? `<p class="party-line">${customerAddress}</p>` : ""}
+        ${customerPhone ? `<p class="party-line">Phone: ${customerPhone}</p>` : ""}
+        ${customerEmail ? `<p class="party-line">${customerEmail}</p>` : ""}
       </div>
-      <div class="text-right">
-        <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Invoice Summary</h3>
-        <p class="text-xs text-gray-600">Invoice Type: <span class="font-medium text-gray-900">${isTaxInvoice ? "Tax Invoice" : "Regular Invoice"}</span></p>
-        <p class="text-xs text-gray-600 mt-1">Total Items: <span class="font-medium text-gray-900">${items.length}</span></p>
-        <p class="text-xs text-gray-600 mt-1">Payment Status: <span class="font-medium text-gray-900">${sale.status}</span></p>
+      <div>
+        <p class="label">Summary</p>
+        <p class="party-line">Invoice Type: ${isTaxInvoice ? "Tax Invoice" : "Regular Invoice"}</p>
+        <p class="party-line">Total Items: ${items.length}</p>
       </div>
     </div>
 
-    <!-- Line items table -->
-    <div class="overflow-x-auto mb-8">
-      <table class="w-full text-left text-sm">
-        <thead>
-          <tr class="bg-gray-50 text-gray-600 text-xs uppercase border-b border-gray-200">
-            <th class="py-3 px-4 w-12">#</th>
-            <th class="py-3 px-4">Item & Description</th>
-            <th class="py-3 px-4 text-center w-20">Qty</th>
-            <th class="py-3 px-4 text-right w-28">Unit Price</th>
-            <th class="py-3 px-4 text-right w-28">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemRows}
-        </tbody>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 36px">#</th>
+          <th>Item &amp; Description</th>
+          <th class="num" style="width: 64px">Qty</th>
+          <th class="num" style="width: 110px">Unit Price</th>
+          <th class="num" style="width: 110px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRows}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table class="totals-table">
+        <tr>
+          <td class="lbl">Subtotal</td>
+          <td class="amt">Rs ${subtotal.toFixed(2)}</td>
+        </tr>
+        ${discount > 0 ? `
+        <tr>
+          <td class="lbl">Discount</td>
+          <td class="amt">-Rs ${discount.toFixed(2)}</td>
+        </tr>` : ""}
+        ${(sale.cgstAmount ?? 0) > 0 ? `
+        <tr>
+          <td class="lbl">CGST</td>
+          <td class="amt">Rs ${(sale.cgstAmount ?? 0).toFixed(2)}</td>
+        </tr>` : ""}
+        ${(sale.sgstAmount ?? 0) > 0 ? `
+        <tr>
+          <td class="lbl">SGST</td>
+          <td class="amt">Rs ${(sale.sgstAmount ?? 0).toFixed(2)}</td>
+        </tr>` : ""}
+        ${(sale.igstAmount ?? 0) > 0 ? `
+        <tr>
+          <td class="lbl">IGST</td>
+          <td class="amt">Rs ${(sale.igstAmount ?? 0).toFixed(2)}</td>
+        </tr>` : ""}
+        ${tax > 0 ? `
+        <tr>
+          <td class="lbl">Total Tax</td>
+          <td class="amt">Rs ${tax.toFixed(2)}</td>
+        </tr>` : ""}
+        <tr class="gline">
+          <td>Total</td>
+          <td class="amt">Rs ${total.toFixed(2)}</td>
+        </tr>
       </table>
     </div>
 
-    <!-- Totals -->
-    <div class="flex justify-end mb-8">
-      <div class="w-64 space-y-2 text-sm">
-        <div class="flex justify-between text-gray-600">
-          <span>Subtotal:</span>
-          <span class="font-medium text-gray-900">Rs ${subtotal.toFixed(2)}</span>
-        </div>
-        ${discount > 0 ? `
-        <div class="flex justify-between text-green-600">
-          <span>Discount:</span>
-          <span>-Rs ${discount.toFixed(2)}</span>
-        </div>` : ""}
-        ${(sale.cgstAmount ?? 0) > 0 ? `
-        <div class="flex justify-between text-gray-600">
-          <span>CGST:</span>
-          <span>Rs ${(sale.cgstAmount ?? 0).toFixed(2)}</span>
-        </div>` : ""}
-        ${(sale.sgstAmount ?? 0) > 0 ? `
-        <div class="flex justify-between text-gray-600">
-          <span>SGST:</span>
-          <span>Rs ${(sale.sgstAmount ?? 0).toFixed(2)}</span>
-        </div>` : ""}
-        ${(sale.igstAmount ?? 0) > 0 ? `
-        <div class="flex justify-between text-gray-600">
-          <span>IGST:</span>
-          <span>Rs ${(sale.igstAmount ?? 0).toFixed(2)}</span>
-        </div>` : ""}
-        ${tax > 0 ? `
-        <div class="flex justify-between text-gray-600 font-medium">
-          <span>Total Tax:</span>
-          <span>+Rs ${tax.toFixed(2)}</span>
-        </div>` : ""}
-        <div class="border-t border-gray-200 pt-2 flex justify-between text-base font-bold text-gray-900">
-          <span>Total:</span>
-          <span class="text-blue-600">Rs ${total.toFixed(2)}</span>
-        </div>
-      </div>
+    <div class="footer">
+      <p>Thank you for your business. For questions regarding this invoice, please contact us.</p>
     </div>
-
-    <!-- Footer -->
-    <div class="border-t border-gray-100 pt-6 text-center text-xs text-gray-400">
-      <p>Thank you for your business. For questions regarding this invoice, please contact support.</p>
-    </div>
-  </div>
-
-  <div class="text-center mt-6 no-print">
-    <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2 rounded shadow-sm">
-      Print Invoice
-    </button>
   </div>
 </body>
 </html>`;

@@ -13,6 +13,9 @@ import { paginationQuerySchema } from "../pagination";
  */
 const categoryFields = {
   name: z.string().trim().min(1, "Name is required"),
+  // Short code used to build a product's SKU (ADR 0007); blank falls back to
+  // the category name's prefix at generation time.
+  shortCode: nullableText("Short code cannot be empty"),
   description: nullableText("Description cannot be empty"),
 };
 

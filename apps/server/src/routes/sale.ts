@@ -6,6 +6,7 @@ import {
   saleListQuerySchema,
 } from "@dms/shared";
 import { asyncHandler } from "../http";
+import { forbidden } from "../http/errors";
 import {
   cancelSale,
   createSale,
@@ -18,13 +19,33 @@ import {
   uncancelSale,
   updateSale,
 } from "../services/sale";
+import { checkPermission } from "../services/rbac";
 
 import { requireUserId } from "../middleware/auth-context";
 
 import { renderSaleInvoiceHtml } from "../services/sale-invoice-template";
 import { generateSalePdf } from "../services/sale-pdf";
+import { getCompanySettings } from "../services/settings";
 
 export const saleRouter: Router = Router();
+
+/**
+ * Hydrate an invoice with the active Company's document profile (issue #39) so
+ * the header prints the issuer the client configured rather than a hardcoded
+ * title. The settings read is scoped to the same tenant the invoice came from.
+ */
+async function withCompany<T extends object>(sale: T, organizationId: string) {
+  const settings = await getCompanySettings(organizationId);
+
+  return {
+    ...sale,
+    company: {
+      name: settings.displayName,
+      address: settings.address,
+      gstin: settings.gstin,
+    },
+  };
+}
 
 saleRouter.get(
   "/",
@@ -62,7 +83,7 @@ saleRouter.get(
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
 
-    const html = renderSaleInvoiceHtml(sale);
+    const html = renderSaleInvoiceHtml(await withCompany(sale, req.auth.organizationId));
     res.type("html").send(html);
   })
 );
@@ -72,7 +93,7 @@ saleRouter.get(
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
 
-    const pdf = await generateSalePdf(sale);
+    const pdf = await generateSalePdf(await withCompany(sale, req.auth.organizationId));
     res
       .type("pdf")
       .set("Content-Disposition", `inline; filename="invoice-${sale.saleCode}.pdf"`)
@@ -86,7 +107,7 @@ saleRouter.get(
     const sale = await getSaleInvoiceData(req.params.id, req.auth.organizationId);
 
     if (req.accepts("html") && !req.accepts("json")) {
-      const html = renderSaleInvoiceHtml(sale);
+      const html = renderSaleInvoiceHtml(await withCompany(sale, req.auth.organizationId));
 
       return res.type("html").send(html);
     }
@@ -112,6 +133,25 @@ saleRouter.post(
     // Every stock movement is written to `InventoryLog`, whose `userId` is
     // required, so the caller has to say who they are.
     const userId = requireUserId(req.auth.userId);
+
+    // The flag only *asks* to override; whether this caller may is decided here
+    // and never by the body (ADR 0005). A caller that cannot is refused before
+    // any credit-limit arithmetic runs.
+    if (data.overrideCreditLimit) {
+      const allowed = await checkPermission(
+        userId,
+        req.auth.organizationId,
+        "sales",
+        "override_credit_limit"
+      );
+
+      if (!allowed) {
+        throw forbidden(
+          "You do not have permission to override a customer's credit limit",
+          "CREDIT_LIMIT_OVERRIDE_FORBIDDEN"
+        );
+      }
+    }
 
     const sale = await createSale(data, req.auth.organizationId, userId);
 

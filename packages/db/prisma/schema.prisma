@@ -110,8 +110,45 @@ model Organization {
   Payments    Payment[]
   roles       Role[]
   batches     StockBatch[]
+  settings    CompanySettings?
 
   @@map("organization")
+}
+
+/**
+ * The per-Company configuration the client edits: the profile printed on
+ * documents, the SKU format new products are generated from, the return policy,
+ * and the default credit term. One row per Company, created lazily on first
+ * read so an organization that predates this model still works.
+ */
+model CompanySettings {
+  id             String @id @default(cuid())
+  organizationId String @unique
+
+  displayName String?
+  address     String?
+  gstin       String?
+
+  // SKU generation (ADR 0007). `skuSequence` is the last sequence number
+  // handed out; it only ever moves forward, so deleting a product never frees
+  // its number for reuse.
+  skuFormat    String @default("{BRAND}-{CATEGORY}-{SEQ:5}")
+  skuSeparator String @default("-")
+  skuSequence  Int    @default(0)
+
+  // Return policy (ADR 0008).
+  returnWindowDays Int     @default(30)
+  returnsEnabled   Boolean @default(true)
+
+  // Credit terms (ADR 0009).
+  creditTermDays Int @default(30)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("company_settings")
 }
 
 model Member {
@@ -212,6 +249,8 @@ model Customer {
   address      String?
   city         String?
   creditLimit  Float?
+  // Per-customer override of the Company's default credit term (ADR 0009).
+  creditTermDays Int?
   isActive     Boolean      @default(true)
   sale         Sale[]
   payments     Payment[]
@@ -316,6 +355,10 @@ model Sale {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // The date this credit sale's balance becomes payable, derived from the
+  // customer's credit term (ADR 0009). Null on a cash sale.
+  dueDate DateTime?
+
   // Sum of the payments allocated to this invoice, maintained inside the same
   // transaction that writes the Payment row, so `amountPaid <= totalAmount` can
   // be guarded with one conditional update instead of a read-then-write.
@@ -374,6 +417,9 @@ model Category {
   name           String
   organizationId String
 
+  // Short code used to build a product's SKU (ADR 0007); blank falls back to
+  // the name's first letters.
+  shortCode    String?
   description  String?
   products     Product[]
   brands       Brand[]
@@ -390,6 +436,8 @@ model Brand {
   name           String
   organizationId String
   categoryId     String
+  // Short code used to build a product's SKU (ADR 0007).
+  shortCode      String?
   description    String?
   products       Product[]
   category       Category     @relation(fields: [categoryId], references: [id])
@@ -505,10 +553,20 @@ model ReturnItem {
   discount  Float
   unitPrice Float
   note      String?
+  // The condition gate (ADR 0008): a restockable line goes back on the shelf, a
+  // damaged one is credited but not put back on hand. `reason` says why *this*
+  // line is in that condition, alongside the header's overall reason.
+  condition ReturnCondition @default(RESTOCKABLE)
+  reason    String?
   return    Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
 
   @@map("return_items")
+}
+
+enum ReturnCondition {
+  RESTOCKABLE
+  DAMAGED
 }
 
 /**

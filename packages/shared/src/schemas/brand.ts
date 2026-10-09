@@ -25,6 +25,9 @@ import { paginationQuerySchema } from "../pagination";
 const brandFields = {
   name: z.string().trim().min(1, "Name is required"),
   categoryId: z.string().min(1, "Select a category"),
+  // Short code used to build a product's SKU (ADR 0007). Blank falls back to
+  // the brand name's prefix at generation time, so it is clearable.
+  shortCode: nullableText("Short code cannot be empty"),
   description: nullableText("Description cannot be empty"),
 };
 

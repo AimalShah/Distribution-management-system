@@ -25,6 +25,7 @@ const { models, transaction } = vi.hoisted(() => {
     },
     inventoryLog: { create: vi.fn() },
     stockBatch: { findMany: vi.fn(), update: vi.fn() },
+    companySettings: { findUnique: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -120,6 +121,7 @@ beforeEach(() => {
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
   // No batches are tracked for this product, so FEFO has nothing to touch.
   models.stockBatch.findMany.mockResolvedValue([]);
+  models.companySettings.findUnique.mockResolvedValue(null);
 });
 
 describe("organization context", () => {
@@ -510,14 +512,22 @@ describe("POST /api/sales", () => {
     expect(models.sale.create).not.toHaveBeenCalled();
   });
 
-  it("leaves saleDate to the column default when it is absent", async () => {
+  it("defaults an absent sale date to now, so the due date has an anchor", async () => {
+    const before = Date.now();
+
     await request(app).post("/api/sales").set(auth()).send(validBody);
 
-    expect(models.sale.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ saleDate: undefined }),
-      })
-    );
+    const { saleDate, dueDate } = models.sale.create.mock.calls[0][0].data;
+
+    // The column default would also be "now", but the service must resolve the
+    // date itself: the due date is derived from it in the same transaction
+    // (ADR 0009), so it cannot be left to the database.
+    expect(saleDate).toBeInstanceOf(Date);
+    expect(saleDate.getTime()).toBeGreaterThanOrEqual(before);
+
+    // With no customer override and no Company settings, the documented
+    // default is net-30, and the due date is that many days after the sale.
+    expect(dueDate.getTime() - saleDate.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
   it("accepts an explicit sale date", async () => {
@@ -910,5 +920,33 @@ describe("POST /api/sales/:id/cancel and /uncancel", () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("SALE_NOT_CANCELLED");
     expect(models.sale.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/sales/:id/print", () => {
+  it("prints the active Company's stored profile in the invoice header", async () => {
+    models.companySettings.findUnique.mockResolvedValue({
+      organizationId: ORG,
+      displayName: "Acme Distribution",
+      address: "12 Market Road",
+      gstin: "27AAPFU0939F1ZV",
+    });
+
+    const res = await request(app).get("/api/sales/sal_1/print").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("Acme Distribution");
+    expect(res.text).toContain("12 Market Road");
+    expect(res.text).toContain("GSTIN: 27AAPFU0939F1ZV");
+    expect(models.companySettings.findUnique).toHaveBeenCalledWith({
+      where: { organizationId: ORG },
+    });
+  });
+
+  it("falls back to a default issuer when the Company has no profile", async () => {
+    const res = await request(app).get("/api/sales/sal_1/print").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("Distribution Management System");
   });
 });
