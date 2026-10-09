@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { CompanySwitcher } from "./CompanySwitcher";
 import type { NotificationItem } from "../../data/mockData";
 
 interface TopbarProps {
@@ -152,6 +153,8 @@ export function Topbar({
 
       {/* Actions */}
       <div className="flex items-center gap-1">
+        {/* Company Switcher */}
+        <CompanySwitcher />
 
         {/* Notifications */}
         <div className="relative" ref={notifRef}>

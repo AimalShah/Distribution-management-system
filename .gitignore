@@ -21,6 +21,7 @@ build/
 /coverage
 
 # misc
+tmp/
 .DS_Store
 *.pem
 
