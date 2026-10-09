@@ -93,6 +93,11 @@ export const api = {
 
   put: <T>(url: string, body?: T) => client.put(url, body).then((response) => response.data),
 
+  // PATCH is a partial update, and the server has endpoints that only speak it
+  // (`PATCH /members/:id/role`). A page reaching past this to the axios client
+  // for those would be the one place the transport is not behind the seam.
+  patch: <T>(url: string, body?: T) => client.patch(url, body).then((response) => response.data),
+
   delete: (url: string) => client.delete(url).then((response) => response.data),
 };
 
@@ -105,7 +110,13 @@ export const fetcher = (url: string) => api.get(url);
  * fallback string); the axios envelope is parsed here, so `code` and `details`
  * arrive without the page ever touching `err.response`.
  */
-export const toFailure = (err: Error, fallback: string): RequestFailure => {
+/**
+ * Typed `unknown` rather than `Error` because that is what a `catch` clause
+ * actually binds: the rejection may be an axios error, a plain `Error`, or
+ * anything at all. Every branch below already handles a non-axios value by
+ * answering with the caller's fallback, so nothing here trusts the shape.
+ */
+export const toFailure = (err: unknown, fallback: string): RequestFailure => {
   if (!isAxiosError(err)) {
     return { origin: "local", status: null, code: null, details: undefined, message: fallback };
   }
@@ -138,7 +149,7 @@ export const toFailure = (err: Error, fallback: string): RequestFailure => {
 };
 
 /** The human half of `toFailure`: the envelope's copy when it sent one, else the fallback. */
-export const failureMessage = (err: Error, fallback: string): string =>
+export const failureMessage = (err: unknown, fallback: string): string =>
   toFailure(err, fallback).message;
 
 /**

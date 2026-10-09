@@ -17,6 +17,8 @@ import { authClient } from "./auth-client";
 export interface ActiveMembership {
   role: string;
   organizationName: string;
+  /** The active Company's id, which every membership route is scoped by. */
+  organizationId: string;
 }
 
 export function useActiveMembership() {
@@ -42,6 +44,7 @@ export function useActiveMembership() {
       // `get-full-organization` returns the organization's own fields spread
       // alongside `members` and `invitations`, not nested under a key.
       organizationName: full.data?.name ?? "",
+      organizationId: full.data?.id ?? "",
     } satisfies ActiveMembership;
   });
 
