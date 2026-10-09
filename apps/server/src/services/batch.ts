@@ -13,27 +13,29 @@ export async function listStockBatches(
   const pageSize = query.pageSize ?? 20;
   const now = new Date();
 
-  const where: Prisma.StockBatchWhereInput = {
-    organizationId,
-    ...(query.productId ? { productId: query.productId } : {}),
-    ...(query.search
-      ? {
-          OR: [
-            { batchNumber: { contains: query.search, mode: "insensitive" } },
-            { product: { name: { contains: query.search, mode: "insensitive" } } },
-            { product: { productCode: { contains: query.search, mode: "insensitive" } } },
-          ],
-        }
-      : {}),
-    ...(query.expiringWithinDays !== undefined
-      ? {
-          expiryDate: {
-            not: null,
-            lte: new Date(now.getTime() + query.expiringWithinDays * MS_PER_DAY),
-          },
-        }
-      : {}),
-  };
+  // The expiry window is a question about the future, so it is bounded on both
+  // sides: `lte now + days` alone also matches every lot that expired last
+  // month, because a past date is also less than a future one (issue #40).
+  // Already-expired lots are a separate question, asked with `expired`.
+  const expiryFilter = query.expired
+    ? { not: null, lt: now }
+    : query.expiringWithinDays !== undefined
+      ? { not: null, gte: now, lte: new Date(now.getTime() + query.expiringWithinDays * MS_PER_DAY) }
+      : undefined;
+
+  const where: Prisma.StockBatchWhereInput = { organizationId };
+
+  if (query.productId) where.productId = query.productId;
+
+  if (query.search) {
+    where.OR = [
+      { batchNumber: { contains: query.search, mode: "insensitive" } },
+      { product: { name: { contains: query.search, mode: "insensitive" } } },
+      { product: { productCode: { contains: query.search, mode: "insensitive" } } },
+    ];
+  }
+
+  if (expiryFilter) where.expiryDate = expiryFilter;
 
   const [data, total] = await Promise.all([
     prisma.stockBatch.findMany({

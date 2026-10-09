@@ -29,7 +29,7 @@ const { models, transaction } = vi.hoisted(() => {
       create: vi.fn(),
     },
     product: { findFirst: vi.fn(), findMany: vi.fn() },
-    stockBatch: { findMany: vi.fn(), update: vi.fn() },
+    stockBatch: { findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
     reorderLevel,
   };
 
@@ -91,10 +91,32 @@ const logFixture = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const prismaError = (code: string, meta?: Record<string, unknown>) => ({
+const prismaError = (code: string, meta: Record<string, unknown> = {}) => ({
   code,
   meta,
   name: "PrismaClientKnownRequestError",
+});
+
+/**
+ * A stock batch as the list returns it. `expiryDate` drives every expiry-window
+ * assertion below, so the fixtures are built from a fixed "now" rather than
+ * from the wall clock: a batch that expires in 10 days must still be in 10 days
+ * when the suite runs next month.
+ */
+const DAY = 24 * 60 * 60 * 1000;
+
+const batchFixture = (overrides: Record<string, unknown> = {}) => ({
+  id: "bat_1",
+  batchNumber: "B-001",
+  productId: "prod_1",
+  organizationId: ORG,
+  quantityReceived: 100,
+  quantityRemaining: 40,
+  unitCost: 12.5,
+  expiryDate: new Date(Date.now() + 10 * DAY),
+  receivedAt: new Date("2026-01-01T00:00:00.000Z"),
+  product: { id: "prod_1", name: "Widget", productCode: "PROD-001", unit: "pcs" },
+  ...overrides,
 });
 
 beforeEach(() => {
@@ -115,6 +137,7 @@ beforeEach(() => {
   // No batches are tracked for this product, so FEFO and its reverse have
   // nothing to touch.
   models.stockBatch.findMany.mockResolvedValue([]);
+  models.stockBatch.count.mockResolvedValue(0);
 });
 
 describe("organization context", () => {
@@ -246,6 +269,83 @@ describe("GET /api/inventory/low-stock", () => {
 
     expect(res.body.pageCount).toBe(5);
     expect(models.inventory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 10, take: 10 })
+    );
+  });
+});
+
+describe("GET /api/inventory/batches", () => {
+  it("does not fall through to the :id route", async () => {
+    await request(app).get("/api/inventory/batches").set(auth());
+
+    expect(models.inventory.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("scopes the list to the active Company", async () => {
+    await request(app).get("/api/inventory/batches").set(auth());
+
+    expect(models.stockBatch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG }) })
+    );
+  });
+
+  it("reports the days until expiry and whether the lot is already expired", async () => {
+    models.stockBatch.findMany.mockResolvedValue([batchFixture({ expiryDate: new Date(Date.now() - 2 * DAY) })]);
+    models.stockBatch.count.mockResolvedValue(1);
+
+    const res = await request(app).get("/api/inventory/batches").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data[0]).toMatchObject({ isExpired: true, daysUntilExpiry: -2 });
+  });
+
+  it("leaves the expiry window unbounded when no window is asked for", async () => {
+    await request(app).get("/api/inventory/batches").set(auth());
+
+    const { where } = models.stockBatch.findMany.mock.calls[0][0];
+
+    expect(where.expiryDate).toBeUndefined();
+  });
+
+  // The defect behind issue #40: `expiringWithinDays` used to filter on
+  // `expiryDate <= now + days` alone, which every already-expired lot also
+  // satisfies — so "expiring within 30 days" answered with stock that expired
+  // last month. A window only ever asks about the future.
+  it("excludes lots that have already expired from an expiry window", async () => {
+    const before = Date.now();
+
+    await request(app).get("/api/inventory/batches?expiringWithinDays=30").set(auth());
+
+    const { expiryDate } = models.stockBatch.findMany.mock.calls[0][0].where;
+
+    expect(expiryDate.gte.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(expiryDate.lte.getTime()).toBeGreaterThan(before);
+  });
+
+  it("returns only already-expired lots when expired is asked for explicitly", async () => {
+    await request(app).get("/api/inventory/batches?expired=true").set(auth());
+
+    const { expiryDate } = models.stockBatch.findMany.mock.calls[0][0].where;
+
+    expect(expiryDate.lt).toBeInstanceOf(Date);
+    expect(expiryDate.gte).toBeUndefined();
+  });
+
+  it("rejects an expiry window that is not a whole number of days", async () => {
+    const res = await request(app).get("/api/inventory/batches?expiringWithinDays=soon").set(auth());
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(models.stockBatch.findMany).not.toHaveBeenCalled();
+  });
+
+  it("is paginated", async () => {
+    models.stockBatch.count.mockResolvedValue(45);
+
+    const res = await request(app).get("/api/inventory/batches?page=2&pageSize=10").set(auth());
+
+    expect(res.body.pageCount).toBe(5);
+    expect(models.stockBatch.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 10, take: 10 })
     );
   });

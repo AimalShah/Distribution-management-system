@@ -73,10 +73,22 @@ export const inventoryLogsQuerySchema = paginationQuerySchema.extend({
 
 export const lowStockQuerySchema = paginationQuerySchema;
 
+/**
+ * `expiringWithinDays` asks about the future only: lots already past their
+ * date are excluded, because "expiring within 30 days" that answered with
+ * stock that expired last month was the defect behind issue #40. Seeing those
+ * lots is a separate question, asked with `expired=true`, which selects them
+ * and nothing else. When both are sent, `expired` wins — the two answer
+ * different questions and cannot be satisfied at once.
+ */
 export const batchListQuerySchema = paginationQuerySchema.extend({
   productId: z.string().trim().optional(),
   search: z.string().trim().optional(),
   expiringWithinDays: z.coerce.number().int().min(1).optional(),
+  expired: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 
 export const stockBatchCreateSchema = z.object({

@@ -28,6 +28,8 @@ const UsersPage = lazy(() => import("./pages/UsersPage"));
 const BillingPage = lazy(() => import("./pages/BillingPage"));
 const PermissionPage = lazy(() => import("./pages/PermissionPage"));
 const CompanySettingsPage = lazy(() => import("./pages/CompanySettingsPage"));
+const BatchesPage = lazy(() => import("./pages/BatchesPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function PageFallback() {
   return <Skeleton className="h-[60vh]" />;
@@ -55,6 +57,13 @@ export function App() {
           <Route
             path="/inventory"
             element={<Suspense fallback={<PageFallback />}><InventoryPage /></Suspense>}
+          />
+          {/* The sidebar's "Batches" entry points here, so the route has to
+              exist as a page of its own rather than only as a tab inside
+              InventoryPage (issue #40). */}
+          <Route
+            path="/inventory/batches"
+            element={<Suspense fallback={<PageFallback />}><BatchesPage /></Suspense>}
           />
           <Route
             path="/products"
@@ -207,6 +216,15 @@ export function App() {
             element={<Suspense fallback={<PageFallback />}><SaleInvoiceEdit /></Suspense>}
           />
           <Route path="/sales-invoices" element={<Navigate to="/sales" replace />} />
+
+          {/* The catch-all has to be the last route in this shell. It turns
+              every unmatched address into a real page instead of an empty
+              `<Outlet>` — a blank white screen the user cannot diagnose
+              (issue #40). */}
+          <Route
+            path="*"
+            element={<Suspense fallback={<PageFallback />}><NotFoundPage /></Suspense>}
+          />
         </Route>
       </Route>
     </Routes>
