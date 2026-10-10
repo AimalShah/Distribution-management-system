@@ -3,13 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanySettingsPage } from "./CompanySettingsPage";
 
-const { apiGet, apiPut } = vi.hoisted(() => ({
+const { apiGet, apiPut, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPut: vi.fn(),
+  apiPost: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
-  api: { get: apiGet, put: apiPut },
+  api: { get: apiGet, put: apiPut, post: apiPost },
   fetcher: apiGet,
   failureMessage: (err: unknown, fallback: string) => fallback,
 }));
@@ -27,9 +28,18 @@ const storedSettings = {
   creditTermDays: 30,
 };
 
+const storedOrganizations = [
+  { id: "org_1", name: "Acme Distribution", slug: "acme-dist", gstin: "27AAPFU0939F1ZV" },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
-  apiGet.mockResolvedValue(storedSettings);
+  apiGet.mockImplementation((path: string) => {
+    if (path === "/organizations") {
+      return Promise.resolve(storedOrganizations);
+    }
+    return Promise.resolve(storedSettings);
+  });
   apiPut.mockResolvedValue(storedSettings);
 });
 
@@ -154,4 +164,44 @@ describe("CompanySettingsPage (issue #39)", () => {
       );
     });
   });
+
+  it("lists multiple companies and highlights the active one", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/organizations") {
+        return Promise.resolve([
+          { id: "org_1", name: "Acme Distribution", slug: "acme-dist", gstin: "27AAPFU0939F1ZV" },
+          { id: "org_2", name: "Beta Distribution", slug: "beta-dist", gstin: null },
+        ]);
+      }
+      return Promise.resolve(storedSettings);
+    });
+
+    render(<CompanySettingsPage />);
+
+    expect(await screen.findByText("Beta Distribution")).toBeInTheDocument();
+    expect(screen.getByText("Acme Distribution")).toBeInTheDocument();
+    expect(screen.getByText(/active company/i)).toBeInTheDocument();
+  });
+
+  it("allows switching to another company", async () => {
+    const user = userEvent.setup();
+    apiPost.mockResolvedValue({});
+
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/organizations") {
+        return Promise.resolve([
+          { id: "org_1", name: "Acme Distribution", slug: "acme-dist" },
+          { id: "org_2", name: "Beta Distribution", slug: "beta-dist" },
+        ]);
+      }
+      return Promise.resolve(storedSettings);
+    });
+
+    render(<CompanySettingsPage />);
+
+    await screen.findByText("Beta Distribution");
+    const switchBtn = screen.getByRole("button", { name: /switch to beta distribution/i });
+    expect(switchBtn).toBeInTheDocument();
+  });
 });
+

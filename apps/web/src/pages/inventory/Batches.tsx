@@ -3,9 +3,12 @@ import useSWR from "swr";
 import {
   AlertTriangle,
   Boxes,
+  Clock,
+  PackageCheck,
   Search,
   RefreshCw,
 } from "lucide-react";
+import { StatTileRow } from "../../components/list/StatTileRow";
 import {
   Badge,
   Button,
@@ -124,8 +127,66 @@ export function Batches() {
   // when there is genuinely nothing to show yet (issue #40).
   const showSkeleton = isLoading && batches.length === 0 && !error;
 
+  const availableLots = useMemo(
+    () => batches.filter((b) => (b.quantityRemaining ?? 0) > 0).length,
+    [batches]
+  );
+  const expiringSoonLots = useMemo(
+    () =>
+      batches.filter(
+        (b) =>
+          b.daysUntilExpiry != null &&
+          b.daysUntilExpiry > 0 &&
+          b.daysUntilExpiry <= 30
+      ).length,
+    [batches]
+  );
+  const pastDueLots = useMemo(
+    () =>
+      batches.filter(
+        (b) =>
+          b.isExpired || (b.daysUntilExpiry != null && b.daysUntilExpiry <= 0)
+      ).length,
+    [batches]
+  );
+
   return (
     <div className="space-y-4">
+      {/* Operational KPI Cards */}
+      <StatTileRow
+        tiles={[
+          {
+            label: "Total Batches",
+            value: isLoading ? "—" : total,
+            sublabel: "Tracked inventory lots",
+            icon: <Boxes className="size-6" />,
+            tone: "neutral",
+          },
+          {
+            label: "Stocked Lots",
+            value: isLoading ? "—" : availableLots,
+            sublabel: "Available remaining inventory",
+            icon: <PackageCheck className="size-6" />,
+            tone: "success",
+            sublabelTone: "success",
+          },
+          {
+            label: "Expiring ≤ 30d",
+            value: isLoading ? "—" : expiringSoonLots,
+            sublabel: "Batches near expiration",
+            icon: <Clock className="size-6" />,
+            tone: "warning",
+          },
+          {
+            label: "Past Due Lots",
+            value: isLoading ? "—" : pastDueLots,
+            sublabel: "Critical action required",
+            icon: <AlertTriangle className="size-6" />,
+            tone: "destructive",
+          },
+        ]}
+      />
+
       {/* Controls row */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 max-w-md">

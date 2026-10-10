@@ -1,0 +1,32 @@
+flowchart TB
+  subgraph Routes
+    RT["routes/*  (Express Router)"]
+  end
+  subgraph Middleware
+    MW["auth-context · session · rbac · permissions"]
+  end
+  subgraph Services
+    SV["services/*"]
+    SM["stock-movement"]
+  end
+  subgraph Shared["@dms/shared"]
+    SC["schemas · money · sku · permissions · inputs"]
+  end
+  subgraph Data["@dms/db"]
+    PR["prisma client"]
+  end
+  HTTP["http/*  (errors · async-handler · error-handler)"]
+
+  RT --> MW
+  RT --> HTTP
+  RT --> SV
+  RT --> SC
+  MW --> SV
+  MW --> HTTP
+  MV["middleware"] --> SC
+  SV --> SM
+  SV --> SC
+  SV --> PR
+  SM --> PR
+  SC -.->|"types only"| SV
+  PR --> PG[("PostgreSQL")]

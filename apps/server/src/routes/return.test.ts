@@ -49,6 +49,20 @@ vi.mock("@dms/db", () => ({
   prisma: { ...models, $transaction: transaction },
 }));
 
+vi.mock("../services/return-pdf", () => ({
+  generateReturnPdf: vi.fn(async () => Buffer.from("%PDF-1.4 mock credit note")),
+}));
+
+vi.mock("../services/settings", () => ({
+  getCompanySettings: vi.fn(async () => ({
+    displayName: "Mock Company",
+    address: "123 Market St",
+    gstin: "27AAAAA0000A1Z5",
+    phone: "555-0199",
+    email: "billing@mock.com",
+  })),
+}));
+
 const app = createApp();
 
 const ORG = "org_1";
@@ -867,3 +881,46 @@ describe("DELETE /api/returns/:id", () => {
     expect(models.return.delete).not.toHaveBeenCalled();
   });
 });
+
+describe("GET /api/returns/:id/pdf", () => {
+  it("generates a return note / credit note PDF with inline content-disposition header", async () => {
+    models.return.findFirst.mockResolvedValue(returnFixture());
+
+    const res = await request(app)
+      .get("/api/returns/ret_1/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/pdf/);
+    expect(res.headers["content-disposition"]).toBe(
+      'inline; filename="return-note-RET-001.pdf"'
+    );
+  });
+
+  it("returns 404 when return record does not exist", async () => {
+    models.return.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/returns/ret_missing/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("RETURN_NOT_FOUND");
+  });
+});
+
+describe("GET /api/returns/:id/html", () => {
+  it("renders credit note HTML template cleanly", async () => {
+    models.return.findFirst.mockResolvedValue(returnFixture());
+
+    const res = await request(app)
+      .get("/api/returns/ret_1/html")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/html/);
+    expect(res.text).toContain("CREDIT NOTE (SALE RETURN)");
+    expect(res.text).toContain("RET-001");
+  });
+});
+

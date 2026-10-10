@@ -1,0 +1,35 @@
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant R as requireRoutePermission
+  participant SR as saleRouter
+  participant SS as SaleService
+  participant SH as @dms/shared
+  participant SM as applyStockMovement
+  participant DB as Prisma
+
+  C->>R: POST /api/sales {items, overrideCreditLimit?}
+  R->>DB: member → customRole → permissions
+  R-->>C: 403 PERMISSION_DENIED (if not sales:create)
+  R->>SR: next()
+  SR->>SH: SaleInvoiceSchema.parse(body)
+  SR->>SS: createSale(data, organizationId, userId)
+  SS->>DB: product.findMany(ids, organizationId)
+  SS->>SH: calculateSaleBreakdown(...)
+  SS->>SS: isInvalidSaleTotal(total)?
+  SS->>DB: BEGIN $transaction
+  SS->>DB: customer.findFirst(id, organizationId)
+  SS->>DB: companySettings.findUnique(creditTermDays)
+  SS->>SS: dueDate = saleDate + creditTermDays
+  alt projected > creditLimit && !override
+    SS-->>C: 409 CREDIT_LIMIT_EXCEEDED
+  end
+  SS->>DB: inventory.findFirst (shortage pre-check)
+  loop each item
+    SS->>SM: applyStockMovement({direction: out})
+    SM->>DB: updateMany(gte) → decrement + InventoryLog
+    SM->>DB: deductFirstExpiredFirstOut
+  end
+  SS->>DB: sale.create({items, batchId})
+  SS->>DB: COMMIT
+  SS-->>C: 201 Sale

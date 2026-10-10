@@ -33,8 +33,11 @@ export async function getDashboardStats(organizationId: string) {
     recentPurchases,
     topInventory,
     expiringSoonCount,
+    expiredCount,
     expiringBatches,
     outstanding,
+    returnCreditsRows,
+    unallocatedPayments,
   ] = await Promise.all([
     prisma.product.count({ where: { organizationId } }),
     prisma.customer.count({ where: { organizationId } }),
@@ -92,20 +95,27 @@ export async function getDashboardStats(organizationId: string) {
       orderBy: { quantityOnHand: "desc" },
       take: 10,
     }),
-    // The expiring-soon card: how many lots run out of time inside a month,
-    // and the first few of them in expiry order.
+    // Batches expiring in the near future (between now and threshold)
     prisma.stockBatch.count({
       where: {
         organizationId,
         quantityRemaining: { gt: 0 },
-        expiryDate: { not: null, lte: threshold },
+        expiryDate: { not: null, gte: now, lte: threshold },
+      },
+    }),
+    // Already-expired batches needing write-off
+    prisma.stockBatch.count({
+      where: {
+        organizationId,
+        quantityRemaining: { gt: 0 },
+        expiryDate: { not: null, lt: now },
       },
     }),
     prisma.stockBatch.findMany({
       where: {
         organizationId,
         quantityRemaining: { gt: 0 },
-        expiryDate: { not: null, lte: threshold },
+        expiryDate: { not: null, gte: now, lte: threshold },
       },
       include: {
         product: { select: { id: true, name: true, productCode: true, unit: true } },
@@ -113,14 +123,46 @@ export async function getDashboardStats(organizationId: string) {
       orderBy: { expiryDate: "asc" },
       take: 5,
     }),
-    // The real Outstanding figure (ADR 0009): the sum of what every active,
-    // non-cancelled invoice still owes. Replaces the old 25%-of-sales
-    // placeholder, which was a number with no relationship to the ledger.
+    // The real Outstanding figure: sum of unpaid balances on non-cancelled invoices
     prisma.sale.aggregate({
       where: { organizationId, deletedAt: null, status: { not: "Cancelled" } },
       _sum: { totalAmount: true, amountPaid: true },
     }),
+    // Active customer sale returns reducing customer debt
+    prisma.return.findMany({
+      where: { organizationId, deletedAt: null, returnType: "SALE" },
+      select: {
+        items: {
+          select: {
+            quantity: true,
+            unitPrice: true,
+            taxAmount: true,
+            discount: true,
+          },
+        },
+      },
+    }),
+    // Unallocated payments sitting as cash on customer accounts
+    prisma.payment.aggregate({
+      where: { organizationId, deletedAt: null, saleId: null },
+      _sum: { amount: true },
+    }),
   ]);
+
+  const returnCredits = returnCreditsRows.reduce(
+    (sum, ret) =>
+      sum +
+      ret.items.reduce(
+        (lineSum, item) =>
+          lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+        0
+      ),
+    0
+  );
+  const unpaidSales =
+    (outstanding._sum.totalAmount ?? 0) - (outstanding._sum.amountPaid ?? 0);
+  const unallocated = unallocatedPayments._sum.amount ?? 0;
+  const netOutstanding = Math.max(0, unpaidSales - returnCredits - unallocated);
 
   return {
     totalProducts,
@@ -135,7 +177,8 @@ export async function getDashboardStats(organizationId: string) {
     recentPurchases,
     topInventory,
     expiringSoonCount,
+    expiredCount,
     expiringBatches,
-    outstanding: (outstanding._sum.totalAmount ?? 0) - (outstanding._sum.amountPaid ?? 0),
+    outstanding: netOutstanding,
   };
 }

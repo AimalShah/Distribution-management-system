@@ -1,4 +1,5 @@
 import { calculateSaleBreakdown } from "@dms/shared";
+import { escapeHtml } from "./html-utils";
 
 export interface SaleInvoiceRenderData {
   saleCode: string;
@@ -68,14 +69,14 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     : null;
 
   const isTaxInvoice = sale.invoiceType === "tax";
-  const customerName = sale.customer?.name || "Cash Customer";
-  const customerEmail = sale.customer?.email || "";
-  const customerPhone = sale.customer?.phone || "";
-  const customerAddress = sale.customer?.address || "";
+  const customerName = escapeHtml(sale.customer?.name || "Cash Customer");
+  const customerEmail = escapeHtml(sale.customer?.email || "");
+  const customerPhone = escapeHtml(sale.customer?.phone || "");
+  const customerAddress = escapeHtml(sale.customer?.address || "");
 
-  const companyName = sale.company?.name?.trim() || "Distribution Management System";
-  const companyAddress = sale.company?.address?.trim() || "";
-  const companyGstin = sale.company?.gstin?.trim() || "";
+  const companyName = escapeHtml(sale.company?.name?.trim() || "Distribution Management System");
+  const companyAddress = escapeHtml(sale.company?.address?.trim() || "");
+  const companyGstin = escapeHtml(sale.company?.gstin?.trim() || "");
 
   const items = sale.items || [];
 
@@ -110,8 +111,8 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
   const itemRows = items
     .map((item, idx) => {
       const lineTotal = item.totalPrice ?? item.quantity * item.unitPrice;
-      const prodName = item.product?.name || `Item #${idx + 1}`;
-      const prodCode = item.product?.productCode ? `(${item.product.productCode})` : "";
+      const prodName = escapeHtml(item.product?.name || `Item #${idx + 1}`);
+      const prodCode = item.product?.productCode ? `(${escapeHtml(item.product.productCode)})` : "";
       const cgst = item.cgstRate ?? 0;
       const sgst = item.sgstRate ?? 0;
       const igst = item.igstRate ?? 0;
@@ -141,7 +142,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${isTaxInvoice ? "Tax Invoice" : "Invoice"} ${sale.saleCode}</title>
+  <title>${isTaxInvoice ? "Tax Invoice" : "Invoice"} ${escapeHtml(sale.saleCode)}</title>
   <style>
     * { box-sizing: border-box; }
     body {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import useSWR from "swr";
-import { ArrowLeft, Copy, MessageCircle, RefreshCw, Wallet } from "lucide-react";
+import { ArrowLeft, Copy, CreditCard, Download, Loader2, MessageCircle, Printer, Receipt, RefreshCw, RotateCcw, Scale, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -61,6 +61,7 @@ export default function CustomerLedgerPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  const [downloadBusy, setDownloadBusy] = useState(false);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -68,6 +69,7 @@ export default function CustomerLedgerPage() {
     if (from) params.set("from", from);
 
     if (to) params.set("to", to);
+
     const qs = params.toString();
 
     return qs ? `?${qs}` : "";
@@ -154,6 +156,42 @@ export default function CustomerLedgerPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!id || !ledger) return;
+    setDownloadBusy(true);
+
+    try {
+      const response = await fetch(`/api/customers/${id}/statement/pdf${queryString}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to generate PDF statement");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = ledger.customer.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const dateStr = new Date().toISOString().split("T")[0];
+      a.download = `statement-${safeName}-${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("Statement PDF downloaded");
+    } catch {
+      toast.error("Failed to generate statement PDF");
+    } finally {
+      setDownloadBusy(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (!id || !ledger) return;
+    const url = `/api/customers/${id}/statement/pdf${queryString}`;
+    window.open(url, "_blank");
+  };
+
   return (
     <div className="space-y-5 animate-slideInUp">
       <ListPageHeader
@@ -191,6 +229,30 @@ export default function CustomerLedgerPage() {
             >
               <RefreshCw className="size-3.5 mr-2" />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleDownloadPdf()}
+              disabled={isLoading || !ledger || downloadBusy}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+            >
+              {downloadBusy ? (
+                <Loader2 className="size-3.5 mr-2 animate-spin" />
+              ) : (
+                <Download className="size-3.5 mr-2" />
+              )}
+              Download PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+              disabled={isLoading || !ledger}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+            >
+              <Printer className="size-3.5 mr-2" />
+              Print
             </Button>
             <Button
               size="sm"
@@ -252,28 +314,30 @@ export default function CustomerLedgerPage() {
             label: "Opening balance",
             value: isLoading ? "—" : formatMoney(ledger?.openingBalance ?? 0),
             sublabel: "Owed before this window",
-            icon: <Wallet className="size-6" />,
+            icon: <Scale className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Invoices",
             value: isLoading ? "—" : formatMoney(ledger?.totals.invoices ?? 0),
             sublabel: "Billed in this window",
-            icon: <Wallet className="size-6" />,
+            icon: <Receipt className="size-6" />,
             tone: "success",
           },
           {
             label: "Returns credited",
             value: isLoading ? "—" : formatMoney(ledger?.totals.credits ?? 0),
             sublabel: "Goods handed back",
-            icon: <Wallet className="size-6" />,
+            icon: <RotateCcw className="size-6" />,
             tone: "warning",
           },
           {
             label: "Payments received",
             value: isLoading ? "—" : formatMoney(ledger?.totals.payments ?? 0),
             sublabel: "Invoices and on account",
-            icon: <Wallet className="size-6" />,
+            icon: <CreditCard className="size-6" />,
             tone: "success",
+            sublabelTone: "success",
           },
           {
             label: "Balance due",

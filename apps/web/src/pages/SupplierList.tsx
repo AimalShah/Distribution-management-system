@@ -4,6 +4,7 @@ import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
+  CheckCircle2,
   Edit,
   Plus,
   RefreshCw,
@@ -233,14 +234,15 @@ export default function SupplierList() {
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
+      {/* Operational KPI Cards */}
       <StatTileRow
         tiles={[
           {
             label: "Total Suppliers",
             value: isLoading ? "—" : totalSuppliers,
             sublabel: "Registered supply partners",
-            icon: <Truck className="size-6" />,
+            icon: <Building2 className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Active Vendors",
@@ -248,7 +250,7 @@ export default function SupplierList() {
               ? "—"
               : suppliersList.filter((s) => s.isActive).length,
             sublabel: "Fulfilling purchase orders",
-            icon: <Building2 className="size-6" />,
+            icon: <Truck className="size-6" />,
             tone: "success",
             sublabelTone: "success",
           },
@@ -256,7 +258,8 @@ export default function SupplierList() {
             label: "Supply Reliability",
             value: "98.4%",
             sublabel: "On-time batch fulfillment",
-            icon: <Truck className="size-6" />,
+            icon: <CheckCircle2 className="size-6" />,
+            tone: "warning",
           },
         ]}
       />

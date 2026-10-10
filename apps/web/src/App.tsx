@@ -29,6 +29,7 @@ const BillingPage = lazy(() => import("./pages/BillingPage"));
 const PermissionPage = lazy(() => import("./pages/PermissionPage"));
 const CompanySettingsPage = lazy(() => import("./pages/CompanySettingsPage"));
 const BatchesPage = lazy(() => import("./pages/BatchesPage"));
+const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function PageFallback() {
@@ -49,6 +50,16 @@ export function App() {
       />
 
       <Route element={<RequireAuth />}>
+        {/* Onboarding is shown to authenticated users who have no active organization */}
+        <Route
+          path="/onboarding"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <OnboardingPage />
+            </Suspense>
+          }
+        />
+
         <Route element={<AppShell />}>
           <Route
             path="/"

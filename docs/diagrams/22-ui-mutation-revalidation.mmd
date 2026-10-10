@@ -1,0 +1,35 @@
+%% UI-05 · Write path — form submit → mutate revalidation
+%% Source: components/*/*Form.tsx, *Dialog.tsx, pages/*, CompanySwitcher.tsx
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant D as Dialog / Form (RHF + zod)
+  participant API as lib/api
+  participant S as Server /api
+  participant SWR as SWR cache
+  participant T as sonner toast
+
+  U->>D: fill fields, submit
+  D->>D: zodResolver validates, isSubmitting = true
+  alt invalid
+    D-->>U: field-level errors
+  else valid
+    D->>API: api.post / put / patch / delete
+    API->>S: request (Authorization: Bearer)
+    alt server refuses (4xx/5xx)
+      S-->>API: error, code, details
+      API-->>D: rejects
+      D->>API: toFailure(err, fallback)
+      API-->>D: RequestFailure (code + details)
+      D->>T: toast.error(message + shortfallLine)
+      D->>D: keep form open, clear isSubmitting
+    else success
+      S-->>API: data
+      API-->>D: data
+      D->>SWR: mutate(listKey) — refetch the list
+      SWR-->>D: fresh rows
+      D->>T: toast.success(...)
+      D->>D: close dialog (or navigate on a full page form)
+    end
+  end
+  Note over SWR: Company switch is the exception:<br/>useSWRConfig().mutate(() => true)<br/>then window.location.reload()

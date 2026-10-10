@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AlertTriangle,
+  ArrowDownLeft,
+  Download,
   Plus,
   RefreshCw,
   RotateCw,
@@ -231,16 +234,28 @@ export default function ReturnList() {
               <RotateCw className="size-3.5" />
             </Button>
           ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-              onClick={() => setConfirmTarget(ret)}
-              disabled={confirmBusy}
-            >
-              <span className="sr-only">Delete</span>
-              <Trash2 className="size-3.5" />
-            </Button>
+            <div className="flex items-center justify-end gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
+                title="Download Credit / Debit Note (PDF)"
+                onClick={() => window.open(`/api/returns/${ret.id}/pdf`, "_blank")}
+              >
+                <span className="sr-only">Download Note</span>
+                <Download className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+                onClick={() => setConfirmTarget(ret)}
+                disabled={confirmBusy}
+              >
+                <span className="sr-only">Delete</span>
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
           );
         },
       },
@@ -292,7 +307,7 @@ export default function ReturnList() {
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
+      {/* Operational KPI Cards */}
       <StatTileRow
         tiles={[
           {
@@ -300,6 +315,7 @@ export default function ReturnList() {
             value: isLoading ? "—" : totalReturns,
             sublabel: "Processed return events",
             icon: <RotateCw className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Sale Handbacks",
@@ -307,8 +323,9 @@ export default function ReturnList() {
               ? "—"
               : returnsList.filter((r) => r.returnType === "SALE").length,
             sublabel: "Customer returns processed",
-            icon: <RotateCw className="size-6" />,
+            icon: <ArrowDownLeft className="size-6" />,
             tone: "success",
+            sublabelTone: "success",
           },
           {
             label: "Disposal Write-offs",
@@ -316,7 +333,7 @@ export default function ReturnList() {
               ? "—"
               : returnsList.filter((r) => r.returnType === "DAMAGED" || r.returnType === "EXPIRED").length,
             sublabel: "Damaged & expired items",
-            icon: <RotateCw className="size-6" />,
+            icon: <AlertTriangle className="size-6" />,
             tone: "warning",
           },
         ]}

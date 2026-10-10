@@ -3,9 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Download,
   Edit,
   MoreHorizontal,
+  PackageCheck,
   Plus,
+  Printer,
+  Receipt,
   RefreshCw,
   ShoppingCart,
   Trash2,
@@ -148,28 +152,32 @@ export default function PurchaseList() {
             <span className="font-semibold text-foreground text-xs block">
               {row.original.supplier?.companyName || "—"}
             </span>
-            <span className="font-mono text-xs text-primary font-medium">
-              {row.original.purchaseCode}
-            </span>
           </div>
         ),
       },
       {
         accessorKey: "purchaseDate",
         header: "Date",
-        cell: ({ row }) => formatDate(row.original.purchaseDate),
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatDate(row.original.purchaseDate)}
+          </span>
+        ),
       },
       {
         id: "items",
         header: "Items",
-        cell: ({ row }) =>
-          row.original._count?.purchaseItems ??
-          row.original.purchaseItems?.length ??
-          0,
+        cell: ({ row }) => (
+          <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
+            {row.original._count?.purchaseItems ??
+              row.original.purchaseItems?.length ??
+              0} pcs
+          </span>
+        ),
       },
       {
         accessorKey: "totalAmount",
-        header: "Total",
+        header: () => <div className="text-right">Total</div>,
         cell: ({ row }) => (
           <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {formatMoney(row.original.totalAmount)}
@@ -183,19 +191,34 @@ export default function PurchaseList() {
       },
       {
         id: "actions",
-        header: "Actions",
+        header: () => <div className="text-right">Actions</div>,
         cell: ({ row }) => {
           const purchase = row.original;
 
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8 p-0">
-                  <span className="sr-only">Open menu</span>
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+            <div className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-8 p-0">
+                    <span className="sr-only">Open menu</span>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => window.open(`/api/purchases/${purchase.id}/pdf`, "_blank")}
+                  className="cursor-pointer"
+                >
+                  <Download className="size-4 mr-2" />
+                  Download PO (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => window.open(`/api/purchases/${purchase.id}/html`, "_blank")}
+                  className="cursor-pointer"
+                >
+                  <Printer className="size-4 mr-2" />
+                  View & Print Order
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => navigate(`/purchases/${purchase.id}/edit`)}
                   className="cursor-pointer"
@@ -212,6 +235,7 @@ export default function PurchaseList() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           );
         },
       },
@@ -263,7 +287,7 @@ export default function PurchaseList() {
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
+      {/* Operational KPI Cards */}
       <StatTileRow
         tiles={[
           {
@@ -271,12 +295,13 @@ export default function PurchaseList() {
             value: isLoading ? "—" : totalPurchases,
             sublabel: "Supplier purchase requests",
             icon: <ShoppingCart className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Page Volume",
             value: isLoading ? "—" : formatMoney(totalSpent),
             sublabel: "Current view commitment",
-            icon: <ShoppingCart className="size-6" />,
+            icon: <Receipt className="size-6" />,
             tone: "success",
           },
           {
@@ -285,7 +310,8 @@ export default function PurchaseList() {
               ? "—"
               : `${purchaseList.filter(p => p.status.toLowerCase() === 'received' || p.status.toLowerCase() === 'completed').length} / ${purchaseList.length}`,
             sublabel: "Received at warehouse",
-            icon: <ShoppingCart className="size-6" />,
+            icon: <PackageCheck className="size-6" />,
+            tone: "warning",
             sublabelTone: "success",
           },
         ]}

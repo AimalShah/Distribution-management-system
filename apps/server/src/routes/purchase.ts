@@ -15,8 +15,66 @@ import {
   updatePurchase,
 } from "../services/purchase";
 import { requireUserId } from "../middleware/auth-context";
+import { generatePurchasePdf } from "../services/purchase-pdf";
+import { renderPurchaseOrderHtml } from "../services/purchase-order-template";
+import { getCompanySettings } from "../services/settings";
 
 export const purchaseRouter: Router = Router();
+
+async function withCompanyProfile<T extends object>(purchase: T, organizationId: string) {
+  const settings = await getCompanySettings(organizationId);
+
+  return {
+    ...purchase,
+    company: {
+      name: settings.displayName,
+      address: settings.address,
+      gstin: settings.gstin,
+    },
+  };
+}
+
+purchaseRouter.get(
+  "/:id/pdf",
+  asyncHandler(async (req, res) => {
+    const purchase = await getPurchaseById(
+      req.params.id,
+      req.auth.organizationId
+    );
+
+    const withComp = await withCompanyProfile(purchase, req.auth.organizationId);
+    const pdf = await generatePurchasePdf({
+      company: withComp.company,
+      purchase: withComp as any,
+    });
+
+    res
+      .type("pdf")
+      .set(
+        "Content-Disposition",
+        `inline; filename="purchase-order-${purchase.purchaseCode}.pdf"`
+      )
+      .send(Buffer.from(pdf));
+  })
+);
+
+purchaseRouter.get(
+  "/:id/html",
+  asyncHandler(async (req, res) => {
+    const purchase = await getPurchaseById(
+      req.params.id,
+      req.auth.organizationId
+    );
+
+    const withComp = await withCompanyProfile(purchase, req.auth.organizationId);
+    const html = renderPurchaseOrderHtml({
+      company: withComp.company,
+      purchase: withComp as any,
+    });
+
+    res.type("html").send(html);
+  })
+);
 
 purchaseRouter.get(
   "/",
@@ -94,7 +152,7 @@ purchaseRouter.put(
 purchaseRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deletePurchase(req.params.id, req.auth.organizationId);
+    await deletePurchase(req.params.id, req.auth.organizationId, req.auth.userId);
     res.status(204).send();
   })
 );

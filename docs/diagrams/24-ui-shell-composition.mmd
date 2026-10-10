@@ -1,0 +1,79 @@
+%% UI-07 · Shell composition and its local state
+%% Source: components/layout/AppShell.tsx, AppSidebar.tsx, Topbar.tsx, CompanySwitcher.tsx, ThemeSwitch.tsx
+classDiagram
+  class AppShell {
+    <<layout route>>
+    -isCollapsed : boolean
+    -isMobileOpen : boolean
+    -isDark : boolean
+    -notifications : NotificationItem[]
+    +useSWR("/dashboard/stats")
+    +useSWR("/inventory/low-stock?page=1&pageSize=5")
+    +toggleDarkMode()
+    +toggleSidebar()
+    +handleMarkNotificationsRead()
+    +showToast(title, message, type)
+  }
+  class AppSidebar {
+    <<navigation>>
+    +navSections : NavGroup[]
+    +useAuth().user → initials
+    +isActive(pathname)
+  }
+  class Topbar {
+    <<header>>
+    -searchQuery : string
+    -showSearch / showNotif / showUser : boolean
+    +useAuth().user / logout
+    +onToggleSidebar()
+    +onToggleDarkMode()
+  }
+  class ThemeSwitch {
+    <<theme control>>
+    +theme : "light" | "dark"
+    +localStorage "dms-theme"
+  }
+  class CompanySwitcher {
+    <<company control>>
+    +useActiveMembership()
+    +useSWR("/organizations")
+    +switchOrganization(id) → globalMutate + reload
+    +CreateCompanyDialog
+  }
+  class CreateCompanyDialog {
+    <<dialog>>
+    +useForm + zodResolver
+    +api.post("/organizations")
+  }
+  class Outlet {
+    <<react-router>>
+    +context : sales / lowStock / showToast
+  }
+  class Toaster {
+    <<sonner>>
+    +position="top-right"
+    +richColors
+  }
+  class NavGroup {
+    <<interface>>
+    +heading : string
+    +items : NavItem[]
+  }
+  class NavItem {
+    <<interface>>
+    +label : string
+    +icon : LucideIcon
+    +to : string
+  }
+
+  AppShell *-- AppSidebar
+  AppShell *-- Topbar
+  AppShell *-- Toaster
+  AppShell --> Outlet : renders active page
+  AppSidebar ..> NavGroup : navSections
+  NavGroup ..> NavItem
+  Topbar *-- ThemeSwitch
+  Topbar *-- CompanySwitcher
+  CompanySwitcher ..> CreateCompanyDialog : opens
+  CompanySwitcher ..> AppShell : reload after switch
+  AppShell ..> Toaster : showToast()

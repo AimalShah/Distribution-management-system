@@ -1,0 +1,33 @@
+flowchart LR
+  subgraph Clients
+    WEB["apps/web<br/>Vite + React Router SPA"]
+    ELEC["apps/desktop<br/>Electron shell 'Inventioo DMS'<br/>wraps apps/web"]
+  end
+
+  subgraph Server["apps/server (Express 4)"]
+    API["REST API<br/>/api/*"]
+    AUTHMW["better-auth<br/>/api/auth/*"]
+    HTMLEXP["Invoice HTML<br/>renderSaleInvoiceHtml"]
+    PDF["Puppeteer PDF<br/>generateSalePdf"]
+  end
+
+  subgraph Packages
+    SHARED["@dms/shared<br/>Zod schemas, money, SKU, RBAC"]
+    DB["@dms/db<br/>Prisma client + logging"]
+  end
+
+  PG[("PostgreSQL")]
+  RESEND["Resend<br/>verification email"]
+
+  WEB -->|"axios / cookie / Bearer"| API
+  ELEC --> WEB
+  WEB --> AUTHMW
+  API --> SHARED
+  API --> DB
+  API --> HTMLEXP
+  HTMLEXP --> PDF
+  AUTHMW --> SHARED
+  AUTHMW --> DB
+  AUTHMW --> RESEND
+  DB --> PG
+  API -->|"puppeteer"| CHROME["Headless Chromium"]

@@ -17,7 +17,8 @@ const { models, transaction } = vi.hoisted(() => {
     },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
-    return: { count: vi.fn() },
+    return: { count: vi.fn(), findMany: vi.fn() },
+    payment: { aggregate: vi.fn(), findMany: vi.fn() },
     inventory: {
       findFirst: vi.fn(),
       findFirstOrThrow: vi.fn(),
@@ -116,7 +117,9 @@ beforeEach(() => {
   models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 0, amountPaid: 0 } });
   models.customer.findFirst.mockResolvedValue({ id: "cus_1" });
   models.product.findMany.mockResolvedValue([{ id: "prod_1" }]);
+  models.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
   models.return.count.mockResolvedValue(0);
+  models.return.findMany.mockResolvedValue([]);
   models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 10 });
   models.inventory.findFirstOrThrow.mockResolvedValue({ id: "inv_1", quantityOnHand: 8 });
   models.inventory.update.mockResolvedValue({ quantityOnHand: 8 });
@@ -677,6 +680,40 @@ describe("POST /api/sales", () => {
       expect(res.body.code).toBe("CREDIT_LIMIT_OVERRIDE_FORBIDDEN");
       expect(res.body.error).toContain("permission to override a customer's credit limit");
       expect(models.sale.create).not.toHaveBeenCalled();
+    });
+
+    it("deducts customer return store credits from outstanding balance so returned goods do not falsely block sales", async () => {
+      // Customer has creditLimit of 100
+      models.customer.findFirst.mockResolvedValue({ id: "cus_1", creditLimit: 100 });
+      // Unpaid invoices = 80 - 10 = 70
+      models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 80, amountPaid: 10 } });
+      // Customer returned 30 worth of goods (store credit)
+      models.return.findMany.mockResolvedValue([
+        {
+          items: [
+            { quantity: 3, unitPrice: 10, taxAmount: 0, discount: 0 },
+          ],
+        },
+      ]);
+      // Net balance is 70 - 30 = 40. New sale total is 50 -> projected = 90 <= 100.
+      const res = await request(app).post("/api/sales").set(auth()).send(validBody);
+
+      expect(res.status).toBe(201);
+      expect(models.sale.create).toHaveBeenCalled();
+    });
+
+    it("deducts unallocated payments from outstanding balance", async () => {
+      // Customer has creditLimit of 100
+      models.customer.findFirst.mockResolvedValue({ id: "cus_1", creditLimit: 100 });
+      // Unpaid invoices = 80 - 10 = 70
+      models.sale.aggregate.mockResolvedValue({ _sum: { totalAmount: 80, amountPaid: 10 } });
+      // Customer has unallocated payments of 30 on account
+      models.payment.aggregate.mockResolvedValue({ _sum: { amount: 30 } });
+      // Net balance is 70 - 30 = 40. New sale total is 50 -> projected = 90 <= 100.
+      const res = await request(app).post("/api/sales").set(auth()).send(validBody);
+
+      expect(res.status).toBe(201);
+      expect(models.sale.create).toHaveBeenCalled();
     });
   });
 });

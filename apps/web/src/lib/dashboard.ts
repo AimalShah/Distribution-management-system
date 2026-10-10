@@ -40,9 +40,12 @@ export interface DashboardStats {
   lowStockCount: number;
   /** Batches with stock expiring inside the next 30 days. */
   expiringSoonCount: number;
+  /** Batches with stock already past expiry. */
+  expiredCount?: number;
   recentSales: RecentSale[];
   recentPurchases: RecentPurchase[];
   topInventory: StockRow[];
+  outstanding?: number;
 }
 
 /**

@@ -1,0 +1,16 @@
+stateDiagram-v2
+  [*] --> Pending
+  Pending --> Completed : update status
+  Pending --> Cancelled : POST /:id/cancel<br/>no payments, no returns
+  Completed --> Cancelled : POST /:id/cancel<br/>no payments, no returns
+  Cancelled --> Pending : POST /:id/uncancel<br/>statusBeforeCancel = Pending
+  Cancelled --> Completed : POST /:id/uncancel<br/>statusBeforeCancel = Completed
+  Pending --> Deleted : DELETE /:id (soft)<br/>stock re-credited
+  Completed --> Deleted : DELETE /:id (soft)<br/>stock re-credited
+  Deleted --> Pending : POST /:id/restore<br/>availability re-check
+  Deleted --> Completed : POST /:id/restore
+  note right of Deleted
+    deletedAt stamped.
+    Payments/returns block delete
+    and cancel.
+  end note

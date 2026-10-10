@@ -87,16 +87,19 @@ const singleShortage = z.object({
  * `toFailure`, when the page catches it.
  */
 export const api = {
-  get: (url: string) => client.get(url).then((response) => response.data),
+  get: <T = any>(url: string): Promise<T> => client.get<T>(url).then((response) => response.data),
 
-  post: <T>(url: string, body?: T) => client.post(url, body).then((response) => response.data),
+  post: <TResponse = any, TBody = unknown>(url: string, body?: TBody): Promise<TResponse> =>
+    client.post<TResponse>(url, body).then((response) => response.data),
 
-  put: <T>(url: string, body?: T) => client.put(url, body).then((response) => response.data),
+  put: <TResponse = any, TBody = unknown>(url: string, body?: TBody): Promise<TResponse> =>
+    client.put<TResponse>(url, body).then((response) => response.data),
 
   // PATCH is a partial update, and the server has endpoints that only speak it
   // (`PATCH /members/:id/role`). A page reaching past this to the axios client
   // for those would be the one place the transport is not behind the seam.
-  patch: <T>(url: string, body?: T) => client.patch(url, body).then((response) => response.data),
+  patch: <TResponse = any, TBody = unknown>(url: string, body?: TBody): Promise<TResponse> =>
+    client.patch<TResponse>(url, body).then((response) => response.data),
 
   delete: (url: string) => client.delete(url).then((response) => response.data),
 };

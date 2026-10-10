@@ -1,0 +1,344 @@
+classDiagram
+  class User {
+    +id : String
+    +name : String
+    +email : String
+    +emailVerified : Boolean
+    +image : String?
+    +organizationId : String?
+    +isOwner : Boolean?
+    +isFormComplete : Boolean?
+    +role : String?
+    +banned : Boolean?
+    +banReason : String?
+    +banExpires : DateTime?
+    +createdAt : DateTime
+    +updatedAt : DateTime
+  }
+  class Session {
+    +id : String
+    +expiresAt : DateTime
+    +token : String
+    +ipAddress : String?
+    +userAgent : String?
+    +userId : String
+    +activeOrganizationId : String?
+    +impersonatedBy : String?
+  }
+  class Account {
+    +id : String
+    +accountId : String
+    +providerId : String
+    +userId : String
+    +password : String?
+    +accessToken : String?
+  }
+  class Verification {
+    +id : String
+    +identifier : String
+    +value : String
+    +expiresAt : DateTime
+  }
+  class Organization {
+    +id : String
+    +name : String
+    +slug : String?
+    +logo : String?
+    +metadata : String?
+    +createdAt : DateTime
+  }
+  class CompanySettings {
+    +id : String
+    +organizationId : String
+    +displayName : String?
+    +address : String?
+    +gstin : String?
+    +skuFormat : String
+    +skuSeparator : String
+    +skuSequence : Int
+    +returnWindowDays : Int
+    +returnsEnabled : Boolean
+    +creditTermDays : Int
+  }
+  class Member {
+    +id : String
+    +organizationId : String
+    +userId : String
+    +role : String
+    +roleId : String?
+    +createdAt : DateTime
+  }
+  class Role {
+    +id : String
+    +name : String
+    +description : String?
+    +organizationId : String
+    +isSystem : Boolean
+  }
+  class RolePermission {
+    +id : String
+    +roleId : String
+    +resource : String
+    +action : String
+  }
+  class Invitation {
+    +id : String
+    +organizationId : String
+    +email : String
+    +role : String?
+    +status : String
+    +expiresAt : DateTime
+    +inviterId : String
+  }
+  class Supplier {
+    +id : String
+    +supplierCode : String
+    +organizationId : String
+    +contactPerson : String
+    +companyName : String
+    +email : String?
+    +phone : String?
+    +isActive : Boolean
+  }
+  class Customer {
+    +id : String
+    +customerCode : String
+    +organizationId : String
+    +name : String
+    +email : String?
+    +phone : String?
+    +creditLimit : Float?
+    +creditTermDays : Int?
+    +isActive : Boolean
+  }
+  class Product {
+    +id : String
+    +productCode : String
+    +organizationId : String
+    +name : String
+    +categoryId : String
+    +brandId : String
+    +unit : String
+    +unitPrice : Float
+    +unitCost : Float
+    +isActive : Boolean
+    +gstApplicable : Boolean
+    +gstRate : Float
+  }
+  class Category {
+    +id : String
+    +name : String
+    +organizationId : String
+    +shortCode : String?
+  }
+  class Brand {
+    +id : String
+    +name : String
+    +organizationId : String
+    +categoryId : String
+    +shortCode : String?
+  }
+  class Inventory {
+    +id : String
+    +productId : String
+    +organizationId : String
+    +quantityOnHand : Int
+    +quantityReserved : Int
+    +reorderLevel : Int
+    +maxStockLevel : Int?
+  }
+  class InventoryLog {
+    +id : String
+    +inventoryId : String
+    +productId : String
+    +userId : String
+    +movementType : InventoryMovement
+    +quantity : Int
+    +previousQty : Int
+    +newQty : Int
+    +reason : String?
+    +reference : String?
+    +createdAt : DateTime
+  }
+  class InventoryMovement {
+    <<enumeration>>
+    IN
+    OUT
+    ADJUSTMENT
+    TRANSFER
+    RETURN
+    DAMAGED
+    EXPIRED
+  }
+  class Purchase {
+    +id : String
+    +purchaseCode : String
+    +organizationId : String
+    +supplierId : String
+    +totalAmount : Float
+    +taxAmount : Float?
+    +discount : Float?
+    +status : String
+    +purchaseDate : DateTime
+  }
+  class PurchaseItem {
+    +id : String
+    +purchaseId : String
+    +productId : String
+    +quantity : Int
+    +unitCost : Float
+    +totalCost : Float
+    +batchNumber : String?
+    +expiryDate : DateTime?
+    +taxPercent : Float?
+    +discount : Float?
+  }
+  class Sale {
+    +id : String
+    +saleCode : String
+    +customerId : String
+    +organizationId : String
+    +totalAmount : Float
+    +taxAmount : Float?
+    +discount : Float?
+    +status : String
+    +invoiceType : String
+    +isInterState : Boolean
+    +cgstAmount : Float
+    +sgstAmount : Float
+    +igstAmount : Float
+    +dueDate : DateTime?
+    +amountPaid : Float
+    +statusBeforeCancel : String?
+    +deletedAt : DateTime?
+    +saleDate : DateTime
+  }
+  class SaleItem {
+    +id : String
+    +saleId : String
+    +productId : String
+    +quantity : Int
+    +unitPrice : Float
+    +totalPrice : Float
+    +taxPercent : Float?
+    +discount : Float?
+    +batchId : String?
+    +cgstRate : Float
+    +sgstRate : Float
+    +igstRate : Float
+    +cgstAmount : Float
+    +sgstAmount : Float
+    +igstAmount : Float
+  }
+  class Return {
+    +id : String
+    +returnCode : String
+    +organizationId : String
+    +returnType : ReturnType
+    +returnDate : DateTime
+    +reason : String?
+    +userId : String
+    +saleId : String?
+    +purchaseId : String?
+    +deletedAt : DateTime?
+  }
+  class ReturnItem {
+    +id : String
+    +returnId : String
+    +productId : String
+    +quantity : Int
+    +taxAmount : Float
+    +discount : Float
+    +unitPrice : Float
+    +note : String?
+    +condition : ReturnCondition
+    +reason : String?
+  }
+  class ReturnType {
+    <<enumeration>>
+    SALE
+    PURCHASE
+    EXPIRED
+    DAMAGED
+  }
+  class ReturnCondition {
+    <<enumeration>>
+    RESTOCKABLE
+    DAMAGED
+  }
+  class Payment {
+    +id : String
+    +paymentCode : String
+    +organizationId : String
+    +customerId : String
+    +saleId : String?
+    +amount : Float
+    +method : String
+    +reference : String?
+    +note : String?
+    +paidAt : DateTime
+    +userId : String
+    +deletedAt : DateTime?
+  }
+  class StockBatch {
+    +id : String
+    +productId : String
+    +organizationId : String
+    +batchNumber : String
+    +expiryDate : DateTime?
+    +quantityRemaining : Int
+    +quantityReceived : Int
+    +unitCost : Float
+    +purchaseItemId : String?
+    +receivedAt : DateTime
+  }
+
+  User "1" --> "*" Session : sessions
+  User "1" --> "*" Account : accounts
+  User "1" --> "*" Member : members
+  User "1" --> "*" Invitation : invitations
+  User "1" --> "*" InventoryLog : inventoryLogs
+  User "1" --> "*" Return : returns
+  User "1" --> "*" Payment : payments
+  Session ..> Organization : activeOrganizationId
+  Organization "1" --> "*" Member : members
+  Organization "1" --> "*" Invitation : invitations
+  Organization "1" --> "0..1" CompanySettings : settings
+  Organization "1" --> "*" Role : roles
+  Organization "1" --> "*" Product : Products
+  Organization "1" --> "*" Purchase : Purchases
+  Organization "1" --> "*" Sale : Sales
+  Organization "1" --> "*" Return : Returns
+  Organization "1" --> "*" Supplier : Suppliers
+  Organization "1" --> "*" Customer : Customers
+  Organization "1" --> "*" Category : Categories
+  Organization "1" --> "*" Brand : Brands
+  Organization "1" --> "*" Inventory : Inventory
+  Organization "1" --> "*" Payment : Payments
+  Organization "1" --> "*" StockBatch : batches
+  Member --> Role : customRole
+  Role "1" --> "*" RolePermission : permissions
+  Role "1" --> "*" Member : members
+  Category "1" --> "*" Product : products
+  Category "1" --> "*" Brand : brands
+  Brand "1" --> "*" Product : products
+  Product "1" --> "0..1" Inventory : inventory
+  Product "1" --> "*" InventoryLog : logs
+  Product "1" --> "*" PurchaseItem : purchaseItems
+  Product "1" --> "*" SaleItem : saleItems
+  Product "1" --> "*" ReturnItem : returnItems
+  Product "1" --> "*" StockBatch : batches
+  Inventory "1" --> "*" InventoryLog : logs
+  Supplier "1" --> "*" Purchase : purchase
+  Purchase "1" --> "*" PurchaseItem : purchaseItems
+  Purchase "1" --> "*" Return : returns
+  PurchaseItem "1" --> "*" StockBatch : batches
+  Sale "1" --> "*" SaleItem : items
+  Sale "1" --> "*" Return : returns
+  Sale "1" --> "*" Payment : payments
+  SaleItem --> StockBatch : batch
+  Return "1" --> "*" ReturnItem : items
+  ReturnItem --> Product : product
+  InventoryLog ..> InventoryMovement
+  Return ..> ReturnType
+  ReturnItem ..> ReturnCondition

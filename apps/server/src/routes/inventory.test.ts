@@ -29,7 +29,7 @@ const { models, transaction } = vi.hoisted(() => {
       create: vi.fn(),
     },
     product: { findFirst: vi.fn(), findMany: vi.fn() },
-    stockBatch: { findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
+    stockBatch: { findMany: vi.fn(), count: vi.fn(), update: vi.fn(), upsert: vi.fn() },
     reorderLevel,
   };
 
@@ -138,6 +138,7 @@ beforeEach(() => {
   // nothing to touch.
   models.stockBatch.findMany.mockResolvedValue([]);
   models.stockBatch.count.mockResolvedValue(0);
+  models.stockBatch.upsert.mockResolvedValue({});
 });
 
 describe("organization context", () => {
@@ -397,9 +398,29 @@ describe("POST /api/inventory", () => {
         }),
       })
     );
+    expect(models.inventoryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productId: "prod_1",
+        movementType: "IN",
+        quantity: 25,
+        reason: "Opening Stock",
+        reference: "OPENING",
+      }),
+    });
+    expect(models.stockBatch.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          productId_batchNumber_organizationId: expect.objectContaining({
+            productId: "prod_1",
+            batchNumber: expect.stringMatching(/^OPENING-/),
+            organizationId: ORG,
+          }),
+        }),
+      })
+    );
   });
 
-  it("keeps an explicit zero instead of falling back to the default", async () => {
+  it("keeps an explicit zero and creates no opening log or batch", async () => {
     await request(app)
       .post("/api/inventory")
       .set(auth())
@@ -413,6 +434,8 @@ describe("POST /api/inventory", () => {
         }),
       })
     );
+    expect(models.inventoryLog.create).not.toHaveBeenCalled();
+    expect(models.stockBatch.upsert).not.toHaveBeenCalled();
   });
 
   it("refuses a product from another organization before writing", async () => {

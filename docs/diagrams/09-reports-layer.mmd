@@ -1,0 +1,33 @@
+classDiagram
+  class InventoryReportService {
+    <<module>>
+    +getBasicInventoryReport(...)
+    +getStockValuationReport(...)
+    +getInventoryMovements(...)
+    +getLowStockReport(...)
+    +getExpiryReport(...)
+    +getFullInventoryReports(...)
+  }
+  class PurchaseReportService {
+    <<module>>
+    +getBasicPurchaseReport(...)
+    +getPurchaseBySupplier(...)
+    +getPurchaseByProduct(...)
+    +getPurchaseByBrand(...)
+    +getFullPurchaseReport(...)
+  }
+  class SalesReportService {
+    <<module>>
+    +getBasicSalesReport(...)
+    +getSalesByCustomer(...)
+    +getSalesByProduct(...)
+    +getSalesByBrand(...)
+    +getFullSalesReport(...)
+    +getSalesAgingReport(...)
+  }
+  class ScopeModule {
+    <<module>>
+  }
+  InventoryReportService ..> ScopeModule
+  PurchaseReportService ..> ScopeModule
+  SalesReportService ..> ScopeModule

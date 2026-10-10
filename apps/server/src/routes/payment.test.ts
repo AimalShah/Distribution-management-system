@@ -12,8 +12,10 @@ const { models, transaction } = vi.hoisted(() => {
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      aggregate: vi.fn(),
     },
     customer: { findFirst: vi.fn() },
+    return: { findMany: vi.fn() },
     sale: {
       findFirst: vi.fn(),
       update: vi.fn(),
@@ -33,6 +35,20 @@ const { models, transaction } = vi.hoisted(() => {
 vi.mock("@dms/db", () => ({
   default: { ...models, $transaction: transaction },
   prisma: { ...models, $transaction: transaction },
+}));
+
+vi.mock("../services/payment-pdf", () => ({
+  generatePaymentPdf: vi.fn(async () => Buffer.from("%PDF-1.4 mock payment")),
+}));
+
+vi.mock("../services/settings", () => ({
+  getCompanySettings: vi.fn(async () => ({
+    displayName: "Mock Company",
+    address: "123 Market St",
+    gstin: "27AAAAA0000A1Z5",
+    phone: "555-0199",
+    email: "billing@mock.com",
+  })),
 }));
 
 const app = createApp();
@@ -91,7 +107,9 @@ beforeEach(() => {
   models.payment.findFirst.mockResolvedValue(paymentFixture());
   models.payment.create.mockResolvedValue(paymentFixture());
   models.payment.update.mockResolvedValue(paymentFixture());
+  models.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
   models.customer.findFirst.mockResolvedValue({ id: "cus_1" });
+  models.return.findMany.mockResolvedValue([]);
   models.sale.findFirst.mockResolvedValue(saleFixture());
   models.sale.updateMany.mockResolvedValue({ count: 1 });
   models.sale.update.mockResolvedValue(saleFixture());
@@ -267,6 +285,54 @@ describe("POST /api/payments", () => {
     expect(res.body.code).toBe("SALE_CANCELLED");
     expect(models.payment.create).not.toHaveBeenCalled();
   });
+
+  it("records a payment with method Store Credit when customer has available store credit", async () => {
+    models.return.findMany.mockResolvedValue([
+      {
+        items: [{ quantity: 3, unitPrice: 10, taxAmount: 0, discount: 0 }],
+      },
+    ]);
+    models.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+
+    const res = await request(app)
+      .post("/api/payments")
+      .set(auth())
+      .send({ ...validBody, method: "Store Credit", amount: 30 });
+
+    expect(res.status).toBe(201);
+    expect(models.sale.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { amountPaid: { increment: 30 } },
+      })
+    );
+    expect(models.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          method: "Store Credit",
+          amount: 30,
+        }),
+      })
+    );
+  });
+
+  it("refuses a Store Credit payment when customer has insufficient store credit balance", async () => {
+    models.return.findMany.mockResolvedValue([
+      {
+        items: [{ quantity: 1, unitPrice: 10, taxAmount: 0, discount: 0 }],
+      },
+    ]);
+    models.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+
+    const res = await request(app)
+      .post("/api/payments")
+      .set(auth())
+      .send({ ...validBody, method: "Store Credit", amount: 25 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STORE_CREDIT");
+    expect(res.body.details).toEqual({ available: 10, requested: 25 });
+    expect(models.payment.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("DELETE /api/payments/:id", () => {
@@ -328,3 +394,41 @@ describe("DELETE /api/payments/:id", () => {
     expect(models.payment.update).toHaveBeenCalled();
   });
 });
+
+describe("GET /api/payments/:id/pdf", () => {
+  it("generates a payment collection receipt PDF with inline content-disposition header", async () => {
+    const res = await request(app)
+      .get("/api/payments/pay_1/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/pdf/);
+    expect(res.headers["content-disposition"]).toBe(
+      'inline; filename="receipt-pay_1.pdf"'
+    );
+  });
+
+  it("returns 404 when payment does not exist", async () => {
+    models.payment.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/payments/pay_missing/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("PAYMENT_NOT_FOUND");
+  });
+});
+
+describe("GET /api/payments/:id/html", () => {
+  it("renders payment receipt HTML template cleanly", async () => {
+    const res = await request(app)
+      .get("/api/payments/pay_1/html")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/html/);
+    expect(res.text).toContain("OFFICIAL RECEIPT");
+  });
+});
+

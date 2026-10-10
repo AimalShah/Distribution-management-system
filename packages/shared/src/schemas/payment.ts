@@ -12,6 +12,7 @@ export const PaymentMethods = [
   "Bank Transfer",
   "Mobile Wallet",
   "Cheque",
+  "Store Credit",
   "Other",
 ] as const;
 

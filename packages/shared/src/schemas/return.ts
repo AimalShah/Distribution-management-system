@@ -91,8 +91,8 @@ const returnBaseSchema = z.object({
   // they pressed submit.
   returnDate: optionalDate,
   reason: optionalText("Reason cannot be empty"),
-  saleId: z.string().trim().min(1, "Please select a sale").optional(),
-  purchaseId: z.string().trim().min(1, "Please select a purchase").optional(),
+  saleId: optionalText("Please select a sale"),
+  purchaseId: optionalText("Please select a purchase"),
   items: z.array(ReturnItemSchema).min(1, "A return needs at least one item"),
 });
 

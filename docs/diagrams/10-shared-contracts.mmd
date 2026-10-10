@@ -1,0 +1,208 @@
+classDiagram
+  namespace Primitives {
+    class inputs {
+      <<module>>
+      +optionalText(msg)
+      +nullableText(msg)
+      +nullableEmail
+      +requiredDate
+      +optionalDate
+      +optionalNumber
+      +optionalMoney
+      +nullableMoneyInput(label)
+      +optionalPercent
+    }
+    class pagination {
+      <<module>>
+      +paginationQuerySchema : zod
+      +paginatedResponseSchema(item)
+    }
+    class SaleMoney {
+      <<module>>
+      +calculateSaleBreakdown(params) : SaleBreakdownResult
+      +isInvalidSaleTotal(total) : boolean
+    }
+    class Sku {
+      <<module>>
+      +SKU_TOKENS
+      +prefixOf(value, length)
+      +codeFor(shortCode, name)
+      +tokensIn(format)
+      +parseSkuFormat(format)
+      +buildSku(format, separator, context)
+    }
+  }
+
+  namespace MoneyTypes {
+    class SaleBreakdownLineInput {
+      <<interface>>
+      +productId? : string
+      +quantity : number
+      +unitPrice : number
+      +subtotal? : number
+      +gstApplicable? : boolean
+      +gstRate? : number
+      +taxPercent? : number
+      +cgstAmount? : number
+      +sgstAmount? : number
+      +igstAmount? : number
+    }
+    class SaleBreakdownParams {
+      <<interface>>
+      +items : SaleBreakdownLineInput[]
+      +isInterState? : boolean
+      +discount? : number
+      +taxAmount? : number
+      +cgstAmount? : number
+      +sgstAmount? : number
+      +igstAmount? : number
+    }
+    class SaleBreakdownItem {
+      <<interface>>
+      +subtotal : number
+      +taxPercent : number
+      +cgstRate : number
+      +sgstRate : number
+      +igstRate : number
+      +cgstAmount : number
+      +sgstAmount : number
+      +igstAmount : number
+    }
+    class SaleBreakdownResult {
+      <<interface>>
+      +subtotal : number
+      +cgstAmount : number
+      +sgstAmount : number
+      +igstAmount : number
+      +taxAmount : number
+      +discount : number
+      +total : number
+      +items : SaleBreakdownItem[]
+    }
+    class SkuContext {
+      <<interface>>
+      +brand? : string
+      +category? : string
+      +name? : string
+      +sequence? : number
+      +date? : Date
+      +random? : () => number
+    }
+    class SkuToken {
+      <<enumeration>>
+      BRAND
+      CATEGORY
+      NAME
+      SEQ
+      YYYY
+      YY
+      MM
+      RANDOM
+    }
+  }
+
+  namespace Permissions {
+    class PermissionModule {
+      <<module>>
+      +PERMISSION_STATEMENT
+      +DEFAULT_ROLES
+      +can(permissions, resource, action) : boolean
+      +createRoleSchema : zod
+      +updateRoleSchema : zod
+      +updateRolePermissionsSchema : zod
+    }
+    class PermissionResource {
+      <<type>>
+      keyof PERMISSION_STATEMENT
+    }
+    class PermissionAction {
+      <<type>>
+    }
+    class PermissionItem {
+      <<interface>>
+      +resource : PermissionResource
+      +action : string
+    }
+  }
+
+  namespace RequestSchemas {
+    class AuthSchemas {
+      <<zod>>
+      +LoginSchema
+      +SignupSchema
+      +RegisterCompanySchema
+      +ProfileSchema
+      +UpdatePasswordSchema
+    }
+    class ProductSchemas {
+      <<zod>>
+      +ProductSchema
+      +ProductUpdateSchema
+      +productListQuerySchema
+    }
+    class SaleSchemas {
+      <<zod>>
+      +SaleInvoiceSchema
+      +SaleUpdateSchema
+      +saleListQuerySchema
+      +SaleStatus
+    }
+    class PurchaseSchemas {
+      <<zod>>
+      +PurchaseFormSchema
+      +PurchaseUpdateSchema
+      +purchaseListQuerySchema
+    }
+    class ReturnSchemas {
+      <<zod>>
+      +ReturnCreateSchema
+      +ReturnUpdateSchema
+      +returnListQuerySchema
+      +ReturnTypes
+      +ReturnConditions
+    }
+    class InventorySchemas {
+      <<zod>>
+      +InventoryCreateSchema
+      +InventoryAdjustSchema
+      +InventorySettingsSchema
+      +batchListQuerySchema
+      +stockBatchCreateSchema
+      +inventoryBulkImportSchema
+      +InventoryMovementValues
+    }
+    class PartySchemas {
+      <<zod>>
+      +CustomerSchema
+      +SupplierSchema
+      +CategorySchema
+      +BrandSchema
+      +customerLedgerQuerySchema
+    }
+    class OrgSchemas {
+      <<zod>>
+      +organizationCreateSchema
+      +setActiveOrganizationSchema
+      +addMemberSchema
+      +updateMemberRoleSchema
+      +memberRoleSchema
+    }
+    class SettingsSchemas {
+      <<zod>>
+      +companySettingsUpdateSchema
+    }
+    class ReportSchemas {
+      <<zod>>
+      +reportRangeQuerySchema
+      +reportExpiryQuerySchema
+      +salesAgingQuerySchema
+      +inventoryFullQuerySchema
+    }
+  }
+
+  SaleMoney ..> SaleBreakdownParams
+  SaleMoney ..> SaleBreakdownResult
+  Sku ..> SkuContext
+  Sku ..> SkuToken
+  PermissionModule ..> PermissionItem
+  RequestSchemas ..> pagination : extends

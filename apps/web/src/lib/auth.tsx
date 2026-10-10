@@ -24,6 +24,7 @@ export type AuthStatus = "loading" | "authenticated" | "anonymous";
 interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
+  activeOrganizationId?: string | null;
   login: (username: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
@@ -64,6 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? { name: data.user.name ?? "", username: data.user.email }
     : null;
 
+  const activeOrganizationId =
+    (data?.session as { activeOrganizationId?: string | null } | undefined)
+      ?.activeOrganizationId ?? null;
+
   const login = useCallback(async (username: string, password: string) => {
     const { error, data: body } = await authClient.signIn.email({
       email: username,
@@ -92,8 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, status, login, logout }),
-    [user, status, login, logout]
+    () => ({ user, status, activeOrganizationId, login, logout }),
+    [user, status, activeOrganizationId, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

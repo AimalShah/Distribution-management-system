@@ -1,0 +1,116 @@
+classDiagram
+  class AuthMode {
+    <<enumeration>>
+    session
+    trusted-proxy
+  }
+  class auth_context {
+    <<module>>
+    +ORGANIZATION_HEADER : "x-organization-id"
+    +USER_HEADER : "x-user-id"
+    +SESSION_HEADER : "x-session-id"
+    +resolveAuthMode() : AuthMode
+    +authContext(req, res, next) : void
+    +bootstrapAuthContext(req, res, next) : void
+    +requireUserId(userId?) : string
+    +requireSessionId(sessionId?) : string
+  }
+  class session {
+    <<module>>
+    +sessionAuthContext(auth: Auth) : RequestHandler
+    +sessionBootstrapAuthContext(auth: Auth) : RequestHandler
+  }
+  class rbac_middleware {
+    <<module>>
+    +resolveRequirement(table, method, path) : PermissionRequirement | null
+    +requirePermission(resource, action) : RequestHandler
+    +requireRoutePermission(table) : RequestHandler
+  }
+  class permissions_middleware {
+    <<module>>
+    +requireAdmin(req, res, next) : void
+  }
+  class PermissionRequirement {
+    <<interface>>
+    +resource : PermissionResource
+    +action : PermissionAction
+  }
+  class RoutePermissionRule {
+    <<interface>>
+    +method : string
+    +path : string
+    +action : PermissionAction
+  }
+  class SegmentPermission {
+    <<interface>>
+    +resource : PermissionResource
+    +rules? : RoutePermissionRule[]
+  }
+  class RoutePermissionTable {
+    <<type>>
+    Record~string, SegmentPermission~
+  }
+  class Auth {
+    <<type>>
+    ReturnType~createAuth~
+  }
+  class AuthOptions {
+    <<interface>>
+    +requireEmailVerification? : boolean
+    +sendEmail? : (Email) => Promise~void~
+  }
+  class auth_module {
+    <<module>>
+    +createAuth(options?) : Auth
+  }
+  class auth_permissions {
+    <<module>>
+    +ac : AccessControl
+    +member : Role
+    +adminRole : Role
+    +owner : Role
+  }
+  class email_module {
+    <<module>>
+    +EMAIL_FROM : string
+    +sendEmail(email: Email) : Promise~void~
+  }
+  class Email {
+    <<interface>>
+    +to : string
+    +subject : string
+    +html : string
+  }
+  class credentials_auth {
+    <<module>>
+    +configuredCredentials() : AuthUser & password
+    +verifyCredentials(username, password) : AuthUser | null
+    +signSessionToken(user: AuthUser) : string
+    +verifySessionToken(token?) : SessionClaims | null
+    +bearerToken(header?) : string | undefined
+  }
+  class AuthUser {
+    <<interface>>
+    +username : string
+    +name : string
+  }
+  class SessionClaims {
+    <<interface>>
+    +username : string
+    +name : string
+    +expiresAt : number
+  }
+
+  AuthMode ..> auth_context
+  auth_module ..> auth_permissions
+  auth_module ..> email_module
+  email_module ..> Email
+  credentials_auth ..> AuthUser
+  credentials_auth ..> SessionClaims
+  auth_context ..> PermissionRequirement
+  rbac_middleware ..> PermissionRequirement
+  rbac_middleware ..> RoutePermissionRule
+  rbac_middleware ..> SegmentPermission
+  rbac_middleware ..> RoutePermissionTable
+  session ..> Auth
+  permissions_middleware ..> credentials_auth : isAdmin()

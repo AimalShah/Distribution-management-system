@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { nullableText } from "../inputs";
+import { gstinSchema } from "./settings";
 
 /**
  * The role vocabulary is unsettled in the source data, so this file records
@@ -53,7 +55,16 @@ export const setActiveOrganizationSchema = z.object({
   organizationId: z.string().min(1, "Select an organization"),
 });
 
+export const organizationUpdateSchema = z.object({
+  name: z.string().trim().min(1, "Organization name cannot be blank").optional(),
+  displayName: nullableText("Display name cannot be blank"),
+  address: nullableText("Address cannot be blank"),
+  gstin: gstinSchema,
+});
+
 export type OrganizationCreateInput = z.output<typeof organizationCreateSchema>;
+
+export type OrganizationUpdateInput = z.output<typeof organizationUpdateSchema>;
 
 export type SetActiveOrganizationInput = z.output<
   typeof setActiveOrganizationSchema

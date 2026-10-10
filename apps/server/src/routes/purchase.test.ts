@@ -16,9 +16,15 @@ const { models, transaction } = vi.hoisted(() => {
     },
     product: { findMany: vi.fn() },
     supplier: { findFirst: vi.fn() },
-    inventory: { upsert: vi.fn() },
+    inventory: {
+      upsert: vi.fn(),
+      findFirst: vi.fn(),
+      updateMany: vi.fn(),
+      findFirstOrThrow: vi.fn(),
+    },
     inventoryLog: { create: vi.fn() },
-    stockBatch: { upsert: vi.fn() },
+    stockBatch: { upsert: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    return: { count: vi.fn() },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
@@ -34,6 +40,20 @@ const { models, transaction } = vi.hoisted(() => {
 vi.mock("@dms/db", () => ({
   default: { ...models, $transaction: transaction },
   prisma: { ...models, $transaction: transaction },
+}));
+
+vi.mock("../services/purchase-pdf", () => ({
+  generatePurchasePdf: vi.fn(async () => Buffer.from("%PDF-1.4 mock purchase")),
+}));
+
+vi.mock("../services/settings", () => ({
+  getCompanySettings: vi.fn(async () => ({
+    displayName: "Mock Company",
+    address: "123 Market St",
+    gstin: "27AAAAA0000A1Z5",
+    phone: "555-0199",
+    email: "billing@mock.com",
+  })),
 }));
 
 const app = createApp();
@@ -111,7 +131,13 @@ beforeEach(() => {
   // `upsert` returns the row as it stands after the statement, which is what the
   // service derives the log's previousQty from.
   models.inventory.upsert.mockResolvedValue({ id: "inv_1", quantityOnHand: 15 });
+  models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 20 });
+  models.inventory.updateMany.mockResolvedValue({ count: 1 });
+  models.inventory.findFirstOrThrow.mockResolvedValue({ id: "inv_1", quantityOnHand: 10 });
   models.inventoryLog.create.mockResolvedValue({ id: "log_1" });
+  models.stockBatch.findMany.mockResolvedValue([]);
+  models.stockBatch.updateMany.mockResolvedValue({ count: 1 });
+  models.return.count.mockResolvedValue(0);
 });
 
 describe("organization context", () => {
@@ -671,29 +697,98 @@ describe("PUT /api/purchases/:id", () => {
 });
 
 describe("DELETE /api/purchases/:id", () => {
-  it("deletes scoped to the organization and returns 204", async () => {
+  it("deletes the purchase and reverses the stock via an OUT movement", async () => {
     const res = await request(app).delete("/api/purchases/pur_1").set(auth());
 
     expect(res.status).toBe(204);
     expect(res.body).toEqual({});
+    expect(models.inventory.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG,
+          quantityOnHand: { gte: 10 },
+        }),
+        data: { quantityOnHand: { decrement: 10 } },
+      })
+    );
+    expect(models.inventoryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryId: "inv_1",
+        productId: "prod_1",
+        movementType: "OUT",
+        quantity: 10,
+        reason: expect.stringMatching(/Reversal of purchase PO-001/i),
+      }),
+    });
     expect(models.purchase.delete).toHaveBeenCalledWith({
       where: { id: "pur_1", organizationId: ORG },
     });
   });
 
   it("404s for a purchase owned by another tenant", async () => {
-    models.purchase.delete.mockRejectedValue(prismaError("P2025"));
+    models.purchase.findFirst.mockResolvedValue(null);
 
     const res = await request(app).delete("/api/purchases/foreign").set(auth());
 
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe("NOT_FOUND");
+    expect(res.body.code).toBe("PURCHASE_NOT_FOUND");
   });
 
-  it("leaves stock untouched, matching the legacy delete", async () => {
-    await request(app).delete("/api/purchases/pur_1").set(auth());
+  it("refuses to delete when active returns exist against the purchase", async () => {
+    models.return.count.mockResolvedValue(2);
 
-    expect(models.inventory.upsert).not.toHaveBeenCalled();
-    expect(models.inventoryLog.create).not.toHaveBeenCalled();
+    const res = await request(app).delete("/api/purchases/pur_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PURCHASE_HAS_RETURNS");
+    expect(models.purchase.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete when on-hand stock has been consumed downstream", async () => {
+    models.inventory.findFirst.mockResolvedValue({ id: "inv_1", quantityOnHand: 5 });
+
+    const res = await request(app).delete("/api/purchases/pur_1").set(auth());
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_STOCK");
+    expect(models.purchase.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/purchases/:id/pdf", () => {
+  it("generates a purchase order PDF with inline content-disposition header", async () => {
+    const res = await request(app)
+      .get("/api/purchases/pur_1/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/pdf/);
+    expect(res.headers["content-disposition"]).toBe(
+      'inline; filename="purchase-order-PO-001.pdf"'
+    );
+  });
+
+  it("returns 404 if the purchase does not exist or belongs to another tenant", async () => {
+    models.purchase.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/purchases/pur_missing/pdf")
+      .set(auth());
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("PURCHASE_NOT_FOUND");
+  });
+});
+
+describe("GET /api/purchases/:id/html", () => {
+  it("renders purchase order HTML template cleanly", async () => {
+    const res = await request(app)
+      .get("/api/purchases/pur_1/html")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/html/);
+    expect(res.text).toContain("PURCHASE ORDER");
+    expect(res.text).toContain("PO-001");
   });
 });

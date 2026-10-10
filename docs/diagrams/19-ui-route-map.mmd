@@ -1,0 +1,93 @@
+%% UI-02 · Page connection / route map
+%% Source: apps/web/src/App.tsx, components/layout/AppSidebar.tsx, page navigate() calls
+flowchart TD
+  ENTRY(["BrowserRouter · App.tsx"]) --> LOGIN["/login · LoginPage<br/>only route outside the guard"]
+  ENTRY --> GUARD{{"RequireAuth<br/>loading → skeleton<br/>anonymous → /login<br/>no active org → /onboarding"}}
+
+  GUARD -->|"anonymous → Navigate(from)"| LOGIN
+  GUARD -->|"authenticated, no active Company"| ONB["/onboarding · OnboardingPage<br/>list / create / activate Company"]
+  GUARD -->|"authenticated + active Company"| SHELL["AppShell<br/>Sidebar · Topbar · Outlet"]
+
+  LOGIN -->|"login() ok → navigate(from)"| GUARD
+  ONB -->|"create or set-active → navigate('/')"| SHELL
+
+  subgraph Overview
+    DASH["/ · Dashboard"]
+  end
+  subgraph Operations
+    SALES["/sales · SaleInvoiceList"]
+    SALESN["/sales/new · SaleInvoiceNew"]
+    SALESE["/sales/:id/edit · SaleInvoiceEdit"]
+    PUR["/purchases · PurchaseList"]
+    PURN["/purchases/new · PurchaseNew"]
+    PURE["/purchases/:id/edit · PurchaseEdit"]
+    RET["/returns · ReturnList"]
+    RETN["/returns/new · ReturnNew"]
+    PAY["/payments · PaymentsPage"]
+  end
+  subgraph Catalog
+    PROD["/products · ProductList"]
+    PRODN["/products/new · ProductNew"]
+    PRODE["/products/:id/edit · ProductEdit"]
+    INV["/inventory · InventoryPage"]
+    BAT["/inventory/batches · BatchesPage"]
+  end
+  subgraph Contacts
+    CUST["/customers · CustomerList"]
+    LEDGER["/customers/:id/ledger · CustomerLedgerPage"]
+    SUP["/suppliers · SupplierList"]
+  end
+  subgraph Reports
+    REP["/reports · ReportsPage"]
+  end
+  subgraph Settings
+    USERS["/users = /settings/users · UsersPage"]
+    COMPANY["/settings/company · CompanySettingsPage"]
+    PERM["/permissions = /permission<br/>= /settings/permissions · PermissionPage"]
+    PROFILE["/profile = /settings/profile · ProfilePage"]
+    BILLING["/billing = /settings/billing · BillingPage"]
+  end
+  NF["* · NotFoundPage"]
+
+  SHELL --> DASH
+  SHELL --> SALES
+  SHELL --> PUR
+  SHELL --> RET
+  SHELL --> PAY
+  SHELL --> PROD
+  SHELL --> INV
+  SHELL --> BAT
+  SHELL --> CUST
+  SHELL --> SUP
+  SHELL --> REP
+  SHELL --> USERS
+  SHELL --> COMPANY
+  SHELL --> PERM
+  SHELL --> PROFILE
+  SHELL --> BILLING
+  SHELL --> NF
+
+  DASH -->|"quick actions navigate()"| SALESN
+  DASH --> PURN
+  DASH --> INV
+  DASH --> CUST
+  SALES -->|"New / Edit"| SALESN
+  SALES --> SALESE
+  SALESN -->|"on success navigate('/sales')"| SALES
+  PUR -->|"New / row Edit"| PURN
+  PUR --> PURE
+  RET -->|"New"| RETN
+  PROD -->|"New / row Edit"| PRODN
+  PROD --> PRODE
+  CUST -->|"row Ledger"| LEDGER
+  COMPANY -->|"CompanySwitcher switch → reload"| SHELL
+
+  LEGACY["Legacy aliases → <Navigate replace>"]
+  LEGACY -.-> USERS
+  LEGACY -.-> REP
+  LEGACY -.-> SUP
+  LEGACY -.-> CUST
+  LEGACY -.-> RET
+  LEGACY -.-> PROD
+  LEGACY -.-> PUR
+  LEGACY -.-> SALES

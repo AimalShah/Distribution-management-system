@@ -14,6 +14,8 @@ import {
   removeCustomer,
   updateCustomer,
 } from "../services/customer";
+import { getCompanySettings } from "../services/settings";
+import { generateCustomerStatementPdf } from "../services/customer-pdf";
 
 export const customerRouter: Router = Router();
 
@@ -54,6 +56,39 @@ customerRouter.get(
     });
 
     res.json(ledger);
+  })
+);
+
+customerRouter.get(
+  ["/:id/statement/pdf", "/:id/ledger/pdf"],
+  asyncHandler(async (req, res) => {
+    const query = customerLedgerQuerySchema.parse(req.query);
+
+    const ledger = await getCustomerLedger({
+      customerId: req.params.id,
+      organizationId: req.auth.organizationId,
+      ...query,
+    });
+
+    const settings = await getCompanySettings(req.auth.organizationId);
+
+    const pdfBuffer = await generateCustomerStatementPdf({
+      company: {
+        name: settings.displayName,
+        address: settings.address,
+        gstin: settings.gstin,
+      },
+      ...ledger,
+    });
+
+    const safeName = ledger.customer.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const dateStr = new Date().toISOString().split("T")[0];
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="statement-${safeName}-${dateStr}.pdf"`
+    );
+    res.send(Buffer.from(pdfBuffer));
   })
 );
 

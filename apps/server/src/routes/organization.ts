@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   organizationCreateSchema,
+  organizationUpdateSchema,
   setActiveOrganizationSchema,
 } from "@dms/shared";
 import { asyncHandler, notFound } from "../http";
@@ -9,6 +10,7 @@ import {
   findActiveOrganization,
   getUserOrganizations,
   setActiveOrganization,
+  updateOrganization,
 } from "../services/organization";
 import { requireSessionId, requireUserId } from "../middleware/auth-context";
 
@@ -80,5 +82,16 @@ organizationRouter.post(
 
     await setActiveOrganization(organizationId, userId, sessionId);
     res.status(204).send();
+  })
+);
+
+organizationRouter.patch(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const userId = requireUserId(req.auth.userId);
+    const data = organizationUpdateSchema.parse(req.body);
+
+    const organization = await updateOrganization(req.params.id, data, userId);
+    res.json(organization);
   })
 );

@@ -12,11 +12,6 @@ import {
   Avatar,
   AvatarFallback,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Form,
   FormControl,
   FormField,
@@ -24,7 +19,6 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Label,
   Skeleton,
   Tabs,
   TabsContent,
@@ -125,7 +119,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
         slug: values.slug || toSlug(values.displayName),
         address: values.address,
         gstin: values.gstin,
-      } as unknown as Organization);
+      });
 
       // Activate the new organization on the session
       await api.post("/organizations/set-active", { organizationId: created.id });
@@ -159,6 +153,12 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
     }
   };
 
+  const handleTabChange = (value: string) => {
+    if (value === "list" || value === "create") {
+      setActiveTab(value);
+    }
+  };
+
   return (
     <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center p-6">
       <div className="w-full max-w-2xl">
@@ -175,7 +175,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "list" | "create")} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList className="bg-muted/40 p-1 rounded-xl">
             <TabsTrigger value="list" className="gap-2 rounded-lg text-xs font-medium">
               <Building2 className="size-4" />
@@ -248,6 +248,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                           {...field}
                           onChange={(event) => {
                             field.onChange(event);
+
                             // Auto-generate slug from display name unless user typed one
                             if (!form.watch("slug")) {
                               form.setValue("slug", toSlug(event.target.value), {
@@ -341,3 +342,5 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
     </div>
   );
 }
+
+export default OnboardingPage;

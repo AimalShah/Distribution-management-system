@@ -5,7 +5,7 @@ import type {
   PurchaseItemInput,
   PurchaseUpdateInput,
 } from "@dms/shared";
-import { badRequest, notFound } from "../http/errors";
+import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement, type StockMovementRequest } from "./stock-movement";
 
 const listInclude = {
@@ -277,9 +277,90 @@ export async function updatePurchase(
   });
 }
 
-// Deleting a purchase does not reverse the stock it moved in; the legacy action
-// behaved the same way. A cancel or reverse flow is still needed, otherwise the
-// quantity stays inflated after a purchase is removed.
-export async function deletePurchase(id: string, organizationId: string) {
-  await prisma.purchase.delete({ where: { id, organizationId } });
+/**
+ * Deleting a purchase reverses the stock it moved in, guarded so that a purchase
+ * whose goods have already been sold downstream refuses rather than driving stock negative.
+ */
+export async function deletePurchase(
+  id: string,
+  organizationId: string,
+  userId = "system"
+) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.purchase.findFirst({
+      where: { id, organizationId },
+      include: {
+        purchaseItems: true,
+      },
+    });
+
+    if (!existing) {
+      throw notFound("Purchase not found", "PURCHASE_NOT_FOUND");
+    }
+
+    const activeReturns = await tx.return.count({
+      where: { purchaseId: existing.id, organizationId, deletedAt: null },
+    });
+
+    if (activeReturns > 0) {
+      throw conflict(
+        "Returns have been recorded against this purchase. Delete those first, then delete the purchase.",
+        "PURCHASE_HAS_RETURNS",
+        { purchaseCode: existing.purchaseCode, returns: activeReturns }
+      );
+    }
+
+    if (existing.status !== "Cancelled") {
+      for (const item of existing.purchaseItems) {
+        const inventory = await tx.inventory.findFirst({
+          where: { productId: item.productId, organizationId },
+          select: { quantityOnHand: true },
+        });
+
+        const available = inventory?.quantityOnHand ?? 0;
+        if (available < item.quantity) {
+          throw conflict(
+            "There is no longer enough stock on hand to reverse this purchase, so it cannot be deleted",
+            "INSUFFICIENT_STOCK",
+            { productId: item.productId, available, requested: item.quantity }
+          );
+        }
+      }
+
+      for (const item of existing.purchaseItems) {
+        await applyStockMovement({
+          tx,
+          organizationId,
+          userId,
+          productId: item.productId,
+          direction: "out",
+          quantity: item.quantity,
+          movementType: "OUT",
+          reason: `Reversal of purchase ${existing.purchaseCode}`,
+          reference: existing.purchaseCode,
+          refusal: (available) =>
+            conflict(
+              "There is no longer enough stock on hand to reverse this purchase, so it cannot be deleted",
+              "INSUFFICIENT_STOCK",
+              { productId: item.productId, available, requested: item.quantity }
+            ),
+        });
+
+        if (item.batchNumber) {
+          await tx.stockBatch.updateMany({
+            where: {
+              productId: item.productId,
+              batchNumber: item.batchNumber,
+              organizationId,
+            },
+            data: {
+              quantityRemaining: { decrement: item.quantity },
+            },
+          });
+        }
+      }
+    }
+
+    await tx.purchase.delete({ where: { id: existing.id, organizationId } });
+  });
 }

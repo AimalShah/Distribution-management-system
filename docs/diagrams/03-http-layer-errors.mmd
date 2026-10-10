@@ -1,0 +1,55 @@
+classDiagram
+  class AppOptions {
+    <<interface>>
+    +authMode? : AuthMode
+    +auth? : Auth
+  }
+
+  class Express {
+    <<interface>>
+  }
+
+  class HttpError {
+    +status : number
+    +code : string
+    +details? : unknown
+    +constructor(status, message, code, details?)
+  }
+
+  class Error {
+    <<interface>>
+    +message : string
+    +name : string
+  }
+
+  class asyncHandler {
+    <<function>>
+    +asyncHandler(handler: AsyncRequestHandler) : RequestHandler
+  }
+  class errors {
+    <<module>>
+    +badRequest(message, code?, details?) : HttpError
+    +unauthorized(message?, code?, details?) : HttpError
+    +notFound(message, code?) : HttpError
+    +conflict(message, code?, details?) : HttpError
+    +forbidden(message, code?, details?) : HttpError
+    +unprocessable(message, code?, details?) : HttpError
+  }
+  class error_handler {
+    <<module>>
+    +notFoundHandler(req, res, next) : void
+    +errorHandler(error, req, res, next) : void
+  }
+  class prisma_errors {
+    <<module>>
+    +translatePrismaError(error) : HttpError | null
+    +translateZodError(error: ZodError) : HttpError
+  }
+
+  Error <|-- HttpError
+  errors ..> HttpError : creates
+  asyncHandler ..> Error : routes rejection to next()
+  error_handler ..> HttpError : serializes
+  error_handler ..> ZodError : translates
+  error_handler ..> prisma_errors : delegates
+  prisma_errors ..> HttpError : maps P2002/P2003/P2014/P2025/P2034

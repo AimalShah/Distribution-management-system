@@ -1,0 +1,35 @@
+%% UI-04 · Read path — SWR → api seam → axios → server
+%% Source: lib/api.ts, page useSWR calls
+sequenceDiagram
+  autonumber
+  participant P as Page (ProductList)
+  participant SWR as SWR cache
+  participant API as lib/api (fetcher)
+  participant AX as axios client
+  participant LS as localStorage
+  participant S as Server /api
+
+  P->>SWR: useSWR(key, fetcher)
+  Note over P: key is the query string, e.g.<br/>/products?page=1&search=…
+  alt cache hit and fresh
+    SWR-->>P: data (deduped, no request)
+  else miss / stale / revalidate
+    SWR->>API: fetcher(key)
+    API->>AX: client.get(key)
+    AX->>LS: getItem("auth_token")
+    AX->>S: GET /api… (Authorization: Bearer)
+    alt server answers
+      S-->>AX: 200 with data
+      AX-->>API: response
+      API-->>SWR: response.data (envelope unwrapped)
+      SWR-->>P: data, isLoading=false
+    else server refuses / network
+      S-->>AX: error, code, details
+      AX-->>SWR: rejection
+      SWR-->>P: error → "Retry" button
+      P->>API: toFailure(err, fallback)
+      API-->>P: RequestFailure (origin, status, code, details, message)
+    end
+  end
+  P->>P: useMemo → rows, columns, totals
+  Note over P: render states<br/>isLoading → Skeleton<br/>empty → empty state<br/>error → retry()

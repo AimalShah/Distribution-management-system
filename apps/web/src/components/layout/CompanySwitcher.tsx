@@ -1,6 +1,6 @@
-import React from "react";
-import useSWR from "swr";
-import { ChevronDown, Building2, AlertTriangle } from "lucide-react";
+import React, { useState } from "react";
+import useSWR, { useSWRConfig } from "swr";
+import { ChevronDown, Building2, AlertTriangle, Plus, Settings2 } from "lucide-react";
 import { api } from "../../lib/api";
 import { useActiveMembership } from "../../lib/profile";
 import {
@@ -8,20 +8,26 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Skeleton,
 } from "@dms/ui";
+import { CreateCompanyDialog } from "../settings/CreateCompanyDialog";
+import { EditCompanyDialog } from "../settings/EditCompanyDialog";
 
 /**
  * The Company switcher in the topbar (issue #42).
  *
- * Shows the active Company and lets the user switch to another one.
+ * Shows the active Company and lets the user switch to another one or create a new one.
  * Calls GET /api/organizations to list the user's companies, and
  * POST /api/organizations/set-active to switch the active organization.
  */
 export function CompanySwitcher() {
   const { membership } = useActiveMembership();
   const organizationId = membership?.organizationId ?? "";
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const { mutate: globalMutate } = useSWRConfig();
 
   const { data, error, isLoading, mutate } = useSWR(
     organizationId ? "/organizations" : null,
@@ -35,9 +41,7 @@ export function CompanySwitcher() {
     try {
       await api.post("/organizations/set-active", { organizationId: targetOrgId });
       await mutate();
-      if (typeof window !== "undefined" && window.location?.reload) {
-        window.location.reload();
-      }
+      await globalMutate(() => true, undefined, { revalidate: true });
     } catch (err) {
       console.error("Failed to switch organization:", err);
     }
@@ -88,10 +92,52 @@ export function CompanySwitcher() {
                   <span className="flex-1 text-left">{organization.name}</span>
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuSeparator />
+              {activeOrg && (
+                <DropdownMenuItem
+                  className="flex items-center gap-2 cursor-pointer font-medium"
+                  onSelect={() => setEditDialogOpen(true)}
+                >
+                  <Settings2 className="size-4" />
+                  <span>Edit Company Details</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                className="flex items-center gap-2 text-primary focus:text-primary cursor-pointer font-medium"
+                onSelect={() => setCreateDialogOpen(true)}
+              >
+                <Plus className="size-4" />
+                <span>Create Company</span>
+              </DropdownMenuItem>
             </React.Fragment>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <EditCompanyDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        organization={
+          activeOrg
+            ? { id: activeOrg.id, name: activeOrg.name, slug: activeOrg.slug }
+            : null
+        }
+        onSuccess={async () => {
+          await mutate();
+          await globalMutate(() => true, undefined, { revalidate: true });
+        }}
+      />
+
+      <CreateCompanyDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSuccess={async () => {
+          await mutate();
+          await globalMutate(() => true, undefined, { revalidate: true });
+        }}
+      />
     </div>
   );
 }
+
+export default CompanySwitcher;

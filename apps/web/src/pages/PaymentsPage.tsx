@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import useSWR from "swr";
-import { Plus, RefreshCw, Trash2, Wallet } from "lucide-react";
+import { CreditCard, Download, Plus, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -27,15 +27,9 @@ import { formatDate, formatMoney } from "../lib/format";
 import { generateCode } from "../lib/code";
 import { PageHead } from "../components/list/PageHead";
 import { StatTileRow } from "../components/list/StatTileRow";
-import type { PaymentMethodValue } from "@dms/shared";
+import { PaymentMethods, type PaymentMethodValue } from "@dms/shared";
 
-const METHODS: readonly PaymentMethodValue[] = [
-  "Cash",
-  "Bank Transfer",
-  "Mobile Wallet",
-  "Cheque",
-  "Other",
-];
+const METHODS: readonly PaymentMethodValue[] = PaymentMethods;
 
 interface PaymentRow {
   id: string;
@@ -254,19 +248,21 @@ export default function PaymentsPage() {
             value: isLoading ? "—" : (data?.total ?? 0),
             sublabel: "Rows on this view",
             icon: <Wallet className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Collected",
             value: isLoading ? "—" : formatMoney(collected),
             sublabel: "Shown rows",
-            icon: <Wallet className="size-6" />,
+            icon: <CreditCard className="size-6" />,
             tone: "success",
+            sublabelTone: "success",
           },
           {
             label: "On account",
             value: isLoading ? "—" : formatMoney(onAccount),
             sublabel: "Not tied to an invoice",
-            icon: <Wallet className="size-6" />,
+            icon: <Receipt className="size-6" />,
             tone: "warning",
           },
         ]}
@@ -349,15 +345,28 @@ export default function PaymentsPage() {
                       {row.deletedAt ? (
                         <span className="text-xs text-muted-foreground">Reversed</span>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
-                          onClick={() => setConfirmTarget(row)}
-                        >
-                          <span className="sr-only">Reverse payment</span>
-                          <Trash2 className="size-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
+                            title="Download Receipt (PDF)"
+                            onClick={() => window.open(`/api/payments/${row.id}/pdf`, "_blank")}
+                          >
+                            <span className="sr-only">Download receipt</span>
+                            <Download className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+                            title="Reverse Payment"
+                            onClick={() => setConfirmTarget(row)}
+                          >
+                            <span className="sr-only">Reverse payment</span>
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>

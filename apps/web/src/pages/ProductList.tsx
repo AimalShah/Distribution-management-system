@@ -5,8 +5,10 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit,
   Filter,
+  Layers,
   MoreHorizontal,
   Package,
+  PackageCheck,
   Plus,
   RefreshCw,
   Trash2,
@@ -293,11 +295,29 @@ export default function ProductList() {
         }
       />
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <StatChip label="Total Products" value={isLoading ? "—" : totalProducts} />
-        <StatChip label="Active" value={isLoading ? "—" : activeProducts} accent="green" />
-        <StatChip label="Categories" value={isLoading ? "—" : categories.length} />
+      {/* Operational KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <StatChip
+          label="Total Products"
+          value={isLoading ? "—" : totalProducts}
+          sublabel="Catalog items"
+          icon={<Package className="size-5" />}
+          accent="blue"
+        />
+        <StatChip
+          label="Active"
+          value={isLoading ? "—" : activeProducts}
+          sublabel="Available for sale"
+          icon={<PackageCheck className="size-5" />}
+          accent="green"
+        />
+        <StatChip
+          label="Categories"
+          value={isLoading ? "—" : categories.length}
+          sublabel="Organized categories"
+          icon={<Layers className="size-5" />}
+          accent="amber"
+        />
       </div>
 
       {/* Filter and Table Card */}

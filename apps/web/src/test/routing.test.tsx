@@ -18,12 +18,17 @@ import { App } from "../App";
 
 type AuthState = "authenticated" | "anonymous";
 
-const { apiGet, authStatus } = vi.hoisted(() => ({
-  apiGet: vi.fn(),
-  // Narrowed on every write in `beforeEach`, so the guard is only ever handed a
-  // status it recognises.
-  authStatus: { current: "authenticated" } satisfies { current: AuthState },
-}));
+const { apiGet, authStatus, activeOrgId } = vi.hoisted(() => {
+  const initialOrgId: string | null = "org-1";
+  const initialAuth: AuthState = "authenticated";
+
+  return {
+    apiGet: vi.fn(),
+    authStatus: { current: initialAuth } as { current: AuthState },
+    // SAFETY: container holds the active company context ID or null when in onboarding
+    activeOrgId: { current: initialOrgId } as { current: string | null },
+  };
+});
 
 vi.mock("../lib/api", () => ({
   fetcher: apiGet,
@@ -34,7 +39,11 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ user: { username: "admin", name: "Admin" }, status: authStatus.current }),
+  useAuth: () => ({
+    user: { username: "admin", name: "Admin" },
+    status: authStatus.current,
+    activeOrganizationId: activeOrgId.current,
+  }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -52,6 +61,7 @@ const emptyPage = { data: [], total: 0, pageCount: 1 };
 beforeEach(() => {
   vi.clearAllMocks();
   authStatus.current = "authenticated";
+  activeOrgId.current = "org-1";
   apiGet.mockResolvedValue(emptyPage);
 });
 
@@ -105,5 +115,26 @@ describe("the sidebar's Batches entry (issue #40)", () => {
     });
 
     expect(String(apiGet.mock.calls[0][0])).toContain("/inventory/batches");
+  });
+});
+
+describe("tenant onboarding route and guard", () => {
+  it("renders the onboarding page directly at /onboarding", async () => {
+    apiGet.mockResolvedValue([]);
+    renderAt("/onboarding");
+
+    expect(
+      await screen.findByRole("heading", { name: /^welcome$/i })
+    ).toBeInTheDocument();
+  });
+
+  it("redirects an authenticated user without an active organization to /onboarding", async () => {
+    activeOrgId.current = null;
+    apiGet.mockResolvedValue([]);
+    renderAt("/");
+
+    expect(
+      await screen.findByRole("heading", { name: /^welcome$/i })
+    ).toBeInTheDocument();
   });
 });

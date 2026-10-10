@@ -1,0 +1,93 @@
+erDiagram
+  USER ||--o{ SESSION : has
+  USER ||--o{ ACCOUNT : has
+  USER ||--o{ MEMBER : joins
+  USER ||--o{ INVITATION : invites
+  USER ||--o{ INVENTORY_LOG : writes
+  USER ||--o{ RETURN : raises
+  USER ||--o{ PAYMENT : records
+  ORGANIZATION ||--o{ MEMBER : contains
+  ORGANIZATION ||--o{ INVITATION : contains
+  ORGANIZATION ||--|| COMPANY_SETTINGS : configures
+  ORGANIZATION ||--o{ ROLE : defines
+  ORGANIZATION ||--o{ PRODUCT : owns
+  ORGANIZATION ||--o{ PURCHASE : owns
+  ORGANIZATION ||--o{ SALE : owns
+  ORGANIZATION ||--o{ RETURN : owns
+  ORGANIZATION ||--o{ SUPPLIER : owns
+  ORGANIZATION ||--o{ CUSTOMER : owns
+  ORGANIZATION ||--o{ CATEGORY : owns
+  ORGANIZATION ||--o{ BRAND : owns
+  ORGANIZATION ||--o{ INVENTORY : owns
+  ORGANIZATION ||--o{ PAYMENT : owns
+  ORGANIZATION ||--o{ STOCK_BATCH : owns
+  ROLE ||--o{ ROLE_PERMISSION : grants
+  ROLE ||--o{ MEMBER : assigned
+  CATEGORY ||--o{ PRODUCT : classifies
+  CATEGORY ||--o{ BRAND : groups
+  BRAND ||--o{ PRODUCT : labels
+  PRODUCT ||--|| INVENTORY : stocked_as
+  PRODUCT ||--o{ INVENTORY_LOG : audited
+  PRODUCT ||--o{ SALE_ITEM : sold
+  PRODUCT ||--o{ PURCHASE_ITEM : bought
+  PRODUCT ||--o{ RETURN_ITEM : returned
+  PRODUCT ||--o{ STOCK_BATCH : lot
+  INVENTORY ||--o{ INVENTORY_LOG : ledger
+  SUPPLIER ||--o{ PURCHASE : supplies
+  PURCHASE ||--o{ PURCHASE_ITEM : lines
+  PURCHASE ||--o{ RETURN : "reversed by"
+  PURCHASE_ITEM ||--o{ STOCK_BATCH : receives
+  SALE ||--o{ SALE_ITEM : lines
+  SALE ||--o{ RETURN : "reversed by"
+  SALE ||--o{ PAYMENT : settled_by
+  STOCK_BATCH ||--o{ SALE_ITEM : drawn_from
+  RETURN ||--o{ RETURN_ITEM : lines
+  CUSTOMER ||--o{ SALE : places
+  CUSTOMER ||--o{ PAYMENT : pays
+
+  SALE {
+    string id PK
+    string saleCode UK
+    string customerId FK
+    string organizationId FK
+    float totalAmount
+    string status
+    bool isInterState
+    float cgstAmount
+    float sgstAmount
+    float igstAmount
+    float amountPaid
+    datetime dueDate
+    datetime deletedAt
+  }
+  STOCK_BATCH {
+    string id PK
+    string productId FK
+    string organizationId FK
+    string batchNumber
+    datetime expiryDate
+    int quantityRemaining
+    int quantityReceived
+    float unitCost
+    string purchaseItemId FK
+  }
+  PAYMENT {
+    string id PK
+    string paymentCode UK
+    string customerId FK
+    string saleId FK
+    float amount
+    string method
+    datetime paidAt
+    datetime deletedAt
+  }
+  COMPANY_SETTINGS {
+    string id PK
+    string organizationId UK
+    string skuFormat
+    string skuSeparator
+    int skuSequence
+    int returnWindowDays
+    bool returnsEnabled
+    int creditTermDays
+  }

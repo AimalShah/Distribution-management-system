@@ -25,6 +25,10 @@ const { customerModel, saleModel, paymentModel, returnModel } = vi.hoisted(() =>
   },
 }));
 
+vi.mock("../services/customer-pdf", () => ({
+  generateCustomerStatementPdf: vi.fn().mockResolvedValue(Buffer.from("%PDF-1.4 mock pdf")),
+}));
+
 vi.mock("@dms/db", () => ({
   default: {
     member: { findFirst: async () => ({ role: "owner" }) },
@@ -32,6 +36,7 @@ vi.mock("@dms/db", () => ({
     sale: saleModel,
     payment: paymentModel,
     return: returnModel,
+    companySettings: { findUnique: vi.fn().mockResolvedValue(null) },
   },
   prisma: {
     member: { findFirst: async () => ({ role: "owner" }) },
@@ -39,6 +44,7 @@ vi.mock("@dms/db", () => ({
     sale: saleModel,
     payment: paymentModel,
     return: returnModel,
+    companySettings: { findUnique: vi.fn().mockResolvedValue(null) },
   },
 }));
 
@@ -816,3 +822,36 @@ describe("GET /api/customers/:id/ledger", () => {
     });
   });
 });
+
+describe("GET /api/customers/:id/statement/pdf", () => {
+  it("generates a PDF customer statement and sets content-disposition header", async () => {
+    customerModel.findFirst.mockResolvedValue(customerFixture());
+    saleModel.findMany.mockResolvedValue([]);
+    returnModel.findMany.mockResolvedValue([]);
+    paymentModel.findMany.mockResolvedValue([]);
+
+    const res = await request(app)
+      .get("/api/customers/cust_1/statement/pdf")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(200);
+    expect(res.header["content-type"]).toBe("application/pdf");
+    expect(res.header["content-disposition"]).toContain("statement-acme-retail-");
+    expect(res.header["content-disposition"]).toContain(".pdf");
+  });
+
+  it("also supports the /ledger/pdf alias", async () => {
+    customerModel.findFirst.mockResolvedValue(customerFixture());
+    saleModel.findMany.mockResolvedValue([]);
+    returnModel.findMany.mockResolvedValue([]);
+    paymentModel.findMany.mockResolvedValue([]);
+
+    const res = await request(app)
+      .get("/api/customers/cust_1/ledger/pdf")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(res.status).toBe(200);
+    expect(res.header["content-type"]).toBe("application/pdf");
+  });
+});
+

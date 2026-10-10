@@ -1,0 +1,274 @@
+classDiagram
+  namespace CoreCrud {
+    class ProductService {
+      +getProducts(args: ProductListArgs)
+      +getProductById(id, organizationId)
+      +addProduct(data: ProductInput, organizationId)
+      +updateProduct(id, data, organizationId)
+      +removeProduct(id, organizationId)
+    }
+    class CategoryService {
+      +getCategories(args: CategoryListArgs)
+      +getCategoryById(id, organizationId)
+      +addCategory(data, organizationId)
+      +updateCategory(id, data, organizationId)
+      +removeCategory(id, organizationId)
+    }
+    class BrandService {
+      +getBrands(args: BrandListArgs)
+      +getBrandById(id, organizationId)
+      +addBrand(data, organizationId)
+      +updateBrand(id, data, organizationId)
+      +removeBrand(id, organizationId)
+    }
+    class SupplierService {
+      +getSuppliers(args: SupplierListArgs)
+      +getSupplierById(id, organizationId)
+      +addSupplier(data, organizationId)
+      +updateSupplier(id, data, organizationId)
+      +removeSupplier(id, organizationId)
+    }
+    class CustomerService {
+      +getCustomers(args: CustomerListArgs)
+      +getCustomerById(id, organizationId)
+      +addCustomer(data, organizationId)
+      +updateCustomer(id, data, organizationId)
+      +removeCustomer(id, organizationId)
+      +getCustomerLedger(args) : CustomerLedger
+    }
+  }
+
+  namespace Revenue {
+    class SaleService {
+      +getSales(args: SaleListArgs)
+      +getSaleByIdOrCode(idOrCode, organizationId)
+      +getSalesByCustomer(args: SaleCustomerListArgs)
+      +createSale(data, organizationId, userId)
+      +updateSale(id, data, organizationId)
+      +deleteSale(id, organizationId, userId)
+      +restoreSale(id, organizationId, userId)
+      +cancelSale(id, organizationId)
+      +uncancelSale(id, organizationId)
+      +getSaleInvoiceData(id, organizationId)
+    }
+    class PaymentService {
+      +getPayments(args)
+      +getPaymentById(id, organizationId)
+      +createPayment(data, organizationId, userId)
+      +deletePayment(id, organizationId)
+    }
+    class PurchaseService {
+      +calculatePurchaseTotal(data: PurchaseFormInput)
+      +getPurchases(args: PurchaseListArgs)
+      +getPurchasesBySupplier(args)
+      +getPurchaseById(id, organizationId)
+      +createPurchase(data, organizationId, userId)
+      +updatePurchase(id, data, organizationId)
+      +deletePurchase(id, organizationId)
+    }
+    class ReturnService {
+      +getReturns(args)
+      +getReturnByIdOrCode(idOrCode, organizationId)
+      +createReturn(data, organizationId, userId)
+      +updateReturn(id, data, organizationId)
+      +deleteReturn(id, organizationId, userId)
+      +restoreReturn(id, organizationId, userId)
+    }
+    class SaleInvoiceTemplate {
+      <<module>>
+      +renderSaleInvoiceHtml(sale: SaleInvoiceRenderData) : string
+    }
+    class SalePdf {
+      <<module>>
+      +generateSalePdf(sale: SaleInvoiceRenderData) : Promise~Uint8Array~
+    }
+  }
+
+  namespace Stock {
+    class StockMovement {
+      <<module>>
+      +applyStockMovement(request: StockMovementRequest) : Promise~StockMovementResult~
+    }
+    class InventoryService {
+      +getInventory(args)
+      +getInventoryById(id, organizationId)
+      +getInventoryLogs(args)
+      +getLowStock(args)
+      +createInventory(data, organizationId)
+      +adjustInventory(data, organizationId, userId)
+      +updateInventorySettings(id, data, organizationId)
+      +bulkImportInventory(rows, organizationId) : Promise~BulkImportResult~
+    }
+    class BatchService {
+      +listStockBatches(organizationId, query)
+      +getStockBatchById(id, organizationId)
+      +getExpiringSoonBatches(organizationId, days?, limit?)
+      +createStockBatch(organizationId, input)
+    }
+    class StockMovementContracts {
+      <<interface>>
+    }
+    class StockDirection {
+      <<enumeration>>
+      in
+      out
+      count
+    }
+    class StockReceipt {
+      <<interface>>
+      +batchNumber : string
+      +expiryDate? : Date | null
+      +unitCost : number
+      +purchaseItemId? : string
+    }
+    class StockMovementRequest {
+      <<interface>>
+      +tx : TransactionTx
+      +organizationId : string
+      +userId : string
+      +productId : string
+      +direction : StockDirection
+      +quantity : number
+      +movementType : InventoryMovementValue
+      +reason : string
+      +reference? : string
+      +refusal? : RefusalFn
+      +batch? : BatchOption
+      +opening? : OpeningStock
+    }
+    class RefusalFn {
+      <<interface>>
+      +call(available: number) : Error
+    }
+    class BatchOption {
+      <<type>>
+      receipt | untracked
+    }
+    class OpeningStock {
+      <<interface>>
+      +reorderLevel : number
+    }
+    class StockMovementResult {
+      <<interface>>
+      +inventoryId : string
+      +previousQty : number
+      +newQty : number
+      +batchId : string | null
+    }
+    class BulkImportError {
+      <<interface>>
+      +row : number
+      +productCode? : string
+      +error : string
+    }
+    class BulkImportResult {
+      <<interface>>
+      +success : number
+      +created : number
+      +updated : number
+      +errors : BulkImportError[]
+    }
+  }
+
+  namespace OrgAndAccess {
+    class OrganizationService {
+      +findActiveOrganization(userId, sessionId)
+      +getUserOrganizations(userId)
+      +createOrganization(data, userId)
+      +setActiveOrganization(organizationId, userId, sessionId)
+      +getUserOrganizationIds(userId)
+    }
+    class MemberService {
+      +findMembership(userId, organizationId)
+      +listMembers(args)
+      +listAvailableUsers(args)
+      +addMember(args)
+      +removeMember(args)
+      +updateMemberRole(args)
+    }
+    class RoleRbacService {
+      +seedDefaultRoles(organizationId)
+      +getMemberPermissions(userId, organizationId)
+      +checkPermission(userId, organizationId, resource, action)
+      +listRoles(organizationId)
+      +getRole(id, organizationId)
+      +createRole(organizationId, data: CreateRoleInput)
+      +updateRole(id, organizationId, data: UpdateRoleInput)
+      +updateRolePermissions(id, organizationId, data)
+      +deleteRole(id, organizationId)
+      +assignMemberRole(memberId, roleId, organizationId)
+    }
+    class RoleVocabulary {
+      <<module>>
+      +MEMBER_ROLES
+      +ELEVATED_ROLES
+      +isElevated(role) : boolean
+      +isOwner(role) : boolean
+      +permissionsForRole(role) : RolePermissions
+    }
+    class PermissionService {
+      +isAdmin(userId, organizationId) : Promise~boolean~
+      +getMemberRole(userId, organizationId)
+    }
+    class CompanySettingsService {
+      +getCompanySettings(organizationId) : Promise~CompanySettingsView~
+      +updateCompanySettings(organizationId, data)
+    }
+    class DashboardService {
+      +getDashboardStats(organizationId)
+    }
+    class CompanySettingsView {
+      <<interface>>
+      +organizationId : string
+      +displayName : string | null
+      +address : string | null
+      +gstin : string | null
+      +skuFormat : string
+      +skuSeparator : string
+      +skuSequence : number
+      +returnWindowDays : number
+      +returnsEnabled : boolean
+      +creditTermDays : number
+    }
+  }
+
+  namespace Scoping {
+    class ScopeModule {
+      <<module>>
+      +notSoftDeleted
+      +reportWindow(query) : DateBound
+      +statementWindow(from, to) : DateBound
+      +beforeWindow(at) : DateBound
+      +saleScope(input) : Prisma.SaleWhereInput
+      +saleItemScope(input) : Prisma.SaleItemWhereInput
+      +purchaseScope(input)
+      +purchaseItemScope(input)
+      +returnScope(input)
+      +paymentScope(input)
+      +productScope(input)
+      +customerScope(input)
+      +supplierScope(input)
+      +inventoryScope(input)
+      +inventoryLogScope(input)
+      +stockBatchScope(input)
+    }
+    class DateBound {
+      <<interface>>
+      +gte? : Date
+      +lte? : Date
+      +lt? : Date
+    }
+  }
+
+  CoreCrud ..> StockMovement : product/inventory
+  SaleService ..> StockMovement : applyStockMovement()
+  InventoryService ..> StockMovement : applyStockMovement()
+  ReturnService ..> StockMovement : applyStockMovement()
+  PurchaseService ..> StockMovement : receipts → batches
+  SaleService ..> SaleInvoiceTemplate : render
+  SaleService ..> SalePdf : render
+  InventoryService ..> BatchService
+  SaleService ..> CompanySettingsService : creditTermDays
+  RoleRbacService ..> RoleVocabulary
+  ScopeModule ..> DateBound
+  RoleRbacService ..> StockMovementContracts

@@ -1,0 +1,42 @@
+%% UI-06 · Session lifecycle — AuthProvider → RequireAuth → pages
+%% Source: lib/auth.tsx, lib/auth-client.ts, components/auth/RequireAuth.tsx, LoginPage.tsx
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant AP as AuthProvider
+  participant AC as authClient (better-auth)
+  participant RA as RequireAuth
+  participant S as Server /api/auth
+  participant LS as localStorage
+
+  B->>AP: mount
+  AP->>AC: useSession()
+  AC->>S: GET /api/auth/get-session (cookie)
+  alt isPending
+    AC-->>AP: isPending = true
+    AP-->>RA: status = "loading"
+    RA-->>B: skeleton "Checking your session"
+  end
+  alt no session
+    AC-->>AP: no user
+    AP-->>RA: status = "anonymous"
+    RA->>B: Navigate /login with state.from
+    B->>AC: signIn.email(email, password)
+    AC->>S: POST /api/auth/sign-in/email
+    S-->>AC: set-auth-token header
+    AC->>LS: setItem("auth_token")
+    AC-->>AP: user → status = "authenticated"
+    AP->>B: login() resolves → navigate(from)
+  else session exists
+    AC-->>AP: user + session.activeOrganizationId
+    AP-->>RA: status = "authenticated"
+    alt activeOrganizationId === null
+      RA->>B: Navigate /onboarding
+    else active Company set
+      RA->>B: render AppShell → Outlet (page)
+    end
+  end
+  Note over B,LS: Every page reads the session through useAuth().<br/>The guard is the only place it turns into a redirect.
+  B->>AP: logout()
+  AP->>AC: signOut() then removeItem("auth_token")
+  AC-->>AP: no user → status = "anonymous"

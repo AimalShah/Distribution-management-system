@@ -1,0 +1,144 @@
+%% UI-03 · State ownership — who holds what
+%% Source: lib/auth.tsx, lib/auth-client.ts, lib/api.ts, lib/profile.ts, pages/*, components/*
+classDiagram
+  class AuthProvider {
+    <<context provider>>
+    +user : AuthUser | null
+    +status : AuthStatus
+    +activeOrganizationId : string | null
+    +login(username, password) : Promise~AuthUser~
+    +logout() : Promise~void~
+    -value : useMemo(...)
+  }
+  class AuthStatus {
+    <<enumeration>>
+    loading
+    authenticated
+    anonymous
+  }
+  class useAuth {
+    <<hook>>
+    +user
+    +status
+    +activeOrganizationId
+    +login()
+    +logout()
+  }
+  class authClient {
+    <<better-auth react client>>
+    +useSession() : SessionState
+    +signIn.email(credentials)
+    +signOut()
+    +organization.getActiveMember()
+    +organization.getFullOrganization()
+  }
+  class useActiveMembership {
+    <<SWR hook, key "active-membership">>
+    +membership : ActiveMembership | null
+    +isLoading : boolean
+  }
+  class ActiveMembership {
+    <<interface>>
+    +role : string
+    +organizationName : string
+    +organizationId : string
+  }
+  class SWRCache {
+    <<global server-state store>>
+    +useSWR(key, fetcher)
+    +mutate() — revalidate one key
+    +useSWRConfig().mutate() — revalidate all
+  }
+  class api {
+    <<transport seam>>
+    +get / post / put / patch / delete(url, body)
+    +toFailure(err, fallback) : RequestFailure
+    +failureMessage(err, fallback) : string
+    +shortfallLine(failure, label) : string
+  }
+  class RequestFailure {
+    <<interface>>
+    +origin : "server" | "network" | "local"
+    +status : number | null
+    +code : string | null
+    +details : unknown
+    +message : string
+  }
+  class FormState {
+    <<react-hook-form + zod>>
+    +useForm(zodResolver(schema))
+    +useFieldArray() line items
+    +formState.errors / isSubmitting
+  }
+  class LocalState {
+    <<useState in pages/comps>>
+    +page / search / statusFilter
+    +categoryFilter / brandFilter / typeFilter
+    +view("active"|"deleted")
+    +dialogOpen / selectedRow / confirmTarget
+    +submitting / confirmBusy / saving
+    +activeTab / isCollapsed / isMobileOpen / isDark
+  }
+  class LocalStorage {
+    <<browser storage>>
+    "auth_token" : Bearer token
+    "dms-theme" : light | dark
+  }
+  class RouterState {
+    <<react-router>>
+    +useLocation().pathname / .state.from
+    +useNavigate()
+    +useSearchParams / queryString (useMemo)
+  }
+  class Toaster {
+    <<sonner transient state>>
+    +toast.success / error / warning / info
+  }
+  class OutletContext {
+    <<AppShell Outlet context>>
+    +sales
+    +lowStock
+    +showToast(title, message, type)
+  }
+  class PagePatterns {
+    <<page shapes>>
+  }
+  class ListPage {
+    <<page pattern>>
+  }
+  class FormPage {
+    <<page pattern>>
+  }
+  class DashboardPage {
+    <<page pattern>>
+  }
+  class ShellLayout {
+    <<layout pattern>>
+  }
+
+  useAuth ..> AuthProvider : reads context
+  AuthProvider ..> authClient : useSession()
+  AuthProvider ..> LocalStorage : token lifecycle
+  useActiveMembership ..> authClient : Promise.all(member, org)
+  useActiveMembership ..> ActiveMembership : returns
+  useActiveMembership ..> SWRCache : useSWR
+  SWRCache ..> api : fetcher = api.get
+  api ..> RequestFailure : toFailure()
+  api ..> LocalStorage : request interceptor reads token
+  ListPage ..> SWRCache : list + lookups
+  ListPage ..> LocalState : page/search/filters/dialog
+  ListPage ..> Toaster : success/error
+  FormPage ..> FormState : useForm + useFieldArray
+  FormPage ..> SWRCache : lookup options
+  FormPage ..> RouterState : navigate after save
+  FormPage ..> RequestFailure : catch → toFailure
+  DashboardPage ..> SWRCache : stats + 4 reports
+  DashboardPage ..> LocalState : mode
+  ShellLayout ..> OutletContext : provides
+  ShellLayout ..> LocalState : collapsed/mobile/dark
+  ShellLayout ..> SWRCache : low-stock + stats
+  ShellLayout ..> Toaster : showToast
+  PagePatterns <|-- ListPage
+  PagePatterns <|-- FormPage
+  PagePatterns <|-- DashboardPage
+  PagePatterns <|-- ShellLayout

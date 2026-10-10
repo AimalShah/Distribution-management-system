@@ -92,6 +92,59 @@ export async function createPayment(
       );
     }
 
+    if (data.method === "Store Credit") {
+      const returnRows = await tx.return.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          returnType: "SALE",
+          sale: { customerId: data.customerId },
+        },
+        select: {
+          items: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              taxAmount: true,
+              discount: true,
+            },
+          },
+        },
+      });
+
+      const totalReturnCredits = returnRows.reduce(
+        (sum, ret) =>
+          sum +
+          ret.items.reduce(
+            (lineSum, item) =>
+              lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+            0
+          ),
+        0
+      );
+
+      const storeCreditPayments = await tx.payment.aggregate({
+        where: {
+          organizationId,
+          customerId: data.customerId,
+          method: "Store Credit",
+          deletedAt: null,
+        },
+        _sum: { amount: true },
+      });
+
+      const usedStoreCredit = storeCreditPayments._sum.amount ?? 0;
+      const availableStoreCredit = Math.max(0, totalReturnCredits - usedStoreCredit);
+
+      if (data.amount > availableStoreCredit) {
+        throw conflict(
+          "The customer does not have enough store credit to cover this payment",
+          "INSUFFICIENT_STORE_CREDIT",
+          { available: availableStoreCredit, requested: data.amount }
+        );
+      }
+    }
+
     if (data.saleId) {
       const sale = await tx.sale.findFirst({
         where: { id: data.saleId, organizationId },

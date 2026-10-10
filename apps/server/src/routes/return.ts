@@ -14,8 +14,60 @@ import {
   updateReturn,
 } from "../services/return";
 import { requireUserId } from "../middleware/auth-context";
+import { generateReturnPdf } from "../services/return-pdf";
+import { renderCreditNoteHtml } from "../services/credit-note-template";
+import { getCompanySettings } from "../services/settings";
 
 export const returnRouter: Router = Router();
+
+async function withCompanyProfile<T extends object>(record: T, organizationId: string) {
+  const settings = await getCompanySettings(organizationId);
+
+  return {
+    ...record,
+    company: {
+      name: settings.displayName,
+      address: settings.address,
+      gstin: settings.gstin,
+    },
+  };
+}
+
+returnRouter.get(
+  "/:id/pdf",
+  asyncHandler(async (req, res) => {
+    const found = await getReturnByIdOrCode(req.params.id, req.auth.organizationId);
+    const withComp = await withCompanyProfile(found, req.auth.organizationId);
+
+    const pdf = await generateReturnPdf({
+      company: withComp.company,
+      returnRecord: withComp as any,
+    });
+
+    res
+      .type("pdf")
+      .set(
+        "Content-Disposition",
+        `inline; filename="return-note-${found.returnCode}.pdf"`
+      )
+      .send(Buffer.from(pdf));
+  })
+);
+
+returnRouter.get(
+  "/:id/html",
+  asyncHandler(async (req, res) => {
+    const found = await getReturnByIdOrCode(req.params.id, req.auth.organizationId);
+    const withComp = await withCompanyProfile(found, req.auth.organizationId);
+
+    const html = renderCreditNoteHtml({
+      company: withComp.company,
+      returnRecord: withComp as any,
+    });
+
+    res.type("html").send(html);
+  })
+);
 
 returnRouter.get(
   "/",

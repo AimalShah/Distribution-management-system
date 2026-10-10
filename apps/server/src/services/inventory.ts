@@ -180,14 +180,13 @@ export async function getLowStock({
 }
 
 /**
- * Creating an inventory row with stock on hand writes no opening log entry; the
- * legacy `addInventory` did not either. The audit trail therefore starts at the
- * first adjustment. It is kept as-is for parity rather than silently inventing
- * a movement the legacy data does not have.
+ * Creating an inventory row with opening stock on hand writes an opening log entry
+ * and seeds an opening stock batch so initial stock is audited and participates in FEFO.
  */
 export async function createInventory(
   data: InventoryCreateInput,
-  organizationId: string
+  organizationId: string,
+  userId = "system"
 ) {
   // `Inventory.productId` is unique across organizations, so a create naming a
   // product id this organization does not own would attach a stock row to
@@ -205,18 +204,61 @@ export async function createInventory(
     );
   }
 
-  return prisma.inventory.create({
-    data: {
-      productId: data.productId,
-      organizationId,
-      quantityOnHand: data.quantityOnHand,
-      // `??` rather than `||` so an explicit 0 is kept instead of falling back
-      // to the default.
-      quantityReserved: data.quantityReserved ?? 0,
-      reorderLevel: data.reorderLevel ?? 0,
-      maxStockLevel: data.maxStockLevel ?? null,
-    },
-    include: inventoryInclude,
+  return prisma.$transaction(async (tx) => {
+    const inventory = await tx.inventory.create({
+      data: {
+        productId: data.productId,
+        organizationId,
+        quantityOnHand: data.quantityOnHand,
+        // `??` rather than `||` so an explicit 0 is kept instead of falling back
+        // to the default.
+        quantityReserved: data.quantityReserved ?? 0,
+        reorderLevel: data.reorderLevel ?? 0,
+        maxStockLevel: data.maxStockLevel ?? null,
+      },
+      include: inventoryInclude,
+    });
+
+    if (data.quantityOnHand > 0) {
+      await tx.inventoryLog.create({
+        data: {
+          inventoryId: inventory.id,
+          productId: data.productId,
+          userId,
+          movementType: "IN",
+          quantity: data.quantityOnHand,
+          previousQty: 0,
+          newQty: data.quantityOnHand,
+          reason: "Opening Stock",
+          reference: "OPENING",
+        },
+      });
+
+      const shortCode = data.productId.slice(-6).toUpperCase();
+      await tx.stockBatch.upsert({
+        where: {
+          productId_batchNumber_organizationId: {
+            productId: data.productId,
+            batchNumber: `OPENING-${shortCode}`,
+            organizationId,
+          },
+        },
+        update: {
+          quantityReceived: { increment: data.quantityOnHand },
+          quantityRemaining: { increment: data.quantityOnHand },
+        },
+        create: {
+          productId: data.productId,
+          organizationId,
+          batchNumber: `OPENING-${shortCode}`,
+          quantityReceived: data.quantityOnHand,
+          quantityRemaining: data.quantityOnHand,
+          unitCost: 0,
+        },
+      });
+    }
+
+    return inventory;
   });
 }
 

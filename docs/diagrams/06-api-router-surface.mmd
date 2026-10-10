@@ -1,0 +1,104 @@
+classDiagram
+  class apiRouter {
+    <<Router>>
+  }
+  class authRouter {
+    <<Router>>
+    +POST /login
+    +GET /me
+    +POST /logout
+  }
+  class organizationRouter {
+    <<Router>>
+  }
+  note for organizationRouter "GET /api/organizations<br/>GET /api/organizations/active<br/>POST /api/organizations<br/>POST /api/organizations/set-active"
+  class organizationMemberRouter {
+    <<Router>>
+  }
+  note for organizationMemberRouter "GET /api/organizations/:id/members<br/>GET /api/organizations/:id/available-users<br/>POST /api/organizations/:id/members"
+  class memberRouter {
+    <<Router>>
+  }
+  note for memberRouter "DELETE /api/members/:id<br/>PATCH /api/members/:id/role"
+  class productRouter {
+    <<Router>>
+  }
+  note for productRouter "GET /api/products<br/>GET /api/products/:id<br/>POST /api/products<br/>PUT /api/products/:id<br/>DELETE /api/products/:id"
+  class categoryRouter {
+    <<Router>>
+  }
+  note for categoryRouter "GET|POST /api/categories · GET|PUT|DELETE /api/categories/:id"
+  class brandRouter {
+    <<Router>>
+  }
+  note for brandRouter "GET|POST /api/brands · GET|PUT|DELETE /api/brands/:id"
+  class customerRouter {
+    <<Router>>
+  }
+  note for customerRouter "GET|POST /api/customers · GET|PUT|DELETE /api/customers/:id<br/>GET /api/customers/:id/ledger"
+  class supplierRouter {
+    <<Router>>
+  }
+  note for supplierRouter "GET|POST /api/suppliers · GET|PUT|DELETE /api/suppliers/:id"
+  class purchaseRouter {
+    <<Router>>
+  }
+  note for purchaseRouter "GET|POST /api/purchases · GET|PUT|DELETE /api/purchases/:id<br/>GET /api/purchases/supplier/:supplierId"
+  class saleRouter {
+    <<Router>>
+  }
+  note for saleRouter "GET|POST /api/sales · GET|PUT|DELETE /api/sales/:id<br/>GET /api/sales/:id/{invoice,print,pdf}<br/>GET /api/sales/customer/:customerId<br/>POST /api/sales/:id/{restore,cancel,uncancel}"
+  class returnRouter {
+    <<Router>>
+  }
+  note for returnRouter "GET|POST /api/returns · GET|PUT|DELETE /api/returns/:id<br/>POST /api/returns/:id/restore"
+  class paymentRouter {
+    <<Router>>
+  }
+  note for paymentRouter "GET|POST /api/payments · GET /api/payments/:id<br/>DELETE /api/payments/:id"
+  class inventoryRouter {
+    <<Router>>
+  }
+  note for inventoryRouter "GET|POST /api/inventory<br/>GET /api/inventory/{logs,low-stock,batches}/:id<br/>POST /api/inventory/{adjust,bulk-import,create}<br/>PUT /api/inventory/:id/settings"
+  class settingsRouter {
+    <<Router>>
+  }
+  note for settingsRouter "GET /api/settings<br/>PUT /api/settings"
+  class roleRouter {
+    <<Router>>
+  }
+  note for roleRouter "GET|POST /api/roles · GET|PUT|DELETE /api/roles/:id<br/>PUT /api/roles/:id/permissions<br/>POST /api/roles/members/:memberId"
+  class dashboardRouter {
+    <<Router>>
+  }
+  note for dashboardRouter "GET /api/dashboard/stats"
+  class inventoryReportRouter {
+    <<Router>>
+  }
+  note for inventoryReportRouter "GET /api/reports/inventory/{basic,valuation,movements,low-stock,expiry,full}"
+  class purchaseReportRouter {
+    <<Router>>
+  }
+  note for purchaseReportRouter "GET /api/reports/purchase/{basic,by-supplier,by-product,by-brand,full}"
+  class salesReportRouter {
+    <<Router>>
+  }
+  note for salesReportRouter "GET /api/reports/sales/{basic,by-customer,by-product,by-brand,full,aging}<br/>alias GET /api/reports/aging"
+
+  apiRouter *-- authRouter
+  apiRouter *-- productRouter
+  apiRouter *-- categoryRouter
+  apiRouter *-- brandRouter
+  apiRouter *-- customerRouter
+  apiRouter *-- supplierRouter
+  apiRouter *-- purchaseRouter
+  apiRouter *-- saleRouter
+  apiRouter *-- returnRouter
+  apiRouter *-- paymentRouter
+  apiRouter *-- inventoryRouter
+  apiRouter *-- settingsRouter
+  apiRouter *-- roleRouter
+  apiRouter *-- dashboardRouter
+  apiRouter *-- inventoryReportRouter
+  apiRouter *-- purchaseReportRouter
+  apiRouter *-- salesReportRouter

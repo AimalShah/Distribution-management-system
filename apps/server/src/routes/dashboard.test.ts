@@ -26,6 +26,8 @@ const { models } = vi.hoisted(() => {
     },
     reorderLevel,
     stockBatch: { count: vi.fn(), findMany: vi.fn() },
+    payment: { aggregate: vi.fn() },
+    return: { findMany: vi.fn() },
   };
 
   return { models };
@@ -60,6 +62,8 @@ beforeEach(() => {
   models.inventory.findMany.mockResolvedValue([]);
   models.stockBatch.count.mockResolvedValue(0);
   models.stockBatch.findMany.mockResolvedValue([]);
+  models.payment.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+  models.return.findMany.mockResolvedValue([]);
 });
 
 describe("GET /api/dashboard/stats", () => {
@@ -231,6 +235,78 @@ describe("GET /api/dashboard/stats", () => {
       where: { organizationId: ORG, deletedAt: null, status: { not: "Cancelled" } },
       _sum: { totalAmount: true, amountPaid: true },
     });
+  });
+
+  it("partitions expiring-soon batches from already-expired write-offs", async () => {
+    models.stockBatch.count.mockImplementation(async ({ where }: any) => {
+      if (where.expiryDate?.lt) {
+        return 4; // 4 already expired
+      }
+      if (where.expiryDate?.gte) {
+        return 7; // 7 expiring soon
+      }
+      return 0;
+    });
+
+    const res = await request(app).get("/api/dashboard/stats").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.expiringSoonCount).toBe(7);
+    expect(res.body.expiredCount).toBe(4);
+    expect(models.stockBatch.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG,
+          quantityRemaining: { gt: 0 },
+          expiryDate: expect.objectContaining({
+            not: null,
+            gte: expect.any(Date),
+            lte: expect.any(Date),
+          }),
+        }),
+      })
+    );
+    expect(models.stockBatch.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG,
+          quantityRemaining: { gt: 0 },
+          expiryDate: expect.objectContaining({
+            not: null,
+            lt: expect.any(Date),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("reconciles outstanding receivables by deducting return credits and unallocated payments", async () => {
+    models.sale.aggregate.mockImplementation(async ({ where }: any) => {
+      if (where.status) {
+        return {
+          _sum: {
+            totalAmount: 50_000,
+            amountPaid: 30_000,
+          },
+        };
+      }
+      return { _sum: { totalAmount: 50_000 } };
+    });
+    // Unpaid invoices = 50_000 - 30_000 = 20_000
+    // Returns = 3_000
+    models.return.findMany.mockResolvedValue([
+      {
+        items: [{ quantity: 3, unitPrice: 1000, taxAmount: 0, discount: 0 }],
+      },
+    ]);
+    // Unallocated payments = 2_000
+    models.payment.aggregate.mockResolvedValue({ _sum: { amount: 2_000 } });
+
+    const res = await request(app).get("/api/dashboard/stats").set(auth());
+
+    expect(res.status).toBe(200);
+    // Net outstanding = 20_000 - 3_000 - 2_000 = 15_000
+    expect(res.body.outstanding).toBe(15_000);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   Edit,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Users,
 } from "lucide-react";
@@ -114,13 +115,12 @@ export default function CustomerList() {
         header: "Name",
         cell: ({ row }) => {
           const name = row.original.name;
+          const phone = row.original.phone;
 
           return (
-            <div className="flex items-center gap-3">
-              <div>
-                <span className="font-semibold text-foreground text-xs block">{name}</span>
-                <span className="font-mono text-xs text-primary font-medium">{row.original.customerCode}</span>
-              </div>
+            <div>
+              <span className="font-semibold text-foreground text-xs block">{name}</span>
+              {phone && <span className="text-[11px] text-muted-foreground block">{phone}</span>}
             </div>
           );
         },
@@ -148,7 +148,7 @@ export default function CustomerList() {
       },
       {
         accessorKey: "creditLimit",
-        header: "Credit Limit",
+        header: () => <div className="text-right">Credit Limit</div>,
         cell: ({ row }) => (
           <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
             {row.original.creditLimit !== null && row.original.creditLimit !== undefined
@@ -171,12 +171,12 @@ export default function CustomerList() {
       },
       {
         id: "actions",
-        header: "Actions",
+        header: () => <div className="text-right">Actions</div>,
         cell: ({ row }) => {
           const customer = row.original;
 
           return (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-end gap-1">
               <Link
                 to={`/customers/${customer.id}/ledger`}
                 className="inline-flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -253,7 +253,7 @@ export default function CustomerList() {
         }
       />
 
-      {/* Invenza Stat Metric Cards */}
+      {/* Operational KPI Cards */}
       <StatTileRow
         tiles={[
           {
@@ -261,6 +261,7 @@ export default function CustomerList() {
             value: isLoading ? "—" : totalCustomers,
             sublabel: "Registered client accounts",
             icon: <Users className="size-6" />,
+            tone: "neutral",
           },
           {
             label: "Active Accounts",
@@ -268,7 +269,7 @@ export default function CustomerList() {
               ? "—"
               : customersList.filter((c) => c.isActive).length,
             sublabel: "Eligible for purchase credit",
-            icon: <CreditCard className="size-6" />,
+            icon: <ShieldCheck className="size-6" />,
             tone: "success",
             sublabelTone: "success",
           },
@@ -279,6 +280,7 @@ export default function CustomerList() {
               : formatMoney(customersList.reduce((acc, c) => acc + (c.creditLimit || 0), 0)),
             sublabel: "Aggregate credit ceiling",
             icon: <CreditCard className="size-6" />,
+            tone: "warning",
           },
         ]}
       />

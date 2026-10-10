@@ -1,0 +1,13 @@
+flowchart TD
+  IDX["index.ts<br/>import './config/dev-env'<br/>assertAuthIsSafe()"] --> APP["app.ts · createApp(options)"]
+  APP --> CORS["cors({ origin: allowlist, credentials: true })"]
+  CORS --> FALLBACK["/api/auth → authRouter<br/>credentials fallback"]
+  FALLBACK --> BA["/api/auth/* → toNodeHandler(auth)<br/>better-auth (raw body)"]
+  BA --> JSON["express.json()"]
+  JSON --> HEALTH["GET /api/health"]
+  HEALTH --> ORGB["/api/organizations<br/>bootstrap → organizationMemberRouter → organizationRouter → notFoundHandler"]
+  ORGB --> MEMB["/api/members<br/>bootstrap → memberRouter → notFoundHandler"]
+  MEMB --> STRICT["/api → strict(authContext)<br/>→ apiRouter"]
+  STRICT --> DEBUG["/__debug (non-production)"]
+  DEBUG --> NF["notFoundHandler"]
+  NF --> EH["errorHandler"]

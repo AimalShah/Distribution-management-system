@@ -7,7 +7,7 @@ import { nullableText } from "../inputs";
  * supplied, and blank clears it. Kept as a preprocess so an untouched box ("" or
  * null) clears rather than fails.
  */
-const gstin = z.preprocess(
+export const gstinSchema = z.preprocess(
   (value) => {
     if (value === null) return null;
 
@@ -45,7 +45,7 @@ const gstin = z.preprocess(
 export const companySettingsUpdateSchema = z.object({
   displayName: nullableText("Display name cannot be blank"),
   address: nullableText("Address cannot be blank"),
-  gstin,
+  gstin: gstinSchema,
   skuFormat: z.string().trim().min(1, "SKU format is required").max(120).optional(),
   skuSeparator: z.string().trim().min(1, "Separator is required").max(3).optional(),
   returnWindowDays: z.coerce

@@ -15,6 +15,7 @@ import {
   FileText,
   ShieldCheck,
   Box,
+  Building2,
 } from "lucide-react";
 
 type NavItem = {
@@ -69,7 +70,7 @@ export const navSections: NavGroup[] = [
     heading: "Settings",
     items: [
       { label: "Team", icon: Users, to: "/users" },
-      { label: "Company", icon: Box, to: "/settings/company" },
+      { label: "Companies", icon: Building2, to: "/settings/company" },
       { label: "Permissions", icon: ShieldCheck, to: "/permissions" },
       { label: "Profile", icon: Box, to: "/profile" },
     ],

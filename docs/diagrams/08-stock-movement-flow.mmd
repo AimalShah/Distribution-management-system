@@ -1,0 +1,18 @@
+flowchart TD
+  A["applyStockMovement(request)"] --> B{direction}
+  B -->|in + opening| U["tx.inventory.upsert<br/>increment / create"]
+  B -->|else| R["tx.inventory.findFirst(productId, organizationId)"]
+  R -->|missing| ERR["conflict INVENTORY_ROW_MISSING"]
+  R --> IN{direction}
+  IN -->|in| I["update increment<br/>+ ledger"]
+  IN -->|out| O["updateMany where gte(quantity)<br/>decrement"]
+  O -->|count 0| REF["throw refusal(available)<br/>INSUFFICIENT_STOCK"]
+  O -->|count 1| OL["read back + ledger"]
+  IN -->|count| CT["update absolute<br/>ledger quantity = newQty - previousQty"]
+  I --> BC["applyBatchConsequence"]
+  OL --> BC
+  CT --> BC
+  U --> BC
+  BC --> FEFO["out → deductFirstExpiredFirstOut<br/>order expiryDate asc, receivedAt asc"]
+  BC --> CRE["in → upsert StockBatch / untracked / creditShortBatches"]
+  BC --> CNT["count delta → creditShort / FEFO"]

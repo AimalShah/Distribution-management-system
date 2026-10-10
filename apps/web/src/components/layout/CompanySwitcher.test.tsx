@@ -129,4 +129,28 @@ describe("CompanySwitcher", () => {
 
     expect(await screen.findByText(/could not load|couldn't load/i)).toBeInTheDocument();
   });
+
+  it("renders a create company button in the dropdown", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+
+    const button = await screen.findByRole("button", { name: /acme distribution/i });
+    await user.click(button);
+
+    expect(
+      await screen.findByRole("menuitem", { name: /create company|new company/i })
+    ).toBeInTheDocument();
+  });
+
+  it("renders an edit company details button in the dropdown", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+
+    const button = await screen.findByRole("button", { name: /acme distribution/i });
+    await user.click(button);
+
+    expect(
+      await screen.findByRole("menuitem", { name: /edit company/i })
+    ).toBeInTheDocument();
+  });
 });

@@ -10,6 +10,7 @@ import {
   History,
   Plus,
   RefreshCw,
+  ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -361,11 +362,29 @@ export default function InventoryPage() {
         }
       />
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <StatChip label="Tracked Products" value={inventoryLoading ? "—" : totalStockItems} />
-        <StatChip label="Low Stock" value={inventoryLoading ? "—" : lowStockCount} accent="amber" />
-        <StatChip label="Healthy" value={inventoryLoading ? "—" : Math.max(0, totalStockItems - lowStockCount)} accent="green" />
+      {/* Operational KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <StatChip
+          label="Tracked Products"
+          value={inventoryLoading ? "—" : totalStockItems}
+          sublabel="Inventory items"
+          icon={<Boxes className="size-5" />}
+          accent="blue"
+        />
+        <StatChip
+          label="Low Stock"
+          value={inventoryLoading ? "—" : lowStockCount}
+          sublabel="Reorder threshold reached"
+          icon={<AlertTriangle className="size-5" />}
+          accent="amber"
+        />
+        <StatChip
+          label="Healthy"
+          value={inventoryLoading ? "—" : Math.max(0, totalStockItems - lowStockCount)}
+          sublabel="Adequate stock levels"
+          icon={<ShieldCheck className="size-5" />}
+          accent="green"
+        />
       </div>
 
       {/* Main Tabs Container */}

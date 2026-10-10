@@ -1,0 +1,18 @@
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> In : direction=in
+  Idle --> Out : direction=out
+  Idle --> Count : direction=count
+  In --> Batches : receipt upsert | untracked | creditShort
+  Out --> FEFO : expiryDate asc, receivedAt asc
+  FEFO --> Guard : count 0 → refusal
+  Guard --> [*] : 409 INSUFFICIENT_STOCK
+  Count --> Batches : delta >0 credit / <0 FEFO
+  Batches --> [*]
+
+  state ReturnRouting {
+    [*] --> StockIn : SALE
+    [*] --> StockOut : PURCHASE
+    [*] --> Expired : EXPIRED
+    [*] --> Damaged : DAMAGED
+  }

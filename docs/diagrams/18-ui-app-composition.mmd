@@ -1,0 +1,25 @@
+%% UI-01 · App composition and providers
+%% Source: apps/web/src/main.tsx, App.tsx, lib/auth.tsx
+flowchart TD
+  MAIN["main.tsx<br/>createRoot(#root).render(...)"] --> STRICT["StrictMode"]
+  STRICT --> ROUTER["BrowserRouter"]
+  ROUTER --> AUTHP["AuthProvider · lib/auth.tsx<br/>React Context (session + active org)"]
+  AUTHP --> APP["App · App.tsx<br/>Routes"]
+  APP --> RLOGIN["Route /login → Suspense → LoginPage"]
+  APP --> RGUARD["Route element = RequireAuth<br/>status guard + org guard"]
+  RGUARD --> RONB["Route /onboarding → OnboardingPage"]
+  RGUARD --> RSHELL["Route element = AppShell<br/>layout + Outlet"]
+  RSHELL --> SUSP["Suspense fallback = Skeleton<br/>(all pages are React.lazy)"]
+  SUSP --> PAGES["Page components"]
+
+  subgraph Pages
+    PAGES --> DASH["Dashboard"]
+    PAGES --> OPS["SaleInvoiceList/New/Edit<br/>PurchaseList/New/Edit<br/>ReturnList/New<br/>PaymentsPage"]
+    PAGES --> CAT["ProductList/New/Edit<br/>InventoryPage · BatchesPage"]
+    PAGES --> CON["CustomerList · CustomerLedgerPage<br/>SupplierList"]
+    PAGES --> REP["ReportsPage"]
+    PAGES --> SET["UsersPage · CompanySettingsPage<br/>PermissionPage · BillingPage · ProfilePage"]
+  end
+
+  AUTHP -.->|"useAuth() context value"| PAGES
+  AUTHP -.->|"isPending → status"| RGUARD

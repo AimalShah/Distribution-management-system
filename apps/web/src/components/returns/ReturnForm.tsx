@@ -1,15 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   ReturnCreateSchema,
   type ReturnTypeValue,
 } from "@dms/shared";
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -73,6 +74,8 @@ export function ReturnForm() {
     unitPrice: 0,
     taxAmount: 0,
     discount: 0,
+    condition: "RESTOCKABLE" as "RESTOCKABLE" | "DAMAGED",
+    reason: "",
     note: "",
   };
 
@@ -90,17 +93,82 @@ export function ReturnForm() {
   });
 
   const watchedReturnType = form.watch("returnType");
+  const watchedSaleId = form.watch("saleId");
+  const watchedPurchaseId = form.watch("purchaseId");
   const watchedItems = form.watch("items") || [];
 
-  const { fields, append, remove } = useFieldArray({
+  // Fetch full details of the selected sale or purchase document
+  const { data: selectedSale } = useSWR(
+    watchedReturnType === "SALE" && watchedSaleId ? `/sales/${watchedSaleId}` : null,
+    fetcher
+  );
+
+  const { data: selectedPurchase } = useSWR(
+    watchedReturnType === "PURCHASE" && watchedPurchaseId ? `/purchases/${watchedPurchaseId}` : null,
+    fetcher
+  );
+
+  const documentItems = useMemo(() => {
+    if (watchedReturnType === "SALE" && selectedSale?.items) {
+      return selectedSale.items.map((it: any) => ({
+        productId: it.productId,
+        name: it.product?.name ?? "Unknown Product",
+        productCode: it.product?.productCode ?? "",
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        taxAmount: it.taxAmount ?? 0,
+        discount: it.discount ?? 0,
+      }));
+    }
+    if (watchedReturnType === "PURCHASE" && selectedPurchase?.purchaseItems) {
+      return selectedPurchase.purchaseItems.map((it: any) => ({
+        productId: it.productId,
+        name: it.product?.name ?? "Unknown Product",
+        productCode: it.product?.productCode ?? "",
+        quantity: it.quantity,
+        unitPrice: it.unitCost ?? it.unitPrice ?? 0,
+        taxAmount: it.taxAmount ?? 0,
+        discount: it.discount ?? 0,
+      }));
+    }
+    return [];
+  }, [watchedReturnType, selectedSale, selectedPurchase]);
+
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "items",
   });
 
+  // Autofill all lines from the selected invoice / purchase order
+  const handleImportDocumentItems = () => {
+    if (!documentItems.length) return;
+    replace(
+      documentItems.map((it: any) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        taxAmount: it.taxAmount,
+        discount: it.discount,
+        condition: "RESTOCKABLE",
+        reason: "",
+        note: "",
+      }))
+    );
+    toast.success(`Imported ${documentItems.length} item(s) from document`);
+  };
+
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
-    const prod = products.find((p) => p.id === productId);
+    
+    // First check if product was on the selected document
+    const docItem = documentItems.find((d: any) => d.productId === productId);
+    if (docItem) {
+      form.setValue(`items.${index}.unitPrice`, docItem.unitPrice);
+      form.setValue(`items.${index}.quantity`, docItem.quantity);
+      return;
+    }
 
+    const prod = products.find((p) => p.id === productId);
     if (prod) {
       const price = watchedReturnType === "PURCHASE" ? prod.unitCost : prod.unitPrice;
       form.setValue(`items.${index}.unitPrice`, price);
@@ -125,7 +193,7 @@ export function ReturnForm() {
       const payload: any = {
         returnCode: values.returnCode.trim(),
         returnType: values.returnType,
-        returnDate: values.returnDate,
+        returnDate: values.returnDate ? values.returnDate : undefined,
         reason: values.reason?.trim() || undefined,
         items: values.items.map((it: any) => ({
           productId: it.productId,
@@ -133,14 +201,16 @@ export function ReturnForm() {
           unitPrice: Number(it.unitPrice),
           taxAmount: Number(it.taxAmount) || 0,
           discount: Number(it.discount) || 0,
+          condition: it.condition || "RESTOCKABLE",
+          reason: it.reason?.trim() || undefined,
           note: it.note?.trim() || undefined,
         })),
       };
 
-      if (values.returnType === "SALE") {
-        payload.saleId = values.saleId;
-      } else if (values.returnType === "PURCHASE") {
-        payload.purchaseId = values.purchaseId;
+      if (values.returnType === "SALE" && values.saleId) {
+        payload.saleId = values.saleId.trim();
+      } else if (values.returnType === "PURCHASE" && values.purchaseId) {
+        payload.purchaseId = values.purchaseId.trim();
       }
 
       await api.post("/returns", payload);
@@ -291,6 +361,28 @@ export function ReturnForm() {
               )}
             </div>
 
+            {/* Document Items Info Bar */}
+            {documentItems.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-xs">
+                <div className="flex items-center gap-2 text-sky-800 dark:text-sky-300">
+                  <FileText className="size-4 shrink-0" />
+                  <span>
+                    Linked {watchedReturnType === "SALE" ? "sale invoice" : "purchase order"} has {documentItems.length} line item(s).
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1.5 bg-background border-sky-300 dark:border-sky-700 hover:bg-sky-100 dark:hover:bg-sky-900/40"
+                  onClick={handleImportDocumentItems}
+                >
+                  <RotateCcw className="size-3" />
+                  Populate items from {watchedReturnType === "SALE" ? "invoice" : "order"}
+                </Button>
+              </div>
+            )}
+
             {/* Reason */}
             <FormField
               control={form.control}
@@ -327,12 +419,13 @@ export function ReturnForm() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[30%]">Product *</TableHead>
-                    <TableHead className="w-[12%]">Quantity *</TableHead>
-                    <TableHead className="w-[15%]">Unit Price *</TableHead>
-                    <TableHead className="w-[12%]">Tax Amount</TableHead>
-                    <TableHead className="w-[12%]">Discount</TableHead>
-                    <TableHead className="w-[15%]">Note</TableHead>
+                    <TableHead className="w-[28%]">Product *</TableHead>
+                    <TableHead className="w-[10%]">Quantity *</TableHead>
+                    <TableHead className="w-[13%]">Unit Price *</TableHead>
+                    <TableHead className="w-[15%]">Condition</TableHead>
+                    <TableHead className="w-[10%]">Tax</TableHead>
+                    <TableHead className="w-[10%]">Discount</TableHead>
+                    <TableHead className="w-[10%]">Note</TableHead>
                     <TableHead className="w-[4%]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -356,11 +449,19 @@ export function ReturnForm() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {products.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      {p.name} ({p.productCode})
-                                    </SelectItem>
-                                  ))}
+                                  {documentItems.length > 0 ? (
+                                    documentItems.map((p: any) => (
+                                      <SelectItem key={p.productId} value={p.productId}>
+                                        {p.name} ({p.productCode}) — {p.quantity} pcs @ {formatMoney(p.unitPrice)}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    products.map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {p.name} ({p.productCode})
+                                      </SelectItem>
+                                    ))
+                                  )}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -409,6 +510,33 @@ export function ReturnForm() {
                                   onChange={(e) => field.onChange(Number(e.target.value))}
                                 />
                               </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TableCell>
+
+                      {/* Condition (ADR 0008) */}
+                      <TableCell>
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.condition`}
+                          render={({ field }) => (
+                            <FormItem className="space-y-0">
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || "RESTOCKABLE"}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Condition" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="RESTOCKABLE">Restockable (Shelf)</SelectItem>
+                                  <SelectItem value="DAMAGED">Damaged (Write-off)</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}

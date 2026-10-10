@@ -105,7 +105,7 @@ inventoryRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const data = InventoryCreateSchema.parse(req.body);
-    const inventory = await createInventory(data, req.auth.organizationId);
+    const inventory = await createInventory(data, req.auth.organizationId, req.auth.userId);
     res.status(201).json(inventory);
   })
 );

@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { SESSION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/auth-context";
 
-const { organizationModel, memberModel, sessionModel, userModel, dbStub } =
+const { organizationModel, memberModel, sessionModel, userModel, companySettingsModel, dbStub } =
   vi.hoisted(() => {
     const organization = {
       findMany: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     };
 
     const member = {
@@ -24,11 +25,16 @@ const { organizationModel, memberModel, sessionModel, userModel, dbStub } =
       update: vi.fn(),
     };
 
+    const companySettings = {
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
+    };
+
     // A callback-passing $transaction stub, so the test controls what the
     // transaction body sees rather than asserting on a mock call.
     const $transaction = vi.fn(
       async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn({ organization, member, session, user })
+        fn({ organization, member, session, user, companySettings })
     );
 
     return {
@@ -36,12 +42,14 @@ const { organizationModel, memberModel, sessionModel, userModel, dbStub } =
       memberModel: member,
       sessionModel: session,
       userModel: user,
+      companySettingsModel: companySettings,
       dbStub: {
         $transaction,
         organization,
         member,
         session,
         user,
+        companySettings,
       },
     };
   });
@@ -73,6 +81,8 @@ beforeEach(() => {
   organizationModel.findMany.mockResolvedValue([organizationFixture()]);
   organizationModel.findFirst.mockResolvedValue(organizationFixture());
   organizationModel.create.mockResolvedValue(organizationFixture());
+  organizationModel.update.mockResolvedValue(organizationFixture({ name: "Updated Corp" }));
+  companySettingsModel.upsert.mockResolvedValue({ organizationId: ORG });
   memberModel.findFirst.mockResolvedValue({
     id: "mem_1",
     userId: USER,
@@ -451,6 +461,96 @@ describe("POST /api/organizations/set-active", () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("SESSION_REQUIRED");
     expect(memberModel.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/organizations/:id", () => {
+  it("updates the organization name and company settings when caller is an owner", async () => {
+    const res = await request(app)
+      .patch(`/api/organizations/${ORG}`)
+      .set(USER_HEADER, USER)
+      .send({
+        name: "Updated Distribution Corp",
+        displayName: "Updated Corp",
+        address: "123 Market Road",
+        gstin: "27AABCU9603R1ZM",
+      });
+
+    expect(res.status).toBe(200);
+    expect(organizationModel.update).toHaveBeenCalledWith({
+      where: { id: ORG },
+      data: { name: "Updated Distribution Corp" },
+    });
+    expect(companySettingsModel.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: ORG },
+        create: expect.objectContaining({
+          organizationId: ORG,
+          displayName: "Updated Corp",
+          address: "123 Market Road",
+          gstin: "27AABCU9603R1ZM",
+        }),
+        update: expect.objectContaining({
+          displayName: "Updated Corp",
+          address: "123 Market Road",
+          gstin: "27AABCU9603R1ZM",
+        }),
+      })
+    );
+  });
+
+  it("403s when caller is not a member of the organization", async () => {
+    memberModel.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .patch(`/api/organizations/${ORG}`)
+      .set(USER_HEADER, USER)
+      .send({ name: "Updated Corp" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("NOT_A_MEMBER");
+    expect(organizationModel.update).not.toHaveBeenCalled();
+  });
+
+  it("403s when caller is a standard member without admin rights", async () => {
+    memberModel.findFirst.mockResolvedValueOnce({
+      id: "mem_2",
+      userId: USER,
+      organizationId: ORG,
+      role: "member",
+    });
+
+    const res = await request(app)
+      .patch(`/api/organizations/${ORG}`)
+      .set(USER_HEADER, USER)
+      .send({ name: "Updated Corp" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("INSUFFICIENT_PERMISSIONS");
+    expect(organizationModel.update).not.toHaveBeenCalled();
+  });
+
+  it("400s when organization name is blank", async () => {
+    const res = await request(app)
+      .patch(`/api/organizations/${ORG}`)
+      .set(USER_HEADER, USER)
+      .send({ name: "   " });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(organizationModel.update).not.toHaveBeenCalled();
+  });
+
+  it("400s when request lacks a user header", async () => {
+    vi.stubEnv(USER_ENV_VAR, "");
+
+    const res = await request(app)
+      .patch(`/api/organizations/${ORG}`)
+      .send({ name: "Updated Corp" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("USER_REQUIRED");
+    expect(organizationModel.update).not.toHaveBeenCalled();
   });
 });
 

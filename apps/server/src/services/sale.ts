@@ -250,10 +250,52 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         _sum: { totalAmount: true, amountPaid: true },
       });
 
-      const outstanding =
-        (ledger._sum.totalAmount ?? 0) - (ledger._sum.amountPaid ?? 0);
+      const unallocatedPayments = await tx.payment.aggregate({
+        where: {
+          customerId: data.customerId,
+          organizationId,
+          saleId: null,
+          deletedAt: null,
+        },
+        _sum: { amount: true },
+      });
 
-      const projected = outstanding + money.total;
+      const returnRows = await tx.return.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          returnType: "SALE",
+          sale: { customerId: data.customerId },
+        },
+        select: {
+          items: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              taxAmount: true,
+              discount: true,
+            },
+          },
+        },
+      });
+
+      const returnCredits = returnRows.reduce(
+        (sum, ret) =>
+          sum +
+          ret.items.reduce(
+            (lineSum, item) =>
+              lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+            0
+          ),
+        0
+      );
+
+      const unpaidSales =
+        (ledger._sum.totalAmount ?? 0) - (ledger._sum.amountPaid ?? 0);
+      const unallocated = unallocatedPayments._sum.amount ?? 0;
+      const netBalance = unpaidSales - returnCredits - unallocated;
+      const outstanding = Math.max(0, netBalance);
+      const projected = Math.max(0, netBalance + money.total);
 
       if (projected > customer.creditLimit && !data.overrideCreditLimit) {
         throw conflict(

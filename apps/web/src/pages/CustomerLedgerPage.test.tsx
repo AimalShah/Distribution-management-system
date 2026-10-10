@@ -81,4 +81,13 @@ describe("CustomerLedgerPage (issue #48)", () => {
     const paymentRow = screen.getByText("PAY-001").closest("tr");
     expect(paymentRow).not.toHaveTextContent(/due/i);
   });
+
+  it("renders Download PDF and Print action buttons", async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /print/i })).toBeInTheDocument();
+    });
+  });
 });

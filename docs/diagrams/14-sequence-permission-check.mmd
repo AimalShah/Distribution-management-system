@@ -1,0 +1,29 @@
+sequenceDiagram
+  autonumber
+  participant M as requireRoutePermission
+  participant RB as resolveRequirement
+  participant P as assertPermission
+  participant CK as checkPermission
+  participant DB as Prisma
+
+  M->>RB: (PERMISSIONS, method, req.path)
+  RB-->>M: {resource, action} | null
+  alt null (no route)
+    M->>M: next() → router 404
+  end
+  M->>P: assertPermission
+  P->>P: organizationId? else 400 ORGANIZATION_REQUIRED
+  P->>P: userId? else 400 USER_REQUIRED
+  P->>CK: checkPermission(userId, org, resource, action)
+  CK->>DB: member.findFirst(include customRole.permissions)
+  CK-->>CK: [] if no member
+  alt customRole && role != owner
+    CK-->>P: customRole.permissions
+  else
+    CK-->>P: permissionsForRole(member.role)
+  end
+  P->>P: can(permissions, resource, action)
+  alt not allowed
+    P-->>M: 403 PERMISSION_DENIED
+  end
+  M->>M: next()

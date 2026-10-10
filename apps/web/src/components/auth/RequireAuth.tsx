@@ -9,7 +9,7 @@ import { useAuth } from "../../lib/auth";
  * and the router resumes it once the credentials check out.
  */
 export function RequireAuth() {
-  const { status } = useAuth();
+  const { status, activeOrganizationId } = useAuth();
   const location = useLocation();
 
   if (status === "loading") {
@@ -27,6 +27,14 @@ export function RequireAuth() {
     const from = `${location.pathname}${location.search}`;
 
     return <Navigate to="/login" replace state={{ from }} />;
+  }
+
+  if (
+    status === "authenticated" &&
+    activeOrganizationId === null &&
+    location.pathname !== "/onboarding"
+  ) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <Outlet />;

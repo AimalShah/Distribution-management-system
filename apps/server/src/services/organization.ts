@@ -1,5 +1,5 @@
 import prisma from "@dms/db";
-import type { OrganizationCreateInput } from "@dms/shared";
+import type { OrganizationCreateInput, OrganizationUpdateInput } from "@dms/shared";
 import { forbidden, notFound } from "../http";
 
 async function findMembership(userId: string, organizationId: string) {
@@ -181,3 +181,71 @@ export async function getUserOrganizationIds(userId: string) {
 
   return memberships.map((m) => m.organizationId);
 }
+
+/**
+ * Updates an organization's name and associated CompanySettings profile.
+ * Restricted to members with owner or admin roles.
+ */
+export async function updateOrganization(
+  organizationId: string,
+  data: OrganizationUpdateInput,
+  userId: string
+) {
+  const membership = await findMembership(userId, organizationId);
+
+  if (!membership) {
+    throw forbidden(
+      "You are not a member of this organization",
+      "NOT_A_MEMBER"
+    );
+  }
+
+  const role = membership.role?.toLowerCase();
+  if (role !== "owner" && role !== "adminrole" && role !== "admin") {
+    throw forbidden(
+      "Only organization owners or administrators can edit company details",
+      "INSUFFICIENT_PERMISSIONS"
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    let org = await tx.organization.findFirst({
+      where: { id: organizationId },
+    });
+
+    if (!org) {
+      throw notFound("Organization not found", "ORGANIZATION_NOT_FOUND");
+    }
+
+    if (data.name !== undefined) {
+      org = await tx.organization.update({
+        where: { id: organizationId },
+        data: { name: data.name },
+      });
+    }
+
+    if (
+      data.displayName !== undefined ||
+      data.address !== undefined ||
+      data.gstin !== undefined
+    ) {
+      await tx.companySettings.upsert({
+        where: { organizationId },
+        create: {
+          organizationId,
+          ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
+          ...(data.address !== undefined ? { address: data.address } : {}),
+          ...(data.gstin !== undefined ? { gstin: data.gstin } : {}),
+        },
+        update: {
+          ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
+          ...(data.address !== undefined ? { address: data.address } : {}),
+          ...(data.gstin !== undefined ? { gstin: data.gstin } : {}),
+        },
+      });
+    }
+
+    return org;
+  });
+}
+
