@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import useSWR from "swr";
-import { CreditCard, Download, Plus, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, CreditCard, Download, Plus, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -94,6 +94,8 @@ const emptyDraft = () => ({
  * native confirm, and the server re-checks the balance arithmetic either way.
  */
 export default function PaymentsPage() {
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
   const [deletedView, setDeletedView] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
@@ -102,7 +104,7 @@ export default function PaymentsPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   const { data, isLoading, mutate } = useSWR(
-    `/payments?pageSize=100${deletedView ? "&deleted=true" : ""}`,
+    `/payments?page=${page}&pageSize=${pageSize}${deletedView ? "&deleted=true" : ""}`,
     fetcher
   );
 
@@ -214,7 +216,10 @@ export default function PaymentsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setDeletedView((v) => !v)}
+              onClick={() => {
+                setDeletedView((v) => !v);
+                setPage(1);
+              }}
               className="h-9 rounded-md cursor-pointer"
             >
               {deletedView ? "Active payments" : "Corrected payments"}
@@ -291,7 +296,8 @@ export default function PaymentsPage() {
               </p>
             </div>
           ) : (
-            <Table className="data-table">
+            <>
+              <Table className="data-table">
               <TableHeader className="[&_tr]:border-0">
                 <TableRow>
                   <TableHead className="h-auto">Date</TableHead>
@@ -373,7 +379,49 @@ export default function PaymentsPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
+            <div className="flex items-center justify-between px-1 pt-4 border-t text-xs text-muted-foreground">
+              <div>
+                Showing{" "}
+                <span className="font-medium text-foreground">
+                  {(page - 1) * pageSize + 1}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium text-foreground">
+                  {Math.min(page * pageSize, data?.total ?? 0)}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium text-foreground">
+                  {data?.total ?? 0}
+                </span>{" "}
+                payments (Page{" "}
+                <span className="font-medium text-foreground">{page}</span> of{" "}
+                <span className="font-medium text-foreground">{Math.max(1, data?.pageCount ?? 1)}</span>)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 text-xs gap-1"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-3.5" />
+                  <span>Previous</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 text-xs gap-1"
+                  disabled={page >= (data?.pageCount ?? 1)}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  <span>Next</span>
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
         </div>
       </div>
 

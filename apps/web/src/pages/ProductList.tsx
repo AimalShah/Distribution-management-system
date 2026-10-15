@@ -80,8 +80,12 @@ export default function ProductList() {
       params.set("brandId", brandFilter);
     }
 
+    if (categoryFilter && categoryFilter !== "all") {
+      params.set("categoryId", categoryFilter);
+    }
+
     return params.toString();
-  }, [page, pageSize, search, statusFilter, brandFilter]);
+  }, [page, pageSize, search, statusFilter, brandFilter, categoryFilter]);
 
   const { data, isLoading, mutate } = useSWR(
     `/products?${queryString}`,
@@ -96,16 +100,7 @@ export default function ProductList() {
   const { data: brandsData } = useSWR("/brands?page=1&pageSize=100", fetcher);
   const brands: { id: string; name: string }[] = brandsData?.data ?? [];
 
-  // Filter client-side by category if category filter is active (server supports isActive & search)
-  const productList: ProductItem[] = useMemo(() => {
-    const raw: ProductItem[] = data?.data ?? [];
-
-    if (categoryFilter === "all") return raw;
-
-    return raw.filter(
-      (p) => p.category?.id === categoryFilter || p.categoryId === categoryFilter
-    );
-  }, [data?.data, categoryFilter]);
+  const productList: ProductItem[] = data?.data ?? [];
 
   const totalProducts = data?.total ?? 0;
   const activeProducts = (data?.data ?? []).filter((p: ProductItem) => p.isActive).length;

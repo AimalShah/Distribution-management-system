@@ -74,6 +74,8 @@ export const productListQuerySchema = paginationQuerySchema.extend({
   // Filters the catalogue to one brand (issue #45). An empty value is rejected
   // rather than ignored: a cleared dropdown means "no brand".
   brandId: z.string().trim().min(1, "Brand filter cannot be empty").optional(),
+  // Filters the catalogue to one category.
+  categoryId: z.string().trim().min(1, "Category filter cannot be empty").optional(),
 });
 
 export type ProductInput = z.output<typeof ProductSchema>;

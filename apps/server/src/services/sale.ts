@@ -8,6 +8,7 @@ import {
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement } from "./stock-movement";
+import { serverCache, invalidateTenantMetrics } from "../utils/cache";
 
 const listInclude = {
   customer: true,
@@ -203,7 +204,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
   // entries as independent statements, so a failure part way through left a
   // sale with stock still on hand. One transaction per POST commits or rolls
   // back all three.
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // `Sale.customerId` and `SaleItem.productId` are plain foreign keys with no
     // organization constraint, so the database will happily bill a sale to
     // another tenant's customer or sell their product. Both are checked before
@@ -416,6 +417,9 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
 
     return sale;
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return result;
 }
 
 // Header columns only; see `SaleUpdateSchema` for why lines are not editable.
@@ -479,11 +483,14 @@ export async function updateSale(
   // A soft-deleted invoice is out of circulation: its stock has been given
   // back, so rewriting its header would edit a document nothing matches
   // anymore. Restore it first.
-  return prisma.sale.update({
+  const updated = await prisma.sale.update({
     where: { id, organizationId, deletedAt: null },
     data: updateData,
     include: detailInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return updated;
 }
 
 /**
@@ -512,7 +519,7 @@ export async function updateSale(
  * not, but putting them back can never go negative.
  */
 export async function deleteSale(id: string, organizationId: string, userId: string) {
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const existing = await tx.sale.findFirst({
         where: { id, organizationId },
@@ -577,6 +584,9 @@ export async function deleteSale(id: string, organizationId: string, userId: str
     },
     { isolationLevel: "Serializable" }
   );
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return result;
 }
 
 /**
@@ -590,7 +600,7 @@ export async function deleteSale(id: string, organizationId: string, userId: str
  * not hold.
  */
 export async function restoreSale(id: string, organizationId: string, userId: string) {
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const existing = await tx.sale.findFirst({
         where: { id, organizationId },
@@ -637,6 +647,9 @@ export async function restoreSale(id: string, organizationId: string, userId: st
     },
     { isolationLevel: "Serializable" }
   );
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return result;
 }
 
 /**
@@ -690,11 +703,14 @@ export async function cancelSale(id: string, organizationId: string) {
     );
   }
 
-  return prisma.sale.update({
+  const updated = await prisma.sale.update({
     where: { id, organizationId },
     data: { status: "Cancelled", statusBeforeCancel: existing.status },
     include: detailInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return updated;
 }
 
 /**
@@ -719,11 +735,14 @@ export async function uncancelSale(id: string, organizationId: string) {
     });
   }
 
-  return prisma.sale.update({
+  const updated = await prisma.sale.update({
     where: { id, organizationId },
     data: { status: existing.statusBeforeCancel ?? "Pending", statusBeforeCancel: null },
     include: detailInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return updated;
 }
 
 export async function getSaleInvoiceData(id: string, organizationId: string) {

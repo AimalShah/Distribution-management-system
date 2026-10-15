@@ -150,8 +150,8 @@ export default function Dashboard() {
 
   const statsError = stats.error ? failureMessage(stats.error, "Stats unavailable") : null;
   const statsData = stats.data;
-  const lowRows = lowStockApi.data?.data ?? [];
-  const outOfStockRows = lowRows.filter((row) => row.quantityOnHand <= 0);
+  const lowRows = useMemo(() => lowStockApi.data?.data ?? [], [lowStockApi.data?.data]);
+  const outOfStockRows = useMemo(() => lowRows.filter((row) => row.quantityOnHand <= 0), [lowRows]);
 
   const retryStats = () => void stats.mutate();
   const retrySalesReport = () => void salesReport.mutate();
@@ -182,10 +182,26 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
-  const salesTotal = salesReport.data?.totalSales ?? statsData?.totalSalesAmount ?? 0;
-  const purchaseTotal = purchaseReport.data?.totalPurchaseAmount ?? statsData?.totalPurchasesAmount ?? 0;
+  const salesTotal = useMemo(
+    () => salesReport.data?.totalSales ?? statsData?.totalSalesAmount ?? 0,
+    [salesReport.data?.totalSales, statsData?.totalSalesAmount]
+  );
+  const purchaseTotal = useMemo(
+    () => purchaseReport.data?.totalPurchaseAmount ?? statsData?.totalPurchasesAmount ?? 0,
+    [purchaseReport.data?.totalPurchaseAmount, statsData?.totalPurchasesAmount]
+  );
   const outstandingBalances = statsData?.outstanding ?? 0;
   const urgentStockCount = lowRows.length;
+
+  const dailyTotals = useMemo(
+    () => salesReport.data?.dailyTotals ?? [],
+    [salesReport.data?.dailyTotals]
+  );
+  const topInventory = useMemo(
+    () => statsData?.topInventory ?? [],
+    [statsData?.topInventory]
+  );
+
 
   return (
     <div className="space-y-6">
@@ -314,7 +330,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <SalesChart
           className="lg:col-span-2 border-border"
-          data={salesReport.data?.dailyTotals ?? []}
+          data={dailyTotals}
           loading={salesReport.isLoading}
           error={salesReport.error ? failureMessage(salesReport.error, "Sales trend unavailable") : null}
           onRetry={retrySalesReport}
@@ -322,7 +338,7 @@ export default function Dashboard() {
         />
         <InventoryChart
           className="border-border"
-          data={statsData?.topInventory ?? []}
+          data={topInventory}
           loading={stats.isLoading}
           error={statsError}
           onRetry={retryStats}

@@ -13,11 +13,13 @@ function daysAgo(days: number) {
 }
 
 async function main() {
-  console.log("🌱 Starting database seeding...");
+  const isOwnerOnly = process.argv.includes("--owner-only") || process.env.SEED_OWNER_ONLY === "true";
+  console.log("🌱 Starting database seeding..." + (isOwnerOnly ? " (Owner credentials only)" : ""));
 
-  // Clean up existing data (optional)
-  console.log("🧹 Cleaning up existing data...");
-  await prisma.inventoryLog.deleteMany();
+  if (!isOwnerOnly) {
+    // Clean up existing data (optional)
+    console.log("🧹 Cleaning up existing data...");
+    await prisma.inventoryLog.deleteMany();
   await prisma.returnItem.deleteMany();
   await prisma.return.deleteMany();
   await prisma.saleItem.deleteMany();
@@ -41,11 +43,12 @@ async function main() {
       },
     },
   });
-  await prisma.user.deleteMany({
-    where: {
-      email: { not: "owner@test.com" },
-    },
-  });
+    await prisma.user.deleteMany({
+      where: {
+        email: { not: "owner@test.com" },
+      },
+    });
+  }
 
   // 1. Get or Create Organization
   let organization = await prisma.organization.findFirst();
@@ -128,6 +131,17 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+  }
+
+  if (isOwnerOnly) {
+    console.log("✅ Seeded owner credentials only.");
+    console.log(`   Organization : ${organization.name} (${organization.id})`);
+    console.log(`   Owner Email  : ${owner.email}`);
+    console.log(`   Owner User ID: ${owner.id}`);
+    console.log(`   Password     : ${ownerPassword}`);
+    console.log(`   Role         : ${owner.role}`);
+    console.log("🎉 Seeding completed successfully!");
+    return;
   }
 
   const users = [owner];

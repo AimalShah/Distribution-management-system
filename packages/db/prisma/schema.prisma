@@ -235,6 +235,8 @@ model Supplier {
   updatedAt     DateTime     @updatedAt
   organization  Organization @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId, companyName])
+  @@index([organizationId, isActive])
   @@map("supplier")
 }
 
@@ -259,6 +261,8 @@ model Customer {
   //Relations
   organization Organization @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId, name])
+  @@index([organizationId, isActive])
   @@map("customer")
 }
 
@@ -291,6 +295,10 @@ model Product {
   batches       StockBatch[]
   organization  Organization   @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId, name])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, brandId])
+  @@index([organizationId, isActive])
   @@map("products")
 }
 
@@ -313,6 +321,8 @@ model Purchase {
   // Purchase returns point back at the receipt the goods are going out on.
   returns        Return[]
 
+  @@index([organizationId, purchaseDate(sort: Desc)])
+  @@index([organizationId, status])
   @@map("purchases")
 }
 
@@ -333,6 +343,8 @@ model PurchaseItem {
   product  Product      @relation(fields: [productId], references: [id])
   batches  StockBatch[]
 
+  @@index([purchaseId])
+  @@index([productId])
   @@map("purchase_items")
 }
 
@@ -382,6 +394,8 @@ model Sale {
   returns  Return[]
   payments Payment[]
 
+  @@index([organizationId, saleDate(sort: Desc)])
+  @@index([organizationId, status])
   @@index([customerId])
   @@map("sales")
 }
@@ -409,6 +423,8 @@ model SaleItem {
   product Product     @relation(fields: [productId], references: [id])
   batch   StockBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
+  @@index([saleId])
+  @@index([productId])
   @@map("sale_items")
 }
 
@@ -465,6 +481,7 @@ model Inventory {
   logs             InventoryLog[]
   organization     Organization   @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId, quantityOnHand])
   @@index([productId])
   @@index([quantityOnHand])
   @@map("inventory")
@@ -539,6 +556,8 @@ model Return {
 
   // Every return against one document has to be summed before the next is
   // allowed, so both sides of that sum are read by document.
+  @@index([organizationId, returnDate(sort: Desc)])
+  @@index([organizationId, returnType])
   @@index([saleId])
   @@index([purchaseId])
   @@map("returns")
@@ -561,6 +580,8 @@ model ReturnItem {
   return    Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
 
+  @@index([returnId])
+  @@index([productId])
   @@map("return_items")
 }
 
@@ -606,6 +627,8 @@ model Payment {
   sale         Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
   user         User         @relation(fields: [userId], references: [id])
 
+  @@index([organizationId, paidAt(sort: Desc)])
+  @@index([organizationId, customerId])
   @@index([customerId])
   @@index([saleId])
   @@map("payments")

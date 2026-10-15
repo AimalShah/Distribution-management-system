@@ -69,21 +69,19 @@ export default function PurchaseList() {
       params.set("search", search.trim());
     }
 
+    if (statusFilter && statusFilter !== "all") {
+      params.set("status", statusFilter);
+    }
+
     return params.toString();
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, statusFilter]);
 
   const { data, isLoading, mutate } = useSWR(
     `/purchases?${queryString}`,
     fetcher
   );
 
-  const purchaseList: PurchaseItemRow[] = useMemo(() => {
-    const raw: PurchaseItemRow[] = data?.data ?? [];
-
-    if (statusFilter === "all") return raw;
-
-    return raw.filter((p) => p.status.toLowerCase() === statusFilter.toLowerCase());
-  }, [data?.data, statusFilter]);
+  const purchaseList: PurchaseItemRow[] = data?.data ?? [];
 
   const totalPurchases = data?.total ?? 0;
 

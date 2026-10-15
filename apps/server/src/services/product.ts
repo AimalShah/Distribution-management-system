@@ -142,6 +142,7 @@ export type ProductListArgs = {
   search?: string;
   isActive?: boolean;
   brandId?: string;
+  categoryId?: string;
 };
 
 export async function getProducts({
@@ -151,6 +152,7 @@ export async function getProducts({
   search,
   isActive,
   brandId,
+  categoryId,
 }: ProductListArgs) {
   const where: Prisma.ProductWhereInput = {
     organizationId,
@@ -162,6 +164,10 @@ export async function getProducts({
 
   if (brandId) {
     where.brandId = brandId;
+  }
+
+  if (categoryId) {
+    where.categoryId = categoryId;
   }
 
   if (search) {

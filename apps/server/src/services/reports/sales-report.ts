@@ -1,6 +1,7 @@
 import prisma from "@dms/db";
 import type { SalesReportQuery, SalesAgingQuery } from "@dms/shared";
 import { customerScope, productScope, reportWindow, saleItemScope, saleScope, type ScopeInput } from "../scope";
+import { serverCache, buildCacheKey } from "../../utils/cache";
 
 /**
  * Window totals.
@@ -16,113 +17,123 @@ export async function getBasicSalesReport(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  // What "active, in-tenant, in-window, in-brand" means is `scope`'s to decide;
-  // only the columns summed and grouped on are this report's.
-  const scope: ScopeInput = {
+  const cacheKey = buildCacheKey(
+    "reports:sales",
     organizationId,
-    window: reportWindow(query),
-    brandId: query.brandId,
-  };
-
-  const [sales, quantities, lines] = await Promise.all([
-    prisma.sale.findMany({
-      where: saleScope(scope),
-      select: {
-        id: true,
-        saleDate: true,
-        totalAmount: true,
-        status: true,
-        customerId: true,
-      },
-      orderBy: { saleDate: "asc" },
-    }),
-    prisma.saleItem.groupBy({
-      by: ["saleId"],
-      _count: { _all: true },
-      _sum: { quantity: true },
-      where: { sale: saleScope(scope) },
-    }),
-    prisma.saleItem.groupBy({
-      by: ["saleId"],
-      _sum: { totalPrice: true },
-      where: { sale: saleScope(scope) },
-    }),
-  ]);
-
-  const totalQuantity = quantities.reduce(
-    (sum, group) => sum + (group._sum.quantity ?? 0),
-    0
+    "basic",
+    query as Record<string, unknown>
   );
 
-  // `_count` rather than the number of groups: the groups are keyed on `saleId`,
-  // so there is one per invoice that has a line, not one per line. A five-invoice
-  // window with one two-line invoice is six lines, and reading the group count
-  // answered five — `totalOrders` again, under a name that says lines.
-  const totalLineItems = quantities.reduce((sum, group) => sum + group._count._all, 0);
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    // What "active, in-tenant, in-window, in-brand" means is `scope`'s to decide;
+    // only the columns summed and grouped on are this report's.
+    const scope: ScopeInput = {
+      organizationId,
+      window: reportWindow(query),
+      brandId: query.brandId,
+    };
 
-  // The line subtotal per sale, so a header that disagrees with its own lines
-  // can be found. See the note on `unreconciledOrders` below.
-  const subtotalBySale = new Map<string, number>();
+    const [sales, quantities, lines] = await Promise.all([
+      prisma.sale.findMany({
+        where: saleScope(scope),
+        select: {
+          id: true,
+          saleDate: true,
+          totalAmount: true,
+          status: true,
+          customerId: true,
+        },
+        orderBy: { saleDate: "asc" },
+      }),
+      prisma.saleItem.groupBy({
+        by: ["saleId"],
+        _count: { _all: true },
+        _sum: { quantity: true },
+        where: { sale: saleScope(scope) },
+      }),
+      prisma.saleItem.groupBy({
+        by: ["saleId"],
+        _sum: { totalPrice: true },
+        where: { sale: saleScope(scope) },
+      }),
+    ]);
 
-  for (const group of lines) {
-    subtotalBySale.set(group.saleId, group._sum.totalPrice ?? 0);
-  }
+    const totalQuantity = quantities.reduce(
+      (sum, group) => sum + (group._sum.quantity ?? 0),
+      0
+    );
 
-  const totalLineSubtotal = [...subtotalBySale.values()].reduce(
-    (sum, value) => sum + value,
-    0
-  );
+    // `_count` rather than the number of groups: the groups are keyed on `saleId`,
+    // so there is one per invoice that has a line, not one per line. A five-invoice
+    // window with one two-line invoice is six lines, and reading the group count
+    // answered five — `totalOrders` again, under a name that says lines.
+    const totalLineItems = quantities.reduce((sum, group) => sum + group._count._all, 0);
 
-  const dailyTotals = new Map<string, number>();
-  const byStatus = new Map<string, { orders: number; totalAmount: number }>();
-  let unreconciledOrders = 0;
+    // The line subtotal per sale, so a header that disagrees with its own lines
+    // can be found. See the note on `unreconciledOrders` below.
+    const subtotalBySale = new Map<string, number>();
 
-  for (const sale of sales) {
-    // `saleDate` is a `timestamp(3)` with no zone, so Prisma hands back a Date
-    // whose UTC fields are the stored calendar date. `toISOString()` reads the
-    // day back out rather than shifting it.
-    const day = sale.saleDate.toISOString().slice(0, 10);
-    dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + sale.totalAmount);
-
-    const status = sale.status || "Unspecified";
-    const bucket = byStatus.get(status) ?? { orders: 0, totalAmount: 0 };
-    bucket.orders += 1;
-    bucket.totalAmount += sale.totalAmount;
-    byStatus.set(status, bucket);
-
-    // `Sale.totalAmount` is written straight from the request body by
-    // `createInvoice` and never recomputed from the lines, so it can disagree
-    // with its own invoice by any amount. Counting the disagreements is cheap;
-    // deciding which figure is right is not ours to do here, so both are
-    // reported and the count says how far apart they are.
-    const subtotal = subtotalBySale.get(sale.id);
-
-    if (subtotal !== undefined && Math.abs(subtotal - sale.totalAmount) > 0.005) {
-      unreconciledOrders += 1;
+    for (const group of lines) {
+      subtotalBySale.set(group.saleId, group._sum.totalPrice ?? 0);
     }
-  }
 
-  return {
-    totalSales: sales.reduce((sum, s) => sum + s.totalAmount, 0),
-    totalLineSubtotal,
-    totalOrders: sales.length,
-    uniqueCustomers: new Set(sales.map((s) => s.customerId)).size,
-    totalLineItems,
-    totalQuantity,
-    unreconciledOrders,
-    // Sorted rather than left in insertion order, which depended on the query
-    // happening to sort by date.
-    dailyTotals: [...dailyTotals.entries()]
-      .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    // `status` is free text and nothing filtered on it, so pending invoices were
-    // summed into the same "total sales" as completed ones. Report the split
-    // rather than choosing a status and hiding the other.
-    byStatus: [...byStatus.entries()]
-      .map(([status, bucket]) => ({ status, ...bucket }))
-      .sort((a, b) => a.status.localeCompare(b.status)),
-  };
+    const totalLineSubtotal = [...subtotalBySale.values()].reduce(
+      (sum, value) => sum + value,
+      0
+    );
+
+    const dailyTotals = new Map<string, number>();
+    const byStatus = new Map<string, { orders: number; totalAmount: number }>();
+    let unreconciledOrders = 0;
+
+    for (const sale of sales) {
+      // `saleDate` is a `timestamp(3)` with no zone, so Prisma hands back a Date
+      // whose UTC fields are the stored calendar date. `toISOString()` reads the
+      // day back out rather than shifting it.
+      const day = sale.saleDate.toISOString().slice(0, 10);
+      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + sale.totalAmount);
+
+      const status = sale.status || "Unspecified";
+      const bucket = byStatus.get(status) ?? { orders: 0, totalAmount: 0 };
+      bucket.orders += 1;
+      bucket.totalAmount += sale.totalAmount;
+      byStatus.set(status, bucket);
+
+      // `Sale.totalAmount` is written straight from the request body by
+      // `createInvoice` and never recomputed from the lines, so it can disagree
+      // with its own invoice by any amount. Counting the disagreements is cheap;
+      // deciding which figure is right is not ours to do here, so both are
+      // reported and the count says how far apart they are.
+      const subtotal = subtotalBySale.get(sale.id);
+
+      if (subtotal !== undefined && Math.abs(subtotal - sale.totalAmount) > 0.005) {
+        unreconciledOrders += 1;
+      }
+    }
+
+    return {
+      totalSales: sales.reduce((sum, s) => sum + s.totalAmount, 0),
+      totalLineSubtotal,
+      totalOrders: sales.length,
+      uniqueCustomers: new Set(sales.map((s) => s.customerId)).size,
+      totalLineItems,
+      totalQuantity,
+      unreconciledOrders,
+      // Sorted rather than left in insertion order, which depended on the query
+      // happening to sort by date.
+      dailyTotals: [...dailyTotals.entries()]
+        .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+      // `status` is free text and nothing filtered on it, so pending invoices were
+      // summed into the same "total sales" as completed ones. Report the split
+      // rather than choosing a status and hiding the other.
+      byStatus: [...byStatus.entries()]
+        .map(([status, bucket]) => ({ status, ...bucket }))
+        .sort((a, b) => a.status.localeCompare(b.status)),
+    };
+  });
 }
+
 
 /**
  * Sales per customer.
@@ -143,50 +154,60 @@ export async function getSalesByCustomer(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  // Counted and summed by the database, not by pulling every matching sale into
-  // this process and folding it in a `Map`. The old shape was `findMany` over the
-  // whole window -- every sale a tenant has ever made, with a join to `Customer`
-  // on each -- and then a JavaScript loop to add up numbers the database can add.
-  // The result was identical and the memory was not: the response had one entry
-  // per customer, but the query had one row per sale.
-  const groups = await prisma.sale.groupBy({
-    by: ["customerId"],
-    where: saleScope({ organizationId, window: reportWindow(query), brandId: query.brandId }),
-    _count: { _all: true },
-    _sum: { totalAmount: true },
-    orderBy: { _sum: { totalAmount: "desc" } },
-  });
+  const cacheKey = buildCacheKey(
+    "reports:sales",
+    organizationId,
+    "by-customer",
+    query as Record<string, unknown>
+  );
 
-  const customers = await prisma.customer.findMany({
-    where: {
-      ...customerScope({ organizationId }),
-      id: { in: groups.map((group) => group.customerId) },
-    },
-    select: { id: true, name: true, customerCode: true, isActive: true },
-  });
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    // Counted and summed by the database, not by pulling every matching sale into
+    // this process and folding it in a `Map`. The old shape was `findMany` over the
+    // whole window -- every sale a tenant has ever made, with a join to `Customer`
+    // on each -- and then a JavaScript loop to add up numbers the database can add.
+    // The result was identical and the memory was not: the response had one entry
+    // per customer, but the query had one row per sale.
+    const groups = await prisma.sale.groupBy({
+      by: ["customerId"],
+      where: saleScope({ organizationId, window: reportWindow(query), brandId: query.brandId }),
+      _count: { _all: true },
+      _sum: { totalAmount: true },
+      orderBy: { _sum: { totalAmount: "desc" } },
+    });
 
-  const byId = new Map(customers.map((customer) => [customer.id, customer]));
-
-  // A group whose customer row has since been deleted has no name to report.
-  // `Sale.customerId` is a required relation, so this cannot normally happen; the
-  // filter is here so a dangling row drops one line rather than throwing.
-  return groups.flatMap((group) => {
-    const customer = byId.get(group.customerId);
-
-    if (!customer) return [];
-
-    return [
-      {
-        customerId: group.customerId,
-        name: customer.name,
-        customerCode: customer.customerCode,
-        isActive: customer.isActive,
-        orders: group._count._all,
-        totalAmount: group._sum.totalAmount ?? 0,
+    const customers = await prisma.customer.findMany({
+      where: {
+        ...customerScope({ organizationId }),
+        id: { in: groups.map((group) => group.customerId) },
       },
-    ];
+      select: { id: true, name: true, customerCode: true, isActive: true },
+    });
+
+    const byId = new Map(customers.map((customer) => [customer.id, customer]));
+
+    // A group whose customer row has since been deleted has no name to report.
+    // `Sale.customerId` is a required relation, so this cannot normally happen; the
+    // filter is here so a dangling row drops one line rather than throwing.
+    return groups.flatMap((group) => {
+      const customer = byId.get(group.customerId);
+
+      if (!customer) return [];
+
+      return [
+        {
+          customerId: group.customerId,
+          name: customer.name,
+          customerCode: customer.customerCode,
+          isActive: customer.isActive,
+          orders: group._count._all,
+          totalAmount: group._sum.totalAmount ?? 0,
+        },
+      ];
+    });
   });
 }
+
 
 /**
  * Sales per product.
@@ -200,58 +221,67 @@ export async function getSalesByProduct(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  // Aggregated in the database, as the customer report above is. The old shape
-  // loaded every line of every sale in the window into this process and folded it
-  // in a `Map`, when the response only ever had one entry per product.
-  //
-  // The average unit price is the mean of the `unitPrice` *on the lines*, not the
-  // revenue-weighted one -- `sum(unitPrice) / count(lines)`, which is what the
-  // loop computed and is preserved here. A revenue-weighted average would be a
-  // different number and a different question.
-  const groups = await prisma.saleItem.groupBy({
-    by: ["productId"],
-    where: saleItemScope({
-      organizationId,
-      window: reportWindow(query),
-      brandId: query.brandId,
-      brandOnLine: true,
-    }),
-    _count: { _all: true },
-    _sum: { quantity: true, totalPrice: true, unitPrice: true },
-    orderBy: { _sum: { totalPrice: "desc" } },
-  });
+  const cacheKey = buildCacheKey(
+    "reports:sales",
+    organizationId,
+    "by-product",
+    query as Record<string, unknown>
+  );
 
-  const products = await prisma.product.findMany({
-    where: {
-      ...productScope({ organizationId, brandId: query.brandId }),
-      id: { in: groups.map((group) => group.productId) },
-    },
-    select: { id: true, name: true, productCode: true, unit: true },
-  });
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    // Aggregated in the database, as the customer report above is. The old shape
+    // loaded every line of every sale in the window into this process and folded it
+    // in a `Map`, when the response only ever had one entry per product.
+    //
+    // The average unit price is the mean of the `unitPrice` *on the lines*, not the
+    // revenue-weighted one -- `sum(unitPrice) / count(lines)`, which is what the
+    // loop computed and is preserved here. A revenue-weighted average would be a
+    // different number and a different question.
+    const groups = await prisma.saleItem.groupBy({
+      by: ["productId"],
+      where: saleItemScope({
+        organizationId,
+        window: reportWindow(query),
+        brandId: query.brandId,
+        brandOnLine: true,
+      }),
+      _count: { _all: true },
+      _sum: { quantity: true, totalPrice: true, unitPrice: true },
+      orderBy: { _sum: { totalPrice: "desc" } },
+    });
 
-  const byId = new Map(products.map((product) => [product.id, product]));
-
-  // `SaleItem.productId` is a required relation, so a group always resolves. The
-  // filter is here so a dangling row drops one line rather than throwing.
-  return groups.flatMap((group) => {
-    const product = byId.get(group.productId);
-
-    if (!product) return [];
-
-    const lineCount = group._count._all;
-    const priceSum = group._sum.unitPrice ?? 0;
-
-    return [
-      {
-        productId: group.productId,
-        name: product.name,
-        productCode: product.productCode,
-        unit: product.unit,
-        quantity: group._sum.quantity ?? 0,
-        totalPrice: group._sum.totalPrice ?? 0,
-        averageUnitPrice: lineCount > 0 ? priceSum / lineCount : 0,
+    const products = await prisma.product.findMany({
+      where: {
+        ...productScope({ organizationId, brandId: query.brandId }),
+        id: { in: groups.map((group) => group.productId) },
       },
-    ];
+      select: { id: true, name: true, productCode: true, unit: true },
+    });
+
+    const byId = new Map(products.map((product) => [product.id, product]));
+
+    // `SaleItem.productId` is a required relation, so a group always resolves. The
+    // filter is here so a dangling row drops one line rather than throwing.
+    return groups.flatMap((group) => {
+      const product = byId.get(group.productId);
+
+      if (!product) return [];
+
+      const lineCount = group._count._all;
+      const priceSum = group._sum.unitPrice ?? 0;
+
+      return [
+        {
+          productId: group.productId,
+          name: product.name,
+          productCode: product.productCode,
+          unit: product.unit,
+          quantity: group._sum.quantity ?? 0,
+          totalPrice: group._sum.totalPrice ?? 0,
+          averageUnitPrice: lineCount > 0 ? priceSum / lineCount : 0,
+        },
+      ];
+    });
   });
 }
 
@@ -262,77 +292,87 @@ export async function getSalesByBrand(
   organizationId: string,
   query: SalesReportQuery
 ) {
-  // The line's own product must carry the brand as well as the invoice
-  // containing it — a mixed-brand invoice contributes only its matching lines
-  // to this grouping, while still being admitted by the invoice-grain filter.
-  const where = saleItemScope({
+  const cacheKey = buildCacheKey(
+    "reports:sales",
     organizationId,
-    window: reportWindow(query),
-    brandId: query.brandId,
-    brandOnLine: true,
-  });
+    "by-brand",
+    query as Record<string, unknown>
+  );
 
-  const groups = await prisma.saleItem.groupBy({
-    by: ["productId"],
-    where,
-    _count: { _all: true },
-    _sum: { quantity: true, totalPrice: true },
-  });
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    // The line's own product must carry the brand as well as the invoice
+    // containing it — a mixed-brand invoice contributes only its matching lines
+    // to this grouping, while still being admitted by the invoice-grain filter.
+    const where = saleItemScope({
+      organizationId,
+      window: reportWindow(query),
+      brandId: query.brandId,
+      brandOnLine: true,
+    });
 
-  if (groups.length === 0) return [];
+    const groups = await prisma.saleItem.groupBy({
+      by: ["productId"],
+      where,
+      _count: { _all: true },
+      _sum: { quantity: true, totalPrice: true },
+    });
 
-  const products = await prisma.product.findMany({
-    where: {
-      ...productScope({ organizationId }),
-      id: { in: groups.map((g) => g.productId) },
-    },
-    select: {
-      id: true,
-      name: true,
-      brandId: true,
-      brand: { select: { id: true, name: true } },
-    },
-  });
+    if (groups.length === 0) return [];
 
-  const productMap = new Map(products.map((p) => [p.id, p]));
+    const products = await prisma.product.findMany({
+      where: {
+        ...productScope({ organizationId }),
+        id: { in: groups.map((g) => g.productId) },
+      },
+      select: {
+        id: true,
+        name: true,
+        brandId: true,
+        brand: { select: { id: true, name: true } },
+      },
+    });
 
-  const brandMap = new Map<
-    string,
-    {
-      brandId: string;
-      brandName: string;
-      productCount: number;
-      quantity: number;
-      totalAmount: number;
-      lineItems: number;
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    const brandMap = new Map<
+      string,
+      {
+        brandId: string;
+        brandName: string;
+        productCount: number;
+        quantity: number;
+        totalAmount: number;
+        lineItems: number;
+      }
+    >();
+
+    for (const group of groups) {
+      const prod = productMap.get(group.productId);
+
+      if (!prod || !prod.brand) continue;
+
+      const bId = prod.brand.id;
+
+      const existing = brandMap.get(bId) || {
+        brandId: bId,
+        brandName: prod.brand.name,
+        productCount: 0,
+        quantity: 0,
+        totalAmount: 0,
+        lineItems: 0,
+      };
+
+      existing.productCount += 1;
+      existing.quantity += group._sum.quantity ?? 0;
+      existing.totalAmount += group._sum.totalPrice ?? 0;
+      existing.lineItems += group._count._all;
+      brandMap.set(bId, existing);
     }
-  >();
 
-  for (const group of groups) {
-    const prod = productMap.get(group.productId);
-
-    if (!prod || !prod.brand) continue;
-
-    const bId = prod.brand.id;
-
-    const existing = brandMap.get(bId) || {
-      brandId: bId,
-      brandName: prod.brand.name,
-      productCount: 0,
-      quantity: 0,
-      totalAmount: 0,
-      lineItems: 0,
-    };
-
-    existing.productCount += 1;
-    existing.quantity += group._sum.quantity ?? 0;
-    existing.totalAmount += group._sum.totalPrice ?? 0;
-    existing.lineItems += group._count._all;
-    brandMap.set(bId, existing);
-  }
-
-  return [...brandMap.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+    return [...brandMap.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+  });
 }
+
 
 export async function getFullSalesReport(
   organizationId: string,
@@ -357,213 +397,223 @@ export async function getSalesAgingReport(
   organizationId: string,
   query: SalesAgingQuery
 ) {
-  const scope: ScopeInput = {
+  const cacheKey = buildCacheKey(
+    "reports:sales",
     organizationId,
-    window: reportWindow(query),
-    brandId: query.brandId,
-  };
+    "aging",
+    query as Record<string, unknown>
+  );
 
-  const where = {
-    ...saleScope(scope),
-    status: { not: "Cancelled" },
-  };
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    const scope: ScopeInput = {
+      organizationId,
+      window: reportWindow(query),
+      brandId: query.brandId,
+    };
 
-  const asOfDate = query.asOfDate ?? query.endDate ?? new Date();
+    const where = {
+      ...saleScope(scope),
+      status: { not: "Cancelled" },
+    };
 
-  const sales = await prisma.sale.findMany({
-    where,
-    select: {
-      id: true,
-      saleCode: true,
-      customerId: true,
-      saleDate: true,
-      dueDate: true,
-      totalAmount: true,
-      amountPaid: true,
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          customerCode: true,
+    const asOfDate = query.asOfDate ?? query.endDate ?? new Date();
+
+    const sales = await prisma.sale.findMany({
+      where,
+      select: {
+        id: true,
+        saleCode: true,
+        customerId: true,
+        saleDate: true,
+        dueDate: true,
+        totalAmount: true,
+        amountPaid: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            customerCode: true,
+          },
         },
       },
-    },
-    orderBy: { dueDate: "asc" },
-  });
+      orderBy: { dueDate: "asc" },
+    });
 
-  const buckets = {
-    "0-30": 0,
-    "31-60": 0,
-    "61-90": 0,
-    "90+": 0,
-  };
-  let current = 0;
-  let totalOverdue = 0;
-  let totalOutstanding = 0;
+    const buckets = {
+      "0-30": 0,
+      "31-60": 0,
+      "61-90": 0,
+      "90+": 0,
+    };
+    let current = 0;
+    let totalOverdue = 0;
+    let totalOutstanding = 0;
 
-  const customerMap = new Map<
-    string,
-    {
+    const customerMap = new Map<
+      string,
+      {
+        customerId: string;
+        customerName: string;
+        customerCode?: string;
+        totalOutstanding: number;
+        totalOverdue: number;
+        current: number;
+        buckets: {
+          "0-30": number;
+          "31-60": number;
+          "61-90": number;
+          "90+": number;
+        };
+        invoices: Array<{
+          id: string;
+          saleCode: string;
+          saleDate: Date;
+          dueDate: Date | null;
+          totalAmount: number;
+          amountPaid: number;
+          balance: number;
+          daysOverdue: number;
+          bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+        }>;
+      }
+    >();
+
+    const invoices: Array<{
+      id: string;
+      saleCode: string;
       customerId: string;
       customerName: string;
       customerCode?: string;
-      totalOutstanding: number;
-      totalOverdue: number;
-      current: number;
-      buckets: {
-        "0-30": number;
-        "31-60": number;
-        "61-90": number;
-        "90+": number;
-      };
-      invoices: Array<{
-        id: string;
-        saleCode: string;
-        saleDate: Date;
-        dueDate: Date | null;
-        totalAmount: number;
-        amountPaid: number;
-        balance: number;
-        daysOverdue: number;
-        bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
-      }>;
-    }
-  >();
+      saleDate: Date;
+      dueDate: Date | null;
+      totalAmount: number;
+      amountPaid: number;
+      balance: number;
+      daysOverdue: number;
+      bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+    }> = [];
 
-  const invoices: Array<{
-    id: string;
-    saleCode: string;
-    customerId: string;
-    customerName: string;
-    customerCode?: string;
-    saleDate: Date;
-    dueDate: Date | null;
-    totalAmount: number;
-    amountPaid: number;
-    balance: number;
-    daysOverdue: number;
-    bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
-  }> = [];
+    for (const sale of sales) {
+      const rawBalance = sale.totalAmount - (sale.amountPaid ?? 0);
+      if (rawBalance <= 0.005) {
+        continue;
+      }
 
-  for (const sale of sales) {
-    const rawBalance = sale.totalAmount - (sale.amountPaid ?? 0);
-    if (rawBalance <= 0.005) {
-      continue;
-    }
+      const balance = Math.round(rawBalance * 100) / 100;
+      const effectiveDueDate = sale.dueDate ?? sale.saleDate;
+      const diffTime = asOfDate.getTime() - effectiveDueDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    const balance = Math.round(rawBalance * 100) / 100;
-    const effectiveDueDate = sale.dueDate ?? sale.saleDate;
-    const diffTime = asOfDate.getTime() - effectiveDueDate.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      let bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+      if (diffDays < 0) {
+        bucket = "current";
+      } else if (diffDays <= 30) {
+        bucket = "0-30";
+      } else if (diffDays <= 60) {
+        bucket = "31-60";
+      } else if (diffDays <= 90) {
+        bucket = "61-90";
+      } else {
+        bucket = "90+";
+      }
 
-    let bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
-    if (diffDays < 0) {
-      bucket = "current";
-    } else if (diffDays <= 30) {
-      bucket = "0-30";
-    } else if (diffDays <= 60) {
-      bucket = "31-60";
-    } else if (diffDays <= 90) {
-      bucket = "61-90";
-    } else {
-      bucket = "90+";
-    }
+      totalOutstanding += balance;
 
-    totalOutstanding += balance;
+      if (bucket === "current") {
+        current += balance;
+      } else {
+        buckets[bucket] += balance;
+        totalOverdue += balance;
+      }
 
-    if (bucket === "current") {
-      current += balance;
-    } else {
-      buckets[bucket] += balance;
-      totalOverdue += balance;
-    }
-
-    const invoiceEntry = {
-      id: sale.id,
-      saleCode: sale.saleCode,
-      customerId: sale.customerId,
-      customerName: sale.customer?.name ?? "Unknown",
-      customerCode: sale.customer?.customerCode,
-      saleDate: sale.saleDate,
-      dueDate: sale.dueDate,
-      totalAmount: sale.totalAmount,
-      amountPaid: sale.amountPaid ?? 0,
-      balance,
-      daysOverdue: Math.max(0, diffDays),
-      bucket,
-    };
-
-    invoices.push(invoiceEntry);
-
-    const custId = sale.customerId;
-    let customerEntry = customerMap.get(custId);
-    if (!customerEntry) {
-      customerEntry = {
-        customerId: custId,
+      const invoiceEntry = {
+        id: sale.id,
+        saleCode: sale.saleCode,
+        customerId: sale.customerId,
         customerName: sale.customer?.name ?? "Unknown",
         customerCode: sale.customer?.customerCode,
-        totalOutstanding: 0,
-        totalOverdue: 0,
-        current: 0,
-        buckets: {
-          "0-30": 0,
-          "31-60": 0,
-          "61-90": 0,
-          "90+": 0,
-        },
-        invoices: [],
+        saleDate: sale.saleDate,
+        dueDate: sale.dueDate,
+        totalAmount: sale.totalAmount,
+        amountPaid: sale.amountPaid ?? 0,
+        balance,
+        daysOverdue: Math.max(0, diffDays),
+        bucket,
       };
-      customerMap.set(custId, customerEntry);
+
+      invoices.push(invoiceEntry);
+
+      const custId = sale.customerId;
+      let customerEntry = customerMap.get(custId);
+      if (!customerEntry) {
+        customerEntry = {
+          customerId: custId,
+          customerName: sale.customer?.name ?? "Unknown",
+          customerCode: sale.customer?.customerCode,
+          totalOutstanding: 0,
+          totalOverdue: 0,
+          current: 0,
+          buckets: {
+            "0-30": 0,
+            "31-60": 0,
+            "61-90": 0,
+            "90+": 0,
+          },
+          invoices: [],
+        };
+        customerMap.set(custId, customerEntry);
+      }
+
+      customerEntry.totalOutstanding += balance;
+      if (bucket === "current") {
+        customerEntry.current += balance;
+      } else {
+        customerEntry.buckets[bucket] += balance;
+        customerEntry.totalOverdue += balance;
+      }
+      customerEntry.invoices.push(invoiceEntry);
     }
 
-    customerEntry.totalOutstanding += balance;
-    if (bucket === "current") {
-      customerEntry.current += balance;
-    } else {
-      customerEntry.buckets[bucket] += balance;
-      customerEntry.totalOverdue += balance;
-    }
-    customerEntry.invoices.push(invoiceEntry);
-  }
+    const roundMoney = (v: number) => Math.round(v * 100) / 100;
 
-  const roundMoney = (v: number) => Math.round(v * 100) / 100;
+    const roundedBuckets = {
+      "0-30": roundMoney(buckets["0-30"]),
+      "31-60": roundMoney(buckets["31-60"]),
+      "61-90": roundMoney(buckets["61-90"]),
+      "90+": roundMoney(buckets["90+"]),
+    };
 
-  const roundedBuckets = {
-    "0-30": roundMoney(buckets["0-30"]),
-    "31-60": roundMoney(buckets["31-60"]),
-    "61-90": roundMoney(buckets["61-90"]),
-    "90+": roundMoney(buckets["90+"]),
-  };
+    const byCustomer = Array.from(customerMap.values()).map((c) => ({
+      ...c,
+      totalOutstanding: roundMoney(c.totalOutstanding),
+      totalOverdue: roundMoney(c.totalOverdue),
+      current: roundMoney(c.current),
+      buckets: {
+        "0-30": roundMoney(c.buckets["0-30"]),
+        "31-60": roundMoney(c.buckets["31-60"]),
+        "61-90": roundMoney(c.buckets["61-90"]),
+        "90+": roundMoney(c.buckets["90+"]),
+      },
+    }));
 
-  const byCustomer = Array.from(customerMap.values()).map((c) => ({
-    ...c,
-    totalOutstanding: roundMoney(c.totalOutstanding),
-    totalOverdue: roundMoney(c.totalOverdue),
-    current: roundMoney(c.current),
-    buckets: {
-      "0-30": roundMoney(c.buckets["0-30"]),
-      "31-60": roundMoney(c.buckets["31-60"]),
-      "61-90": roundMoney(c.buckets["61-90"]),
-      "90+": roundMoney(c.buckets["90+"]),
-    },
-  }));
+    const summary = {
+      totalOutstanding: roundMoney(totalOutstanding),
+      totalOverdue: roundMoney(totalOverdue),
+      current: roundMoney(current),
+      buckets: roundedBuckets,
+    };
 
-  const summary = {
-    totalOutstanding: roundMoney(totalOutstanding),
-    totalOverdue: roundMoney(totalOverdue),
-    current: roundMoney(current),
-    buckets: roundedBuckets,
-  };
-
-  return {
-    asOfDate: asOfDate.toISOString(),
-    totalOutstanding: roundMoney(totalOutstanding),
-    totalOverdue: roundMoney(totalOverdue),
-    current: roundMoney(current),
-    buckets: roundedBuckets,
-    summary,
-    byCustomer,
-    invoices,
-  };
+    return {
+      asOfDate: asOfDate.toISOString(),
+      totalOutstanding: roundMoney(totalOutstanding),
+      totalOverdue: roundMoney(totalOverdue),
+      current: roundMoney(current),
+      buckets: roundedBuckets,
+      summary,
+      byCustomer,
+      invoices,
+    };
+  });
 }
+
 

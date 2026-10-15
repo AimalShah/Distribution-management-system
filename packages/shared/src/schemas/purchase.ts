@@ -43,6 +43,7 @@ export const PurchaseUpdateSchema = PurchaseFormSchema.partial().omit({
 export const purchaseListQuerySchema = paginationQuerySchema.extend({
   // An empty search box trims to "" and the service reads that as "no filter".
   search: z.string().trim().optional(),
+  status: z.string().trim().min(1, "Status filter cannot be empty").optional(),
 });
 
 export type PurchaseItemInput = z.output<typeof PurchaseItemInputSchema>;

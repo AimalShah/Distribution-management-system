@@ -2,6 +2,7 @@ import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { PaymentCreateInput, PaymentListQuery } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
+import { serverCache, invalidateTenantMetrics } from "../utils/cache";
 
 const listInclude = {
   customer: { select: { id: true, customerCode: true, name: true, phone: true } },
@@ -78,7 +79,7 @@ export async function createPayment(
   organizationId: string,
   userId: string
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.findFirst({
       where: { id: data.customerId, organizationId },
       select: { id: true },
@@ -228,6 +229,9 @@ export async function createPayment(
       include: listInclude,
     });
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return result;
 }
 
 /**
@@ -239,7 +243,7 @@ export async function createPayment(
  * correction itself stays visible.
  */
 export async function deletePayment(id: string, organizationId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.payment.findFirst({
       where: { id, organizationId },
       select: {
@@ -287,4 +291,7 @@ export async function deletePayment(id: string, organizationId: string) {
       include: listInclude,
     });
   });
+
+  invalidateTenantMetrics(organizationId, "sales");
+  return result;
 }

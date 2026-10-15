@@ -13,7 +13,10 @@
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @dms/db run generate",
     "db:migrate": "pnpm --filter @dms/db run migrate",
+    "db:migrate:deploy": "pnpm --filter @dms/db run migrate:deploy",
     "db:seed": "pnpm --filter @dms/db run seed",
+    "db:seed:owner": "pnpm --filter @dms/db run seed:owner",
+    "db:seed:stress": "pnpm --filter @dms/db run seed:stress",
     "db:wipe": "pnpm --filter @dms/db run wipe",
     "debug": "tsx packages/devtools/src/cli.ts"
   },

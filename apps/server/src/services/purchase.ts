@@ -7,6 +7,7 @@ import type {
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement, type StockMovementRequest } from "./stock-movement";
+import { serverCache, invalidateTenantMetrics } from "../utils/cache";
 
 const listInclude = {
   supplier: true,
@@ -46,6 +47,7 @@ export type PurchaseListArgs = {
   page: number;
   pageSize: number;
   search?: string;
+  status?: string;
 };
 
 export async function getPurchases({
@@ -53,10 +55,15 @@ export async function getPurchases({
   page,
   pageSize,
   search,
+  status,
 }: PurchaseListArgs) {
   const where: Prisma.PurchaseWhereInput = {
     organizationId,
   };
+
+  if (status) {
+    where.status = { equals: status, mode: "insensitive" };
+  }
 
   if (search) {
     where.purchaseCode = { contains: search, mode: "insensitive" };
@@ -165,7 +172,7 @@ export async function createPurchase(
   // entries as independent statements: a failure halfway through left a
   // purchase with no stock, or stock with no purchase. One transaction per
   // POST makes the three writes commit or roll back together.
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // `Inventory.productId` is unique across organizations, so the legacy
     // `upsert({ where: { productId } })` would happily increment another
     // tenant's stock for a product id this organization does not own. Checking
@@ -239,6 +246,9 @@ export async function createPurchase(
 
     return purchase;
   });
+
+  invalidateTenantMetrics(organizationId, "purchases");
+  return result;
 }
 
 // Header columns only. `items` is not part of the update schema because
@@ -270,11 +280,14 @@ export async function updatePurchase(
 
   const updateData: Prisma.PurchaseUncheckedUpdateInput = { ...data };
 
-  return prisma.purchase.update({
+  const updated = await prisma.purchase.update({
     where: { id, organizationId },
     data: updateData,
     include: detailInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "purchases");
+  return updated;
 }
 
 /**
@@ -286,7 +299,7 @@ export async function deletePurchase(
   organizationId: string,
   userId = "system"
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.purchase.findFirst({
       where: { id, organizationId },
       include: {
@@ -363,4 +376,7 @@ export async function deletePurchase(
 
     await tx.purchase.delete({ where: { id: existing.id, organizationId } });
   });
+
+  invalidateTenantMetrics(organizationId, "purchases");
+  return result;
 }

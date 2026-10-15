@@ -8,6 +8,7 @@ import type {
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement } from "./stock-movement";
+import { invalidateTenantMetrics } from "../utils/cache";
 
 /**
  * The legacy list embedded every line with its product, so one row carried an
@@ -235,7 +236,7 @@ export async function createReturn(
    * The stock writes themselves do not depend on this: they are single guarded
    * statements, and they are what actually protects the quantity on hand.
    */
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       // The Company's return policy is read inside the same transaction that
       // enforces it, so the window checked is the window in force at write time.
@@ -486,6 +487,9 @@ export async function createReturn(
     },
     { isolationLevel: "Serializable" }
   );
+
+  invalidateTenantMetrics(organizationId, "all");
+  return result;
 }
 
 /**
@@ -501,12 +505,16 @@ export async function updateReturn(
   data: ReturnUpdateInput,
   organizationId: string
 ) {
-  return prisma.return.update({
+  const result = await prisma.return.update({
     where: { id, organizationId },
     data: { ...data },
     include: detailInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "all");
+  return result;
 }
+
 
 /**
  * Deleting a return has to put the stock back where it found it — and the row
@@ -528,7 +536,7 @@ export async function updateReturn(
  * necessarily the member who recorded the return going in.
  */
 export async function deleteReturn(id: string, organizationId: string, userId: string) {
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const existing = await tx.return.findFirst({
         where: { id, organizationId },
@@ -585,6 +593,9 @@ export async function deleteReturn(id: string, organizationId: string, userId: s
     },
     { isolationLevel: "Serializable" }
   );
+
+  invalidateTenantMetrics(organizationId, "all");
+  return result;
 }
 
 /**
@@ -603,7 +614,7 @@ export async function deleteReturn(id: string, organizationId: string, userId: s
  * cannot hold under READ COMMITTED.
  */
 export async function restoreReturn(id: string, organizationId: string, userId: string) {
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const existing = await tx.return.findFirst({
         where: { id, organizationId },
@@ -727,4 +738,8 @@ export async function restoreReturn(id: string, organizationId: string, userId: 
     },
     { isolationLevel: "Serializable" }
   );
+
+  invalidateTenantMetrics(organizationId, "all");
+  return result;
 }
+

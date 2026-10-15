@@ -2,6 +2,8 @@ import prisma from "@dms/db";
 import { parseSkuFormat, type CompanySettingsUpdateInput } from "@dms/shared";
 import { badRequest } from "../http";
 
+import { serverCache } from "../utils/cache";
+
 /** The shape the Settings page reads, stored or defaulted. */
 export interface CompanySettingsView {
   organizationId: string;
@@ -42,13 +44,19 @@ export const DEFAULT_COMPANY_SETTINGS: Omit<CompanySettingsView, "organizationId
 export async function getCompanySettings(
   organizationId: string
 ): Promise<CompanySettingsView> {
-  const stored = await prisma.companySettings.findUnique({ where: { organizationId } });
+  return serverCache.getOrSet(
+    `settings:${organizationId}`,
+    5 * 60 * 1000,
+    async () => {
+      const stored = await prisma.companySettings.findUnique({ where: { organizationId } });
 
-  if (!stored) {
-    return { organizationId, ...DEFAULT_COMPANY_SETTINGS };
-  }
+      if (!stored) {
+        return { organizationId, ...DEFAULT_COMPANY_SETTINGS };
+      }
 
-  return stored;
+      return stored;
+    }
+  );
 }
 
 /**
@@ -72,9 +80,12 @@ export async function updateCompanySettings(
     }
   }
 
-  return prisma.companySettings.upsert({
+  const updated = await prisma.companySettings.upsert({
     where: { organizationId },
     create: { organizationId, ...data },
     update: { ...data },
   });
+
+  serverCache.delete(`settings:${organizationId}`);
+  return updated;
 }

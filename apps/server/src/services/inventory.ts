@@ -10,6 +10,7 @@ import {
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement } from "./stock-movement";
+import { serverCache, buildCacheKey, invalidateTenantMetrics } from "../utils/cache";
 
 /**
  * The legacy `getInventory` embedded `logs: true`, so every adjustment ever made
@@ -155,29 +156,37 @@ export async function getLowStock({
   page: number;
   pageSize: number;
 }) {
-  // Column to column comparison. The legacy query used
-  // `prisma.inventory.fields?.reorderLevel || 0`, and a plain `where` cannot
-  // express `quantityOnHand <= reorderLevel`; the field reference is the
-  // supported way to do it and the optional chain was hiding a working feature
-  // rather than papering over a missing one.
-  const where: Prisma.InventoryWhereInput = {
-    organizationId,
-    quantityOnHand: { lte: prisma.inventory.fields.reorderLevel },
-  };
+  const cacheKey = buildCacheKey("inventory:low-stock", organizationId, undefined, {
+    page,
+    pageSize,
+  });
 
-  const [data, total] = await Promise.all([
-    prisma.inventory.findMany({
-      where,
-      include: { product: true },
-      orderBy: { quantityOnHand: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.inventory.count({ where }),
-  ]);
+  return serverCache.getOrSet(cacheKey, 15_000, async () => {
+    // Column to column comparison. The legacy query used
+    // `prisma.inventory.fields?.reorderLevel || 0`, and a plain `where` cannot
+    // express `quantityOnHand <= reorderLevel`; the field reference is the
+    // supported way to do it and the optional chain was hiding a working feature
+    // rather than papering over a missing one.
+    const where: Prisma.InventoryWhereInput = {
+      organizationId,
+      quantityOnHand: { lte: prisma.inventory.fields.reorderLevel },
+    };
 
-  return { data, pageCount: Math.ceil(total / pageSize), total };
+    const [data, total] = await Promise.all([
+      prisma.inventory.findMany({
+        where,
+        include: { product: true },
+        orderBy: { quantityOnHand: "asc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.inventory.count({ where }),
+    ]);
+
+    return { data, pageCount: Math.ceil(total / pageSize), total };
+  });
 }
+
 
 /**
  * Creating an inventory row with opening stock on hand writes an opening log entry
@@ -204,7 +213,7 @@ export async function createInventory(
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const inventory = await tx.inventory.create({
       data: {
         productId: data.productId,
@@ -260,6 +269,9 @@ export async function createInventory(
 
     return inventory;
   });
+
+  invalidateTenantMetrics(organizationId, "inventory");
+  return result;
 }
 
 export async function adjustInventory(
@@ -283,7 +295,7 @@ export async function adjustInventory(
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Scoped to the organization. The legacy `findUnique({ where: { productId } })`
     // had no tenant filter, so a caller could adjust another tenant's stock by
     // naming a product id they do not own.
@@ -323,6 +335,9 @@ export async function adjustInventory(
       include: inventoryInclude,
     });
   });
+
+  invalidateTenantMetrics(organizationId, "inventory");
+  return result;
 }
 
 export async function updateInventorySettings(
@@ -333,12 +348,16 @@ export async function updateInventorySettings(
   // `where: { id, organizationId }` makes a foreign id a P2025, which the error
   // handler maps to a 404. The legacy lookup keyed on `productId` with no tenant
   // filter, so any member could rewrite any tenant's reorder levels.
-  return prisma.inventory.update({
+  const result = await prisma.inventory.update({
     where: { id, organizationId },
     data: { ...data },
     include: inventoryInclude,
   });
+
+  invalidateTenantMetrics(organizationId, "inventory");
+  return result;
 }
+
 
 export interface BulkImportError {
   row: number;
@@ -516,6 +535,8 @@ export async function bulkImportInventory(
     }
   });
 
+  invalidateTenantMetrics(organizationId, "inventory");
+
   return {
     success: toImport.length,
     created,
@@ -523,4 +544,5 @@ export async function bulkImportInventory(
     errors,
   };
 }
+
 

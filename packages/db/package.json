@@ -12,7 +12,10 @@
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
+    "seed:owner": "tsx prisma/seed-owner.ts",
+    "seed:stress": "tsx prisma/seed-stress.ts",
     "wipe": "tsx prisma/wipe.ts",
     "typecheck": "tsc --noEmit"
   },

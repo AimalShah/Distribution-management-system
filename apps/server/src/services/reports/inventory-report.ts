@@ -8,6 +8,7 @@ import {
   reportWindow,
   stockBatchScope,
 } from "../scope";
+import { serverCache, buildCacheKey } from "../../utils/cache";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -47,70 +48,80 @@ export async function getBasicInventoryReport(
   organizationId: string,
   { startDate, endDate }: InventoryReportQuery
 ) {
-  const windowBound = reportWindow({ startDate, endDate });
+  const cacheKey = buildCacheKey(
+    "reports:inventory",
+    organizationId,
+    "basic",
+    { startDate, endDate }
+  );
 
-  // The movement type is a caller's concern — which *kind* of row this group
-  // reads — and everything that makes a row in scope comes from the module.
-  const movementWhere = (types: readonly string[]): Prisma.InventoryLogWhereInput => ({
-    ...inventoryLogScope({ organizationId, window: windowBound }),
-    // SAFETY: `types` only ever arrives as `INCREASES`, `DECREASES`, or the
-    // `["ADJUSTMENT"]` literal below — each an `as const` tuple of members of
-    // the movement enum this schema generates, so its members are enum members.
-    movementType: { in: types as Prisma.EnumInventoryMovementFilter["in"] },
-  });
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    const windowBound = reportWindow({ startDate, endDate });
 
-  const [inventories, increases, decreases, adjustments] = await Promise.all([
-    prisma.inventory.findMany({
-      where: inventoryScope({ organizationId }),
-      select: {
-        productId: true,
-        quantityOnHand: true,
-        quantityReserved: true,
-        reorderLevel: true,
-        maxStockLevel: true,
-        product: {
-          select: { id: true, name: true, productCode: true, unit: true },
+    // The movement type is a caller's concern — which *kind* of row this group
+    // reads — and everything that makes a row in scope comes from the module.
+    const movementWhere = (types: readonly string[]): Prisma.InventoryLogWhereInput => ({
+      ...inventoryLogScope({ organizationId, window: windowBound }),
+      // SAFETY: `types` only ever arrives as `INCREASES`, `DECREASES`, or the
+      // `["ADJUSTMENT"]` literal below — each an `as const` tuple of members of
+      // the movement enum this schema generates, so its members are enum members.
+      movementType: { in: types as Prisma.EnumInventoryMovementFilter["in"] },
+    });
+
+    const [inventories, increases, decreases, adjustments] = await Promise.all([
+      prisma.inventory.findMany({
+        where: inventoryScope({ organizationId }),
+        select: {
+          productId: true,
+          quantityOnHand: true,
+          quantityReserved: true,
+          reorderLevel: true,
+          maxStockLevel: true,
+          product: {
+            select: { id: true, name: true, productCode: true, unit: true },
+          },
         },
-      },
-      orderBy: { product: { name: "asc" } },
-    }),
-    prisma.inventoryLog.groupBy({
-      by: ["productId"],
-      _sum: { quantity: true },
-      where: movementWhere(INCREASES),
-    }),
-    prisma.inventoryLog.groupBy({
-      by: ["productId"],
-      _sum: { quantity: true },
-      where: movementWhere(DECREASES),
-    }),
-    prisma.inventoryLog.groupBy({
-      by: ["productId"],
-      _sum: { quantity: true },
-      where: movementWhere(["ADJUSTMENT"]),
-    }),
-  ]);
+        orderBy: { product: { name: "asc" } },
+      }),
+      prisma.inventoryLog.groupBy({
+        by: ["productId"],
+        _sum: { quantity: true },
+        where: movementWhere(INCREASES),
+      }),
+      prisma.inventoryLog.groupBy({
+        by: ["productId"],
+        _sum: { quantity: true },
+        where: movementWhere(DECREASES),
+      }),
+      prisma.inventoryLog.groupBy({
+        by: ["productId"],
+        _sum: { quantity: true },
+        where: movementWhere(["ADJUSTMENT"]),
+      }),
+    ]);
 
-  const netFor = (productId: string) =>
-    (sumFor(increases, productId) - sumFor(decreases, productId)) +
-    sumFor(adjustments, productId);
+    const netFor = (productId: string) =>
+      (sumFor(increases, productId) - sumFor(decreases, productId)) +
+      sumFor(adjustments, productId);
 
-  return inventories.map((inv) => ({
-    id: inv.product.id,
-    name: inv.product.name,
-    productCode: inv.product.productCode,
-    unit: inv.product.unit,
-    reorderLevel: inv.reorderLevel,
-    maxStockLevel: inv.maxStockLevel,
-    quantityOnHand: inv.quantityOnHand,
-    quantityReserved: inv.quantityReserved,
-    // Null rather than 0 when no window was sent, so a caller can tell "nothing
-    // moved in this period" from "no period was asked about".
-    netMovementInPeriod:
-      startDate || endDate ? netFor(inv.productId) : null,
-    isBelowReorderLevel: inv.quantityOnHand <= inv.reorderLevel,
-  }));
+    return inventories.map((inv) => ({
+      id: inv.product.id,
+      name: inv.product.name,
+      productCode: inv.product.productCode,
+      unit: inv.product.unit,
+      reorderLevel: inv.reorderLevel,
+      maxStockLevel: inv.maxStockLevel,
+      quantityOnHand: inv.quantityOnHand,
+      quantityReserved: inv.quantityReserved,
+      // Null rather than 0 when no window was sent, so a caller can tell "nothing
+      // moved in this period" from "no period was asked about".
+      netMovementInPeriod:
+        startDate || endDate ? netFor(inv.productId) : null,
+      isBelowReorderLevel: inv.quantityOnHand <= inv.reorderLevel,
+    }));
+  });
 }
+
 
 const sumFor = (
   groups: { productId: string; _sum: { quantity: number | null } }[],
@@ -134,46 +145,55 @@ export async function getStockValuationReport(
   organizationId: string,
   _query: InventoryReportQuery
 ) {
-  const [inventories, costs] = await Promise.all([
-    prisma.inventory.findMany({
-      where: inventoryScope({ organizationId }),
-      select: {
-        productId: true,
-        quantityOnHand: true,
-        product: { select: { id: true, name: true, productCode: true, unit: true } },
-      },
-    }),
-    prisma.purchaseItem.groupBy({
-      by: ["productId"],
-      _avg: { unitCost: true },
-      where: purchaseItemScope({ organizationId }),
-    }),
-  ]);
+  const cacheKey = buildCacheKey(
+    "reports:inventory",
+    organizationId,
+    "valuation",
+    _query as Record<string, unknown>
+  );
 
-  const rows = inventories.map((inv) => {
-    // `Product.unitCost` is the fallback, matching the low-stock report. The
-    // average purchase cost is preferred because it is what this tenant
-    // actually paid; the product's own figure is whatever was typed in when the
-    // product was created.
-    const unitCost =
-      costs.find((c) => c.productId === inv.productId)?._avg.unitCost ?? 0;
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    const [inventories, costs] = await Promise.all([
+      prisma.inventory.findMany({
+        where: inventoryScope({ organizationId }),
+        select: {
+          productId: true,
+          quantityOnHand: true,
+          product: { select: { id: true, name: true, productCode: true, unit: true } },
+        },
+      }),
+      prisma.purchaseItem.groupBy({
+        by: ["productId"],
+        _avg: { unitCost: true },
+        where: purchaseItemScope({ organizationId }),
+      }),
+    ]);
+
+    const rows = inventories.map((inv) => {
+      // `Product.unitCost` is the fallback, matching the low-stock report. The
+      // average purchase cost is preferred because it is what this tenant
+      // actually paid; the product's own figure is whatever was typed in when the
+      // product was created.
+      const unitCost =
+        costs.find((c) => c.productId === inv.productId)?._avg.unitCost ?? 0;
+
+      return {
+        id: inv.product.id,
+        name: inv.product.name,
+        productCode: inv.product.productCode,
+        unit: inv.product.unit,
+        quantityOnHand: inv.quantityOnHand,
+        averageUnitCost: unitCost,
+        totalValue: inv.quantityOnHand * unitCost,
+      };
+    });
 
     return {
-      id: inv.product.id,
-      name: inv.product.name,
-      productCode: inv.product.productCode,
-      unit: inv.product.unit,
-      quantityOnHand: inv.quantityOnHand,
-      averageUnitCost: unitCost,
-      totalValue: inv.quantityOnHand * unitCost,
+      items: rows,
+      totalValue: rows.reduce((sum, row) => sum + row.totalValue, 0),
+      generatedAt: new Date(),
     };
   });
-
-  return {
-    items: rows,
-    totalValue: rows.reduce((sum, row) => sum + row.totalValue, 0),
-    generatedAt: new Date(),
-  };
 }
 
 /**
@@ -194,24 +214,34 @@ export async function getInventoryMovements(
   organizationId: string,
   { startDate, endDate }: InventoryReportQuery
 ) {
-  return prisma.inventoryLog.findMany({
-    where: inventoryLogScope({ organizationId, window: reportWindow({ startDate, endDate }) }),
-    select: {
-      id: true,
-      movementType: true,
-      quantity: true,
-      previousQty: true,
-      newQty: true,
-      reason: true,
-      reference: true,
-      createdAt: true,
-      product: { select: { id: true, name: true, productCode: true } },
-      inventory: { select: { quantityOnHand: true } },
-      user: { select: { id: true, name: true, email: true } },
-    },
-    orderBy: { createdAt: "desc" },
+  const cacheKey = buildCacheKey(
+    "reports:inventory",
+    organizationId,
+    "movements",
+    { startDate, endDate }
+  );
+
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    return prisma.inventoryLog.findMany({
+      where: inventoryLogScope({ organizationId, window: reportWindow({ startDate, endDate }) }),
+      select: {
+        id: true,
+        movementType: true,
+        quantity: true,
+        previousQty: true,
+        newQty: true,
+        reason: true,
+        reference: true,
+        createdAt: true,
+        product: { select: { id: true, name: true, productCode: true } },
+        inventory: { select: { quantityOnHand: true } },
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
   });
 }
+
 
 /**
  * Products at or below their reorder level.
@@ -235,79 +265,88 @@ export async function getLowStockReport(
   organizationId: string,
   { startDate, endDate }: InventoryReportQuery
 ) {
-  const inventories = await prisma.inventory.findMany({
-    where: {
-      ...inventoryScope({ organizationId }),
-      quantityOnHand: { lte: prisma.inventory.fields.reorderLevel },
-      reorderLevel: { gt: 0 },
-    },
-    select: {
-      productId: true,
-      quantityOnHand: true,
-      reorderLevel: true,
-      maxStockLevel: true,
-      product: {
-        select: {
-          id: true,
-          name: true,
-          productCode: true,
-          unit: true,
-          unitCost: true,
+  const cacheKey = buildCacheKey(
+    "reports:inventory",
+    organizationId,
+    "low-stock",
+    { startDate, endDate }
+  );
+
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    const inventories = await prisma.inventory.findMany({
+      where: {
+        ...inventoryScope({ organizationId }),
+        quantityOnHand: { lte: prisma.inventory.fields.reorderLevel },
+        reorderLevel: { gt: 0 },
+      },
+      select: {
+        productId: true,
+        quantityOnHand: true,
+        reorderLevel: true,
+        maxStockLevel: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            productCode: true,
+            unit: true,
+            unitCost: true,
+          },
         },
       },
-    },
-    orderBy: { quantityOnHand: "asc" },
-  });
+      orderBy: { quantityOnHand: "asc" },
+    });
 
-  const purchaseItems = await prisma.purchaseItem.findMany({
-    where: {
-      ...purchaseItemScope({ organizationId }),
-      productId: { in: inventories.map((inv) => inv.productId) },
-    },
-    select: {
-      productId: true,
-      purchase: {
-        select: {
-          purchaseDate: true,
-          supplier: { select: { id: true, companyName: true } },
+    const purchaseItems = await prisma.purchaseItem.findMany({
+      where: {
+        ...purchaseItemScope({ organizationId }),
+        productId: { in: inventories.map((inv) => inv.productId) },
+      },
+      select: {
+        productId: true,
+        purchase: {
+          select: {
+            purchaseDate: true,
+            supplier: { select: { id: true, companyName: true } },
+          },
         },
       },
-    },
-    orderBy: { purchase: { purchaseDate: "desc" } },
-  });
+      orderBy: { purchase: { purchaseDate: "desc" } },
+    });
 
-  return inventories.map((inv) => {
-    const itemsForProduct = purchaseItems.filter(
-      (pi) => pi.productId === inv.productId
-    );
+    return inventories.map((inv) => {
+      const itemsForProduct = purchaseItems.filter(
+        (pi) => pi.productId === inv.productId
+      );
 
-    // The most recent purchase overall, not the most recent inside the window:
-    // a supplier last bought from eight months ago is the one to reorder from,
-    // and returning null just because the window excluded them would answer a
-    // question nobody asked.
-    const lastPurchase = itemsForProduct.find(
-      (pi) =>
-        !startDate ||
-        !endDate ||
-        (pi.purchase.purchaseDate >= startDate && pi.purchase.purchaseDate <= endDate)
-    ) ?? itemsForProduct[0];
+      // The most recent purchase overall, not the most recent inside the window:
+      // a supplier last bought from eight months ago is the one to reorder from,
+      // and returning null just because the window excluded them would answer a
+      // question nobody asked.
+      const lastPurchase = itemsForProduct.find(
+        (pi) =>
+          !startDate ||
+          !endDate ||
+          (pi.purchase.purchaseDate >= startDate && pi.purchase.purchaseDate <= endDate)
+      ) ?? itemsForProduct[0];
 
-    const shortfall = Math.max(0, inv.reorderLevel - inv.quantityOnHand);
+      const shortfall = Math.max(0, inv.reorderLevel - inv.quantityOnHand);
 
-    return {
-      id: inv.product.id,
-      name: inv.product.name,
-      productCode: inv.product.productCode,
-      unit: inv.product.unit,
-      quantityOnHand: inv.quantityOnHand,
-      reorderLevel: inv.reorderLevel,
-      maxStockLevel: inv.maxStockLevel,
-      shortfall,
-      unitCost: inv.product.unitCost,
-      estimatedRestockCost: shortfall * inv.product.unitCost,
-      supplier: lastPurchase?.purchase.supplier ?? null,
-      lastPurchaseDate: lastPurchase?.purchase.purchaseDate ?? null,
-    };
+      return {
+        id: inv.product.id,
+        name: inv.product.name,
+        productCode: inv.product.productCode,
+        unit: inv.product.unit,
+        quantityOnHand: inv.quantityOnHand,
+        reorderLevel: inv.reorderLevel,
+        maxStockLevel: inv.maxStockLevel,
+        shortfall,
+        unitCost: inv.product.unitCost,
+        estimatedRestockCost: shortfall * inv.product.unitCost,
+        supplier: lastPurchase?.purchase.supplier ?? null,
+        lastPurchaseDate: lastPurchase?.purchase.purchaseDate ?? null,
+      };
+    });
   });
 }
 
@@ -338,115 +377,125 @@ export async function getExpiryReport(
     daysUntilExpiry?: number;
   }
 ) {
-  const now = new Date();
-  // No start date means no lower bound rather than the epoch: the legacy used
-  // `new Date(0)`, which asks for every purchase line ever written.
-  const windowStart = startDate ?? null;
+  const cacheKey = buildCacheKey(
+    "reports:inventory",
+    organizationId,
+    "expiry",
+    { startDate, daysUntilExpiry }
+  );
 
-  const expiryLimit =
-    daysUntilExpiry !== undefined
-      ? new Date(now.getTime() + daysUntilExpiry * MS_PER_DAY)
-      : null;
+  return serverCache.getOrSet(cacheKey, 60_000, async () => {
+    const now = new Date();
+    // No start date means no lower bound rather than the epoch: the legacy used
+    // `new Date(0)`, which asks for every purchase line ever written.
+    const windowStart = startDate ?? null;
 
-  // Built key by key rather than spread: each bound that was not asked for
-  // must stay out of the filter instead of entering it as `{}`.
-  const expiryFilter: Prisma.DateTimeNullableFilter = { not: null };
+    const expiryLimit =
+      daysUntilExpiry !== undefined
+        ? new Date(now.getTime() + daysUntilExpiry * MS_PER_DAY)
+        : null;
 
-  if (windowStart) {
-    expiryFilter.gte = windowStart;
-  }
+    // Built key by key rather than spread: each bound that was not asked for
+    // must stay out of the filter instead of entering it as `{}`.
+    const expiryFilter: Prisma.DateTimeNullableFilter = { not: null };
 
-  if (expiryLimit) {
-    expiryFilter.lte = expiryLimit;
-  }
+    if (windowStart) {
+      expiryFilter.gte = windowStart;
+    }
 
-  const items = await prisma.purchaseItem.findMany({
-    where: {
-      ...purchaseItemScope({ organizationId }),
-      expiryDate: expiryFilter,
-    },
-    select: {
-      id: true,
-      productId: true,
-      quantity: true,
-      unitCost: true,
-      totalCost: true,
-      batchNumber: true,
-      expiryDate: true,
-      product: {
-        select: { id: true, name: true, productCode: true, unit: true },
+    if (expiryLimit) {
+      expiryFilter.lte = expiryLimit;
+    }
+
+    const items = await prisma.purchaseItem.findMany({
+      where: {
+        ...purchaseItemScope({ organizationId }),
+        expiryDate: expiryFilter,
       },
-      purchase: {
-        select: {
-          id: true,
-          purchaseCode: true,
-          purchaseDate: true,
-          organizationId: true,
-          supplier: { select: { id: true, companyName: true } },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        unitCost: true,
+        totalCost: true,
+        batchNumber: true,
+        expiryDate: true,
+        product: {
+          select: { id: true, name: true, productCode: true, unit: true },
         },
-      },
-    },
-    orderBy: { expiryDate: "asc" },
-  });
-
-  const [stock, batches] = await Promise.all([
-    prisma.inventory.findMany({
-      where: {
-        ...inventoryScope({ organizationId }),
-        productId: { in: items.map((i) => i.productId) },
-      },
-      select: { productId: true, quantityOnHand: true },
-    }),
-    prisma.stockBatch.findMany({
-      where: {
-        ...stockBatchScope({ organizationId }),
-        productId: { in: items.map((i) => i.productId) },
-      },
-      select: { productId: true, batchNumber: true, quantityRemaining: true },
-    }),
-  ]);
-
-  return items.flatMap((item) => {
-    const expiryDate = item.expiryDate;
-
-    if (!expiryDate) return [];
-
-    const matchedBatch = batches.find(
-      (b) => b.productId === item.productId && b.batchNumber === item.batchNumber
-    );
-
-    return [
-      {
-        id: item.id,
-        productId: item.productId,
-        name: item.product.name,
-        productCode: item.product.productCode,
-        unit: item.product.unit,
-        batchNumber: item.batchNumber,
-        expiryDate,
-        daysUntilExpiry: Math.ceil(
-          (expiryDate.getTime() - now.getTime()) / MS_PER_DAY
-        ),
-        isExpired: expiryDate < now,
-        // What was bought, not what remains
-        purchasedQuantity: item.quantity,
-        // Specific batch stock remaining
-        quantityRemaining: matchedBatch ? matchedBatch.quantityRemaining : item.quantity,
-        // Per-product total stock on hand
-        quantityOnHand:
-          stock.find((s) => s.productId === item.productId)?.quantityOnHand ?? 0,
-        unitCost: item.unitCost,
-        totalCost: item.totalCost,
         purchase: {
-          id: item.purchase.id,
-          purchaseCode: item.purchase.purchaseCode,
-          purchaseDate: item.purchase.purchaseDate,
-          supplier: item.purchase.supplier,
+          select: {
+            id: true,
+            purchaseCode: true,
+            purchaseDate: true,
+            organizationId: true,
+            supplier: { select: { id: true, companyName: true } },
+          },
         },
       },
-    ];
+      orderBy: { expiryDate: "asc" },
+    });
+
+    const [stock, batches] = await Promise.all([
+      prisma.inventory.findMany({
+        where: {
+          ...inventoryScope({ organizationId }),
+          productId: { in: items.map((i) => i.productId) },
+        },
+        select: { productId: true, quantityOnHand: true },
+      }),
+      prisma.stockBatch.findMany({
+        where: {
+          ...stockBatchScope({ organizationId }),
+          productId: { in: items.map((i) => i.productId) },
+        },
+        select: { productId: true, batchNumber: true, quantityRemaining: true },
+      }),
+    ]);
+
+    return items.flatMap((item) => {
+      const expiryDate = item.expiryDate;
+
+      if (!expiryDate) return [];
+
+      const matchedBatch = batches.find(
+        (b) => b.productId === item.productId && b.batchNumber === item.batchNumber
+      );
+
+      return [
+        {
+          id: item.id,
+          productId: item.productId,
+          name: item.product.name,
+          productCode: item.product.productCode,
+          unit: item.product.unit,
+          batchNumber: item.batchNumber,
+          expiryDate,
+          daysUntilExpiry: Math.ceil(
+            (expiryDate.getTime() - now.getTime()) / MS_PER_DAY
+          ),
+          isExpired: expiryDate < now,
+          // What was bought, not what remains
+          purchasedQuantity: item.quantity,
+          // Specific batch stock remaining
+          quantityRemaining: matchedBatch ? matchedBatch.quantityRemaining : item.quantity,
+          // Per-product total stock on hand
+          quantityOnHand:
+            stock.find((s) => s.productId === item.productId)?.quantityOnHand ?? 0,
+          unitCost: item.unitCost,
+          totalCost: item.totalCost,
+          purchase: {
+            id: item.purchase.id,
+            purchaseCode: item.purchase.purchaseCode,
+            purchaseDate: item.purchase.purchaseDate,
+            supplier: item.purchase.supplier,
+          },
+        },
+      ];
+    });
   });
 }
+
 
 export async function getFullInventoryReports(
   organizationId: string,
