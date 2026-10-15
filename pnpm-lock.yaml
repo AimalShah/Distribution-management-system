@@ -248,6 +248,9 @@ importers:
       puppeteer:
         specifier: ^25.12.0
         version: 25.12.0(yauzl@2.10.0)
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.15
       zod:
         specifier: ^4.0.5
         version: 4.6.5
@@ -273,9 +276,6 @@ importers:
       supertest:
         specifier: ^7.3.0
         version: 7.3.0(supports-color@8.1.1)
-      tsx:
-        specifier: ^4.20.3
-        version: 4.23.15
       typescript:
         specifier: ^5
         version: 5.9.3
