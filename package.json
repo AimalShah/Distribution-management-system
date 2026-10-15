@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:web": "pnpm --filter @dms/web build",
     "lint": "turbo run lint && oxlint",
     "test": "turbo run test",
     "test:parity": "vitest run",
