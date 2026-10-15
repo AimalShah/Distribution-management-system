@@ -34,11 +34,10 @@ export const allowedOrigins = new Set(
 export const port = Number(process.env.PORT ?? 4000);
 
 /**
- * Loopback by default. `app.listen(port)` with no host binds every interface,
- * which puts a server that trusts an `x-organization-id` request header on the
- * network. `DMS_HOST=0.0.0.0` is the deliberate way to opt out.
+ * Loopback by default in dev/test, and 0.0.0.0 in production so cloud containers
+ * (Render, Koyeb, Docker) bind external traffic properly.
  */
-export const host = process.env.DMS_HOST ?? "127.0.0.1";
+export const host = process.env.DMS_HOST ?? (isProduction ? "0.0.0.0" : "127.0.0.1");
 
 /**
  * Production refuses to start with an auth configuration that would let a
