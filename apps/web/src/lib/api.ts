@@ -2,9 +2,15 @@ import axios, { isAxiosError } from "axios";
 import { z } from "zod";
 import { AUTH_TOKEN_KEY } from "./auth-client";
 
+const configuredApiUrl =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.VITE_SERVER_URL
+    ? `${import.meta.env.VITE_SERVER_URL.replace(/\/+$/, "")}/api`
+    : "/api");
+
 /** The axios adapter: the transport this module keeps private behind the seam. */
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
+  baseURL: configuredApiUrl,
   headers: {
     "Content-Type": "application/json",
   },

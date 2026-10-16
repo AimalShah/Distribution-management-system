@@ -47,7 +47,15 @@ export function createApp(options: AppOptions = {}): Express {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || allowedOrigins.has(origin)) {
+        if (!origin) {
+          callback(null, true);
+
+          return;
+        }
+
+        const normalized = origin.replace(/\/+$/, "");
+
+        if (allowedOrigins.has(origin) || allowedOrigins.has(normalized)) {
           callback(null, true);
 
           return;
@@ -59,6 +67,9 @@ export function createApp(options: AppOptions = {}): Express {
       // allows credentials. Safe alongside the allowlist above: credentials are
       // never granted to an origin that is not on it.
       credentials: true,
+      // Expose set-auth-token so the frontend authClient can store the session
+      // bearer token for cross-origin requests.
+      exposedHeaders: ["set-auth-token"],
     })
   );
 

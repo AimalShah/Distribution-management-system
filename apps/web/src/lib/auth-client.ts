@@ -22,9 +22,15 @@ const readToken = () => {
  * no cookie jar worth relying on, so it sets `VITE_SERVER_URL` and runs on the
  * bearer token the server returns in `set-auth-token` instead.
  */
+const configuredServerUrl =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "")
+    : "");
+
 export const authClient = createAuthClient({
   baseURL:
-    import.meta.env.VITE_SERVER_URL ||
+    configuredServerUrl ||
     (typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"),
   basePath: "/api/auth",
   plugins: [organizationClient(), adminClient()],

@@ -12,11 +12,20 @@ const DEV_ORIGINS = [
   "http://127.0.0.1:3000",
 ];
 
+const PRODUCTION_DEFAULT_ORIGINS = [
+  "https://distribution-management-system.aimalshah62.workers.dev",
+];
+
 const parseOrigins = (raw: string | undefined) =>
   (raw ?? "")
     .split(",")
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean);
+
+const configuredOrigins = [
+  ...parseOrigins(process.env.DMS_ALLOWED_ORIGINS),
+  ...parseOrigins(process.env.TRUSTED_ORIGINS),
+];
 
 /**
  * `cors()` with no arguments answers `Access-Control-Allow-Origin: *` to any
@@ -26,9 +35,9 @@ const parseOrigins = (raw: string | undefined) =>
  * unaffected and is not required to appear here.
  */
 export const allowedOrigins = new Set(
-  parseOrigins(process.env.DMS_ALLOWED_ORIGINS).length > 0
-    ? parseOrigins(process.env.DMS_ALLOWED_ORIGINS)
-    : DEV_ORIGINS
+  configuredOrigins.length > 0
+    ? [...configuredOrigins, ...(isProduction ? PRODUCTION_DEFAULT_ORIGINS : [])]
+    : [...DEV_ORIGINS, ...(isProduction ? PRODUCTION_DEFAULT_ORIGINS : [])]
 );
 
 export const port = Number(process.env.PORT ?? 4000);
