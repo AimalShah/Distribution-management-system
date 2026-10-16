@@ -34,11 +34,11 @@ const configuredOrigins = [
  * a request with no `Origin` — curl, another server, the test suite — is
  * unaffected and is not required to appear here.
  */
-export const allowedOrigins = new Set(
-  configuredOrigins.length > 0
-    ? [...configuredOrigins, ...(isProduction ? PRODUCTION_DEFAULT_ORIGINS : [])]
-    : [...DEV_ORIGINS, ...(isProduction ? PRODUCTION_DEFAULT_ORIGINS : [])]
-);
+export const allowedOrigins = new Set([
+  ...configuredOrigins,
+  ...PRODUCTION_DEFAULT_ORIGINS,
+  ...(configuredOrigins.length === 0 ? DEV_ORIGINS : []),
+]);
 
 export const port = Number(process.env.PORT ?? 4000);
 
