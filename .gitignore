@@ -42,3 +42,4 @@ yarn-error.log*
 
 # prisma generated client
 /packages/db/prisma/generated/
+scripts/qa/artifacts/

@@ -9,6 +9,7 @@
     "build:web": "pnpm --filter @dms/web build",
     "lint": "turbo run lint && oxlint",
     "test": "turbo run test",
+    "qa": "node scripts/qa/run.mjs",
     "test:parity": "vitest run",
     "test:parity:all": "vitest run --config vitest.parity-all.config.ts",
     "typecheck": "turbo run typecheck",

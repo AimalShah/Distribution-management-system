@@ -45,7 +45,12 @@ export const authSurfaceLimiter: RateLimitRequestHandler = rateLimit({
  * whose staff share one IP gets their sign-ins free.
  */
 export const credentialEntryLimiter: RateLimitRequestHandler = rateLimit({
-  windowMs: 15 * 60_000,
+  // 10 minutes: the window an office shares the pain of a buggy client. Ten
+  // failures in ten minutes is a slow brute force at any rate (a machine
+  // cycling 10-round buckets still takes ~4 attempts/hour at best), so the
+  // shorter window's cost is timeout-only and its benefit is that a clerk's
+  // typo burst never outlives a coffee break.
+  windowMs: 10 * 60_000,
   limit: 10,
   skipSuccessfulRequests: true,
   standardHeaders: "draft-7",
