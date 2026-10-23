@@ -2,6 +2,7 @@ import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type {
   ReturnCreateInput,
+  ReturnItemInput,
   ReturnListQuery,
   ReturnTypeValue,
   ReturnUpdateInput,
@@ -79,6 +80,102 @@ const sumByProduct = (lines: { productId: string; quantity: number }[]) => {
 
   return totals;
 };
+
+/** Money is reported to two decimals, exactly as the sale module rounds it. */
+const round2 = (value: number) => Number(value.toFixed(2));
+
+/**
+ * The money figures a return line stores, as the service derives them.
+ */
+type DerivedMoney = { unitPrice: number; taxAmount: number; discount: number };
+
+/** Per-unit basis for one product, which can sit on several document lines. */
+type DocLine = {
+  quantity: number;
+  unitPrice: number;
+  /** The invoice's stored line subtotal (pre-tax), when the document is an invoice. */
+  totalPrice: number | null;
+  /** The stored split is what `createSale` wrote for this line. */
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  /** A receipt line's own discount; invoice lines carry none. */
+  discount: number | null;
+  /**
+   * A receipt line's tax rate in percent. NOT the invoice's stored rate: an
+   * invoice line's tax is already in the split amounts — the caller of this
+   * helper passes `null` for invoice lines, or the rate would tax the line twice.
+   */
+  taxPercent: number | null;
+};
+
+/**
+ * The money figures of a document-reversing return line are derived from the
+ * document it reverses, never banked from the client's word — the P0-6 rule of
+ * `services/sale.ts` carried over to returns. A forged `unitPrice` typed into
+ * the form must not be able to mint store credit out of nothing or erase a
+ * customer's balance by more than the goods ever cost.
+ *
+ * A product can sit on several invoice lines at different prices, so the figures
+ * below are weighted across every line the product occupies. The ledger's credit
+ * formula (`quantity × unitPrice + taxAmount − discount`, see
+ * `services/customer.ts` and the store-credit pool in `services/payment.ts`)
+ * then reads pro rata for any slice of those lines: returning one line whole
+ * gives back exactly the whole line's tax and its share of the header discount,
+ * and a partial return gives back the same share of them.
+ */
+const documentItemMoney = (
+  lines: DocLine[],
+  /**
+   * The document's own subtotal (invoice) or gross (receipt), used only to
+   * spread the header discount over its lines the way the module that wrote
+   * the document spread the arithmetic to write it.
+   */
+  documentSubtotal: number,
+  headerDiscount: number,
+  returnedQty: number
+): DerivedMoney => {
+  const docQty = lines.reduce((sum, line) => sum + line.quantity, 0);
+  const goodsValue = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+  // An invoice's per-line tax is the stored split; a receipt's is the rate
+  // applied to the line's net as `services/purchase.ts` priced it.
+  const lineTax = lines.reduce(
+    (sum, line) =>
+      sum +
+      (line.cgstAmount + line.sgstAmount + line.igstAmount) +
+      (line.taxPercent
+        ? Math.max(0, ((line.taxPercent / 100) * (line.quantity * line.unitPrice - (line.discount ?? 0))))
+        : 0),
+    0
+  );
+  const lineDiscount = lines.reduce((sum, line) => sum + (line.discount ?? 0), 0);
+  const lineSubtotal = lines.reduce(
+    (sum, line) => sum + (line.totalPrice ?? line.quantity * line.unitPrice),
+    0
+  );
+  // The header discount is spread over the document by line value; a receipt's
+  // line discount is the line's own and comes back with it.
+  const subtotalShare = documentSubtotal > 0 ? lineSubtotal / documentSubtotal : 0;
+
+  return {
+    unitPrice: docQty > 0 ? round2(goodsValue / docQty) : 0,
+    taxAmount: round2(lineTax * (docQty > 0 ? returnedQty / docQty : 0)),
+    discount: round2((headerDiscount * subtotalShare + lineDiscount) * (docQty > 0 ? returnedQty / docQty : 0)),
+  };
+};
+
+/**
+ * A write-off (`EXPIRED`/`DAMAGED`) reverses no document, so no figure can be
+ * derived for it — these goods were never on an invoice or a receipt of
+ * record. The record stores what the clerk entered, or zero when the form
+ * sent none; the new optional fields make the zero explicit instead of
+ * letting a required-but-unused number through.
+ */
+const writeOffItemMoney = (item: ReturnItemInput): DerivedMoney => ({
+  unitPrice: item.unitPrice ?? 0,
+  taxAmount: item.taxAmount ?? 0,
+  discount: item.discount ?? 0,
+});
 
 /**
  * A Company with no settings row still gets the documented defaults (30-day
@@ -238,6 +335,15 @@ export async function createReturn(
    */
   const result = await prisma.$transaction(
     async (tx) => {
+      /**
+       * Money figures for document-backed returns, resolved per product from
+       * the document branches below. Unset for write-offs, whose rows store
+       * the client's own (or zero) figures instead.
+       */
+      const docMoney = new Map<string, (returnedQty: number) => DerivedMoney>();
+      const moneyFor = (item: ReturnItemInput): DerivedMoney =>
+        docMoney.get(item.productId)?.(item.quantity) ?? writeOffItemMoney(item);
+
       // The Company's return policy is read inside the same transaction that
       // enforces it, so the window checked is the window in force at write time.
       if (returnType === "SALE") {
@@ -282,7 +388,7 @@ export async function createReturn(
         );
       }
 
-      if (returnType === "SALE" && saleId) {
+      if (returnType === "SALE") {
         // A soft-deleted invoice has had its stock reversed, so nothing is left
         // for a return to hand back against it.
         const sale = await tx.sale.findFirst({
@@ -290,7 +396,18 @@ export async function createReturn(
           select: {
             saleCode: true,
             saleDate: true,
-            items: { select: { productId: true, quantity: true } },
+            discount: true,
+            items: {
+              select: {
+                productId: true,
+                quantity: true,
+                unitPrice: true,
+                totalPrice: true,
+                cgstAmount: true,
+                sgstAmount: true,
+                igstAmount: true,
+              },
+            },
           },
         });
 
@@ -343,14 +460,54 @@ export async function createReturn(
           documentCode: sale.saleCode,
           reference: { saleId },
         });
+
+        // The invoice supplies every money figure a SALE return line stores.
+        // Resolved per product now, per returned quantity in the create below.
+        const linesByProduct = new Map<string, DocLine[]>();
+        for (const line of sale.items) {
+          // `taxPercent` is deliberately NOT taken from an invoice line: its
+          // tax is already stored in the split amounts, and feeding the rate in
+          // here as well would tax the line twice.
+          linesByProduct.set(line.productId, [
+            ...(linesByProduct.get(line.productId) ?? []),
+            { ...line, discount: null, taxPercent: null },
+          ]);
+        }
+        const invoiceSubtotal = sale.items.reduce(
+          (sum, line) => sum + (line.totalPrice ?? line.quantity * line.unitPrice),
+          0
+        );
+        const headerDiscount = sale.discount ?? 0;
+
+        for (const [productId, lines] of linesByProduct) {
+          docMoney.set(productId, (returnedQty) =>
+            documentItemMoney(lines, invoiceSubtotal, headerDiscount, returnedQty)
+          );
+        }
       }
 
-      if (returnType === "PURCHASE" && purchaseId) {
+      if (returnType === "PURCHASE") {
+        if (!purchaseId) {
+          throw badRequest(
+            "A purchase return must reference the original receipt",
+            "PURCHASE_REFERENCE_REQUIRED"
+          );
+        }
+
         const purchase = await tx.purchase.findFirst({
           where: { id: purchaseId, organizationId },
           select: {
             purchaseCode: true,
-            purchaseItems: { select: { productId: true, quantity: true } },
+            discount: true,
+            purchaseItems: {
+              select: {
+                productId: true,
+                quantity: true,
+                unitCost: true,
+                discount: true,
+                taxPercent: true,
+              },
+            },
           },
         });
 
@@ -375,6 +532,37 @@ export async function createReturn(
           documentCode: purchase.purchaseCode,
           reference: { purchaseId },
         });
+
+        // Same rule as a SALE return: the receipt the goods are going back
+        // against supplies every figure, including what the line originally
+        // cost. The receipt's per-line discount and its share of the header
+        // discount come back with the quantity returned.
+        const linesByProduct = new Map<string, DocLine[]>();
+        for (const line of purchase.purchaseItems) {
+          linesByProduct.set(line.productId, [
+            ...(linesByProduct.get(line.productId) ?? []),
+            {
+              unitPrice: line.unitCost,
+              discount: line.discount,
+              taxPercent: line.taxPercent,
+              totalPrice: null,
+              cgstAmount: 0,
+              sgstAmount: 0,
+              igstAmount: 0,
+              quantity: line.quantity,
+            },
+          ]);
+        }
+        const purchaseGross = purchase.purchaseItems.reduce(
+          (sum, line) => sum + line.quantity * line.unitCost,
+          0
+        );
+
+        for (const [productId, lines] of linesByProduct) {
+          docMoney.set(productId, (returnedQty) =>
+            documentItemMoney(lines, purchaseGross, purchase.discount ?? 0, returnedQty)
+          );
+        }
       }
 
       // Read once, for the missing-row check and the shortage message. The
@@ -434,16 +622,24 @@ export async function createReturn(
           saleId: returnType === "SALE" ? (saleId ?? null) : null,
           purchaseId: returnType === "PURCHASE" ? (purchaseId ?? null) : null,
           items: {
-            create: data.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              taxAmount: item.taxAmount,
-              discount: item.discount,
-              note: item.note,
-              condition: item.condition,
-              reason: item.reason,
-            })),
+            create: data.items.map((item) => {
+              // Not the client's word: for a SALE return the figures come from
+              // the invoice line the goods were billed on, for a PURCHASE
+              // return from the receipt they were received on, and only a
+              // write-off keeps what the clerk entered.
+              const money = moneyFor(item);
+
+              return {
+                productId: item.productId,
+                quantity: item.quantity,
+                unitPrice: money.unitPrice,
+                taxAmount: money.taxAmount,
+                discount: money.discount,
+                note: item.note,
+                condition: item.condition,
+                reason: item.reason,
+              };
+            }),
           },
         },
         include: detailInclude,

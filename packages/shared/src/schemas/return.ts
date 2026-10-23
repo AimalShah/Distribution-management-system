@@ -14,8 +14,12 @@ export const ReturnConditions = ["RESTOCKABLE", "DAMAGED"] as const;
 /**
  * A line of goods coming back.
  *
- * `ReturnItem.unitPrice`, `.taxAmount` and `.discount` are NOT NULL columns, so
- * all three stay required; the legacy form posted them for every line.
+ * `ReturnItem.unitPrice`, `.taxAmount` and `.discount` are NOT NULL columns, but
+ * the client no longer has to send them: for a SALE or PURCHASE return the
+ * service derives every figure from the document the return reverses (the P0-6
+ * rule — the €0.01 parity bug class — refusing to bank whatever numbers the
+ * caller typed). They are needed only for EXPIRED and DAMAGED write-offs, which
+ * reverse no document; there a missing figure stores as 0.
  *
  * `condition` and `reason` are the per-line condition gate: the header's
  * `reason` says why the return happened, and the line's says why *this* line is
@@ -27,9 +31,11 @@ export const ReturnItemSchema = z
   .object({
     productId: z.string().trim().min(1, "Please select a product"),
     quantity: z.number().int().min(1, "Quantity must be at least 1"),
-    unitPrice: z.number("Expected a number").min(0, "Unit price cannot be negative"),
-    taxAmount: z.number("Expected a number").min(0, "Tax amount cannot be negative"),
-    discount: z.number("Expected a number").min(0, "Discount cannot be negative"),
+    // Client figures are for write-off records only; SALE/PURCHASE returns
+    // ignore them entirely and store what the invoice or receipt charged.
+    unitPrice: z.number("Expected a number").min(0, "Unit price cannot be negative").optional(),
+    taxAmount: z.number("Expected a number").min(0, "Tax amount cannot be negative").optional(),
+    discount: z.number("Expected a number").min(0, "Discount cannot be negative").optional(),
     condition: z.enum(ReturnConditions).default("RESTOCKABLE"),
     note: optionalText("Note cannot be empty"),
     reason: optionalText("Reason cannot be empty"),
