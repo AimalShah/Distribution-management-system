@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import helmet from "helmet";
 import { toNodeHandler } from "better-auth/node";
 import { createAuth, type Auth } from "./auth";
 import { allowedOrigins, trustProxy } from "./config/env";
@@ -45,6 +46,11 @@ export function createApp(options: AppOptions = {}): Express {
 
   const bootstrap =
     authMode === "session" ? sessionBootstrapAuthContext(auth) : bootstrapAuthContext;
+
+  // CSP defaults block inline scripts but allow inline styles, which the
+  // server-rendered document templates (invoice/statement HTML) rely on and
+  // only inline-style use; no template ships a <script> tag.
+  app.use(helmet());
 
   // An allowlist, not a wildcard: an origin that is not on it gets no CORS
   // headers, so the browser withholds the response from the calling page.

@@ -14,7 +14,8 @@ export interface Email {
   html: string;
 }
 
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? "Inventioo <onboarding@resend.dev>";
+export const EMAIL_FROM =
+  process.env.EMAIL_FROM ?? "AM-Enterprise <no-reply@am-enterprise.org>";
 
 export async function sendEmail(email: Email): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;

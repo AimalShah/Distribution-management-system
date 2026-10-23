@@ -14,6 +14,8 @@ const DEV_ORIGINS = [
 
 const PRODUCTION_DEFAULT_ORIGINS = [
   "https://distribution-management-system.aimalshah62.workers.dev",
+  "https://am-enterprise.org",
+  "https://www.am-enterprise.org",
 ];
 
 const parseOrigins = (raw: string | undefined) =>

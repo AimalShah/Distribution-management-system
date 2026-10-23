@@ -54,11 +54,11 @@ Decisions locked with the owner:
 - **Est:** 45 min
 - **Done when:** running any of them against a non-local DB aborts with the target host in the error; a local override var is documented in `.env.example`.
 
-### [ ] P0-8 · Production security headers + email/domain wiring
+### [x] P0-8 · Production security headers + email/domain wiring
 - **Why:** no helmet/CSP/HSTS anywhere; `EMAIL_FROM` defaults to `onboarding@resend.dev`; `am-enterprise.org` appears nowhere in the repo; `.env.example` ships `REQUIRE_EMAIL_VERIFICATION="false"`.
 - **Files:** `apps/server/src/app.ts` (helmet with CSP + HSTS), `apps/server/src/auth/email.ts:17` (default `AM-Enterprise <no-reply@am-enterprise.org>`), `apps/server/src/config/env.ts:15-17` (add `https://am-enterprise.org` to production default origins), root `.env.example` (flip verification default to `"true"` with a "don't disable in prod" comment; add missing vars `PORT`, `DMS_HOST`, `DMS_ALLOWED_ORIGINS`, `EMAIL_FROM`, `PUPPETEER_EXECUTABLE_PATH`, `VITE_API_URL`).
 - **Est:** 1.5 h
-- **Done when:** responses carry CSP/HSTS/X-Content-Type-Options; verification mail comes from an `am-enterprise.org` address once `RESEND_API_KEY` is set; `.env.example` lists every env var the code reads.
+- **Done when:** ✅ **Done.** `helmet()` mounted first in `app.ts` (CSP defaults fine — verified no template ships inline scripts, only inline styles); `EMAIL_FROM` default now `AM-Enterprise <no-reply@am-enterprise.org>`; `https://am-enterprise.org` + www added to production default origins; `.env.example` now documents `DMS_ALLOWED_ORIGINS`, `PORT`, `DMS_HOST`, `EMAIL_FROM`, `PUPPETEER_EXECUTABLE_PATH`, `VITE_API_URL`, and flips `REQUIRE_EMAIL_VERIFICATION` to `"true"` with an explicit don't-disable comment. Typecheck clean; 762/762 server tests pass. **Operator action for go-live:** verify the `am-enterprise.org` sending domain in Resend (config still no-ops gracefully without `RESEND_API_KEY`).
 
 ---
 
