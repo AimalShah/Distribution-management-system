@@ -396,6 +396,7 @@ export async function createReturn(
           select: {
             saleCode: true,
             saleDate: true,
+            status: true,
             discount: true,
             items: {
               select: {
@@ -416,6 +417,20 @@ export async function createReturn(
             "The sale does not exist in this organization",
             "SALE_NOT_IN_ORGANIZATION",
             { saleId }
+          );
+        }
+
+        // A cancelled invoice has been reversed by hand — the goods are counted
+        // as having come back under the cancel, the same reason a payment is
+        // refused against one (the SALE_CANCELLED rule in services/payment.ts).
+        // Letting a return through would hand the stock back twice: second
+        // time through `uncancelSale`'s path or a credit settled against an
+        // invoice that no longer exists.
+        if (sale.status === "Cancelled") {
+          throw conflict(
+            "That invoice is cancelled, so a return cannot be recorded against it",
+            "SALE_CANCELLED",
+            { saleCode: sale.saleCode, saleId }
           );
         }
 
