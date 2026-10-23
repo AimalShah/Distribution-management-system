@@ -1,5 +1,5 @@
 import cors from "cors";
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 import helmet from "helmet";
 import { toNodeHandler } from "better-auth/node";
 import { createAuth, type Auth } from "./auth";
@@ -137,7 +137,18 @@ export function createApp(options: AppOptions = {}): Express {
   // header of its own.
   app.use("/api/members", bootstrap, memberRouter, notFoundHandler);
 
-  app.use("/api", strict, apiRouter);
+  // Authenticated tenant data is per-session, per-organization and money: no
+  // intermediary is licensed to hand a cached copy to the next viewer. The
+  // header applies to everything below it, so it sits on the authenticated
+  // mounts only — `/api/health` and the auth surface stay out of scope.
+  const noStore: RequestHandler = (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  };
+
+  app.use("/api/organizations", noStore);
+  app.use("/api/members", noStore);
+  app.use("/api", strict, noStore, apiRouter);
 
   if (process.env.NODE_ENV !== "production") {
     app.use("/__debug", debugRouter);

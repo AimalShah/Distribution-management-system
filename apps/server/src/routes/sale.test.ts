@@ -15,6 +15,7 @@ const { models, transaction } = vi.hoisted(() => {
       delete: vi.fn(),
       aggregate: vi.fn(),
     },
+    saleItem: { update: vi.fn() },
     customer: { findFirst: vi.fn() },
     product: { findMany: vi.fn() },
     return: { count: vi.fn(), findMany: vi.fn() },
@@ -749,6 +750,94 @@ describe("PUT /api/sales/:id", () => {
     const arg = models.sale.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(arg.data).toEqual({ status: "Pending" });
     expect(models.inventory.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("recomputes the stored figures when the PUT changes the discount", async () => {
+    // The stored lines keep their create-time terms (items are omitted from
+    // the update schema); the recompute replays those rows — 2 × 25 at 10% —
+    // under the PUT's new header discount of 3.
+    models.sale.findFirst.mockResolvedValue({
+      discount: 0,
+      isInterState: false,
+      items: [{ id: "si_1", productId: "prod_1", quantity: 2, unitPrice: 25, taxPercent: 10 }],
+    });
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", gstApplicable: true, gstRate: 10 },
+    ]);
+
+    await request(app).put("/api/sales/sal_1").set(auth()).send({ discount: 3 });
+
+    const arg = models.sale.update.mock.calls[0][0] as {
+      data: Record<string, number | undefined>;
+    };
+
+    // The terms support 50 + derived tax 5 − 3 = 52, half-CGST/half-SGST
+    // domestically. Nothing here was taken from the request body except the
+    // discount itself.
+    expect(arg.data).toEqual({
+      discount: 3,
+      totalAmount: 52,
+      taxAmount: 5,
+      cgstAmount: 2.5,
+      sgstAmount: 2.5,
+      igstAmount: 0,
+    });
+    // Header-only PUT: the line rows keep the splits the create path wrote.
+    expect(models.saleItem.update).not.toHaveBeenCalled();
+  });
+
+  it("rewrites the line splits when the PUT flips the inter-state claim", async () => {
+    models.sale.findFirst.mockResolvedValue({
+      discount: 0,
+      isInterState: false,
+      items: [{ id: "si_1", productId: "prod_1", quantity: 2, unitPrice: 25, taxPercent: 10 }],
+    });
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", gstApplicable: true, gstRate: 10 },
+    ]);
+
+    await request(app).put("/api/sales/sal_1").set(auth()).send({ isInterState: true });
+
+    const arg = models.sale.update.mock.calls[0][0] as { data: Record<string, number | undefined> };
+    // 10% of 50 as IGST when the sale is inter-state.
+    expect(arg.data).toEqual({
+      isInterState: true,
+      totalAmount: 55,
+      taxAmount: 5,
+      cgstAmount: 0,
+      sgstAmount: 0,
+      igstAmount: 5,
+    });
+    // No discount was stated, so the stored trade term must not be touched.
+    expect(arg.data.discount).toBeUndefined();
+    expect(models.saleItem.update).toHaveBeenCalledWith({
+      where: { id: "si_1" },
+      data: {
+        cgstRate: 0,
+        sgstRate: 0,
+        igstRate: 10,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        igstAmount: 5,
+      },
+    });
+  });
+
+  it("refuses a PUT discount that would drive the total negative", async () => {
+    models.sale.findFirst.mockResolvedValue({
+      discount: 0,
+      isInterState: false,
+      items: [{ id: "si_1", productId: "prod_1", quantity: 2, unitPrice: 25, taxPercent: 10 }],
+    });
+    models.product.findMany.mockResolvedValue([
+      { id: "prod_1", gstApplicable: true, gstRate: 10 },
+    ]);
+
+    const res = await request(app).put("/api/sales/sal_1").set(auth()).send({ discount: 1000 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOTAL");
+    expect(models.sale.update).not.toHaveBeenCalled();
   });
 
   it("404s for a sale owned by another tenant", async () => {

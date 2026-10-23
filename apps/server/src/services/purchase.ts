@@ -29,7 +29,7 @@ const detailInclude = {
  * existing documents while removing a client supplied total the API would
  * otherwise have to trust.
  */
-const lineTotal = (item: PurchaseItemInput) => {
+const lineTotal = (item: Pick<PurchaseItemInput, "quantity" | "unitCost" | "itemDiscount" | "taxPercent">) => {
   const gross = item.quantity * item.unitCost;
   const itemDiscount = item.itemDiscount ?? 0;
   const tax = ((item.taxPercent ?? 0) / 100) * (gross - itemDiscount);
@@ -37,7 +37,16 @@ const lineTotal = (item: PurchaseItemInput) => {
   return gross - itemDiscount + tax;
 };
 
-const linesTax = (data: PurchaseFormInput) =>
+/**
+ * The recompute helpers read the same terms from a stored row that a request
+ * body carries (the PUT path re-derives figures from the rows already on the
+ * invoice — items cannot be rewritten there, but the header discount the rows
+ * were priced under can), so they accept a structural subset of the form item
+ * rather than the full create input.
+ */
+type PurchasePricedLine = Pick<PurchaseItemInput, "quantity" | "unitCost" | "itemDiscount" | "taxPercent">;
+
+const linesTax = (data: { items: readonly PurchasePricedLine[] }) =>
   data.items.reduce(
     (sum, item) =>
       sum +
@@ -45,7 +54,10 @@ const linesTax = (data: PurchaseFormInput) =>
     0
   );
 
-export const calculatePurchaseTotal = (data: PurchaseFormInput) =>
+export const calculatePurchaseTotal = (data: {
+  items: readonly PurchasePricedLine[];
+  discount?: number;
+}) =>
   data.items.reduce((sum, item) => sum + lineTotal(item), 0) - (data.discount ?? 0);
 
 export type PurchaseListArgs = {
@@ -286,6 +298,39 @@ export async function updatePurchase(
   }
 
   const updateData: Prisma.PurchaseUncheckedUpdateInput = { ...data };
+
+  // The PUT cannot rewrite lines (`PurchaseUpdateSchema` omits `items` —
+  // rewriting quantities without replaying the stock movement would desync
+  // inventory), so every stored line's own terms stay as the create path
+  // priced them. The one header term a PUT can change is the discount, and the
+  // stored figures were derived from the *old* discount: banking a new one
+  // without recomputing would leave `totalAmount` disagreeing with the terms
+  // both the document and its printout state. `taxAmount` is not recomputed:
+  // it comes from the lines' rates, which a header-only PUT cannot touch.
+  if (data.discount !== undefined) {
+    const lines = await prisma.purchaseItem.findMany({
+      where: { purchase: { id, organizationId } },
+      select: { quantity: true, unitCost: true, discount: true, taxPercent: true },
+    });
+
+    updateData.totalAmount = calculatePurchaseTotal({
+      items: lines.map((line) => ({
+        quantity: line.quantity,
+        unitCost: line.unitCost,
+        itemDiscount: line.discount ?? 0,
+        taxPercent: line.taxPercent ?? undefined,
+      })),
+      discount: data.discount,
+    });
+
+    if ((updateData.totalAmount as number) < 0) {
+      throw badRequest(
+        "Purchase total cannot be negative. Check the discount and tax amounts.",
+        "INVALID_TOTAL",
+        { totalAmount: updateData.totalAmount }
+      );
+    }
+  }
 
   const updated = await prisma.purchase.update({
     where: { id, organizationId },

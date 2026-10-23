@@ -475,17 +475,164 @@ export async function updateSale(
 
   const updateData: Prisma.SaleUncheckedUpdateInput = { ...data };
 
-  // A soft-deleted invoice is out of circulation: its stock has been given
-  // back, so rewriting its header would edit a document nothing matches
-  // anymore. Restore it first.
-  const updated = await prisma.sale.update({
-    where: { id, organizationId, deletedAt: null },
-    data: updateData,
-    include: detailInclude,
+  // The PUT cannot rewrite lines (`SaleUpdateSchema` omits `items` — rewriting
+  // quantities without replaying the stock movement would desync inventory), so
+  // every stored line's own terms stay as the create path priced them. But the
+  // header terms a PUT *can* change — the discount, and the inter-state claim
+  // that decides CGST+SGST vs IGST — are exactly what the stored figures were
+  // derived from at create time. Bank neither stale nor forged figures: replay
+  // the stored lines through the same breakdown the create path stores from,
+  // in the same transaction as the header rewrite.
+  const discountChanged = data.discount !== undefined;
+  const isInterStateChanged = data.isInterState !== undefined;
+
+  let recompute: Awaited<ReturnType<typeof deriveSaleMoney>> | null = null;
+
+  if (discountChanged || isInterStateChanged) {
+    recompute = await deriveSaleMoney(id, organizationId, {
+      discount: data.discount,
+      isInterState: data.isInterState,
+    });
+
+    // Drafted into `updateData` below; the header columns carry exactly the
+    // figures the line terms support, never the PUT's own word. The discount
+    // itself is only assigned when the PUT stated one: an inter-state-only PUT
+    // must not overwrite the stored trade term with a recompute artefact.
+    updateData.totalAmount = recompute.money.total;
+    updateData.taxAmount = recompute.money.taxAmount;
+    updateData.cgstAmount = recompute.money.cgstAmount;
+    updateData.sgstAmount = recompute.money.sgstAmount;
+    updateData.igstAmount = recompute.money.igstAmount;
+
+    if (discountChanged) {
+      updateData.discount = recompute.money.discount;
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // A soft-deleted invoice is out of circulation: its stock has been given
+    // back, so rewriting its header would edit a document nothing matches
+    // anymore. Restore it first.
+    const sale = await tx.sale.update({
+      where: { id, organizationId, deletedAt: null },
+      data: updateData,
+      include: detailInclude,
+    });
+
+    // An inter-state flip changes how each line's tax splits, and the split
+    // lives per line row as well as in the header. The header update above
+    // committed its new figures, so the line rows move in the same
+    // transaction: a failure between them would leave a document whose lines
+    // disagree with its own totals.
+    if (recompute?.lineSplits) {
+      for (const split of recompute.lineSplits) {
+        await tx.saleItem.update({
+          where: { id: split.id },
+          data: {
+            cgstRate: split.cgstRate,
+            sgstRate: split.sgstRate,
+            igstRate: split.igstRate,
+            cgstAmount: split.cgstAmount,
+            sgstAmount: split.sgstAmount,
+            igstAmount: split.igstAmount,
+          },
+        });
+      }
+    }
+
+    return sale;
   });
 
   invalidateTenantMetrics(organizationId, "sales");
   return updated;
+}
+
+/**
+ * Derive an invoice's money figures from its *stored* lines plus the PUT's new
+ * header terms — the same terms-in, figures-out contract `createSale` and the
+ * document printout follow, pointed at rows instead of a request body.
+ */
+async function deriveSaleMoney(
+  id: string,
+  organizationId: string,
+  next: { discount?: number; isInterState?: boolean }
+) {
+  const invoice = await prisma.sale.findFirst({
+    where: { id, organizationId, deletedAt: null },
+    select: {
+      discount: true,
+      isInterState: true,
+      items: {
+        select: {
+          id: true,
+          productId: true,
+          quantity: true,
+          unitPrice: true,
+          taxPercent: true,
+        },
+      },
+    },
+  });
+
+  if (!invoice) {
+    throw notFound("Sale not found", "SALE_NOT_FOUND");
+  }
+
+  const productIds = [...new Set(invoice.items.map((item) => item.productId))];
+
+  if (productIds.length > 0) {
+    const owned = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, gstApplicable: true, gstRate: true },
+    });
+
+    const productMap = new Map(owned.map((product) => [product.id, product]));
+
+    const money = calculateSaleBreakdown({
+      items: invoice.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        gstApplicable: productMap.get(item.productId)?.gstApplicable,
+        gstRate: productMap.get(item.productId)?.gstRate,
+        taxPercent: item.taxPercent ?? undefined,
+      })),
+      isInterState: next.isInterState ?? invoice.isInterState,
+      discount: next.discount ?? (typeof invoice.discount === "number" ? invoice.discount : undefined),
+    });
+
+    if (isInvalidSaleTotal(money.total)) {
+      throw badRequest(
+        "Sale total cannot be negative. Check the discount and tax amounts.",
+        "INVALID_TOTAL",
+        { totalAmount: money.total }
+      );
+    }
+
+    // Zip by construction, not by lookup: both lists came from the same stored
+    // order, so `lineSplits[i]` belongs to `invoice.items[i]` — an update
+    // matched by product id could mis-fire against two lines of one product.
+    const lineSplits = money.items.map((line, index) => ({
+      id: invoice.items[index].id,
+      cgstRate: line.cgstRate,
+      sgstRate: line.sgstRate,
+      igstRate: line.igstRate,
+      cgstAmount: line.cgstAmount,
+      sgstAmount: line.sgstAmount,
+      igstAmount: line.igstAmount,
+    }));
+
+    return {
+      money,
+      /** Non-null only when the PUT actually flips the inter-state claim. */
+      lineSplits: Boolean(next.isInterState) === invoice.isInterState ? null : lineSplits,
+    };
+  }
+
+  // Unreachable through normal use (a sale needs at least one item at create),
+  // but a lineless invoice cannot feed the breakdown without inventing a
+  // product read for nothing; refuse rather than guess.
+  throw conflict("This invoice has no lines to reprice from", "SALE_HAS_NO_ITEMS", { id });
 }
 
 /**

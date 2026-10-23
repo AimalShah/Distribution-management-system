@@ -16,6 +16,7 @@ const { models, transaction } = vi.hoisted(() => {
     },
     product: { findMany: vi.fn() },
     supplier: { findFirst: vi.fn() },
+    purchaseItem: { findMany: vi.fn() },
     inventory: {
       upsert: vi.fn(),
       findFirst: vi.fn(),
@@ -653,6 +654,33 @@ describe("PUT /api/purchases/:id", () => {
 
     const arg = models.purchase.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(arg.data).toEqual({});
+  });
+
+  it("recomputes the stored total when the PUT discounts the purchase", async () => {
+    // The stored lines keep their own create-time terms (items are omitted
+    // from the update schema); the recompute replays those rows — 2 × 10 at
+    // 10% line tax — under the PUT's new header discount of 3.
+    models.purchaseItem.findMany.mockResolvedValue([
+      { quantity: 2, unitCost: 10, discount: null, taxPercent: 10 },
+    ]);
+
+    await request(app).put("/api/purchases/pur_1").set(auth()).send({ discount: 3 });
+
+    const arg = models.purchase.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    // 2 × 10 = 20, + line tax 2 = 22, − discount 3 = 19.
+    expect(arg.data).toEqual({ discount: 3, totalAmount: 19 });
+  });
+
+  it("refuses a PUT discount that would drive the total negative", async () => {
+    models.purchaseItem.findMany.mockResolvedValue([
+      { quantity: 2, unitCost: 10, discount: null, taxPercent: 10 },
+    ]);
+
+    const res = await request(app).put("/api/purchases/pur_1").set(auth()).send({ discount: 1000 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOTAL");
+    expect(models.purchase.update).not.toHaveBeenCalled();
   });
 
   it("refuses to re-point the purchase at another tenant's supplier", async () => {
