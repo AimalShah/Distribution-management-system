@@ -43,6 +43,8 @@ export interface ReturnRow {
   purchase?: { id: string; purchaseCode: string } | null;
   user?: { name?: string | null; email?: string | null } | null;
   _count?: { items: number };
+  /** The summed line quantities the list service computes — pieces, not lines. */
+  pieces?: number;
   items?: any[];
 }
 
@@ -204,11 +206,22 @@ export default function ReturnList() {
       {
         id: "items",
         header: "Items",
-        cell: ({ row }) => (
-          <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800/80 px-2 py-1 rounded-md">
-            {row.original._count?.items ?? row.original.items?.length ?? 0} pcs
-          </span>
-        ),
+        cell: ({ row }) => {
+          const lines = row.original._count?.items ?? row.original.items?.length ?? 0;
+
+          return (
+            <div className="flex items-center gap-1.5">
+              {/* Pieces, not lines: a 20-piece return of 3 products must not
+                  read as 3, and a 12-piece single-line return not as 1. */}
+              <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800/80 px-2 py-1 rounded-md">
+                {row.original.pieces ?? 0} pcs
+              </span>
+              <span className="text-[10px] text-muted-foreground/70">
+                {lines} {lines === 1 ? "line" : "lines"}
+              </span>
+            </div>
+          );
+        },
       },
       {
         id: "user",

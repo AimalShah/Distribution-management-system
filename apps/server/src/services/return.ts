@@ -210,6 +210,9 @@ export async function getReturns({
     where.returnCode = { contains: search, mode: "insensitive" };
   }
 
+  // Plain sequential reads: the piece sum is derived from the page's own rows,
+  // and the count's consistency with the rows is the same best-effort it was
+  // when both queries ran through Promise.all — no transaction is warranted.
   const [data, total] = await Promise.all([
     prisma.return.findMany({
       where,
@@ -221,7 +224,31 @@ export async function getReturns({
     prisma.return.count({ where }),
   ]);
 
-  return { data, pageCount: Math.ceil(total / pageSize), total };
+  /**
+   * The list shows pieces, not lines: a clerk who handed back 12 units of one
+   * product must not read "1 pcs" because the row happens to hold a single
+   * line. One grouped sum over the page's lines keeps the payload bounded
+   * (the count alone was the reason the lines moved off the list).
+   */
+  const piecesByReturn = new Map<string, number>();
+
+  if (data.length > 0) {
+    const summed = await prisma.returnItem.groupBy({
+      by: ["returnId"],
+      where: { returnId: { in: data.map((row) => row.id) } },
+      _sum: { quantity: true },
+    });
+
+    for (const entry of summed) {
+      piecesByReturn.set(entry.returnId, entry._sum.quantity ?? 0);
+    }
+  }
+
+  return {
+    data: data.map((row) => ({ ...row, pieces: piecesByReturn.get(row.id) ?? 0 })),
+    pageCount: Math.ceil(total / pageSize),
+    total,
+  };
 }
 
 /**

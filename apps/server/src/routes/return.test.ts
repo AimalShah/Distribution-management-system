@@ -28,6 +28,9 @@ const { models, transaction } = vi.hoisted(() => {
     stockBatch: { findMany: vi.fn(), update: vi.fn() },
     // The Company's return policy (issue #47) is read inside the transaction.
     companySettings: { findUnique: vi.fn() },
+    // The list service derives the pieces column with one grouped sum over the
+    // page's lines; no list route test asserts it, so it resolves to none.
+    returnItem: { groupBy: vi.fn(async () => []) },
   };
 
   // `$transaction` receives an interactive callback: the real client hands it a
