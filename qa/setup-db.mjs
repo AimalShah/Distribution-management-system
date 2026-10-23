@@ -84,7 +84,10 @@ console.log("migrations: applied");
 const { default: prisma } = await import(path.join(REPO, "packages", "db", "src", "index.ts"));
 
 const qaOrgs = await prisma.organization.findMany({
-  where: { name: { contains: "QA Org" } },
+  // "QA Org *" comes from `seedTenant`; "probe *" from ad-hoc probe scripts.
+  // Both are QA-only conventions — the guard above already refused anything
+  // but the local test database.
+  where: { OR: [{ name: { contains: "QA Org" } }, { name: { startsWith: "probe " } }] },
   select: { id: true },
 });
 console.log(`removing ${qaOrgs.length} stale QA tenant(s)`);
