@@ -24,11 +24,11 @@ Decisions locked with the owner:
 - **Est:** 1 h
 - **Done when:** ✅ **Done.** `DEFAULT_CREDENTIALS` deleted (the login-page panel was already commented out in working-tree code); new `packages/db/prisma/owner-password.ts` — seeds require `DMS_OWNER_PASSWORD` for any non-localhost DB (abort with a clear error), explicitly refuse `DMS_OWNER_PASSWORD=admin123` everywhere, and keep the known literal only for localhost dev; env-supplied passwords are never echoed (masked as "(set from DMS_OWNER_PASSWORD — not shown)"); `scripts/screenshot.mjs` repointed to the seeded local-dev owner so dev tooling survives the change. `admin123` survives only in: screenshot.mjs (localhost-only tooling, labelled) and the localhost fallback in `owner-password.ts`. db + web typecheck clean, 77/77 web tests pass.
 
-### [ ] P0-3 · Rate-limit auth endpoints
-- **Why:** `POST /api/auth/login` (legacy route) is an unlimited brute-force oracle; better-auth's own limiter is prod-only and generous (100 req/10 s/IP, memory-based).
+### [x] P0-3 · Rate-limit auth endpoints
+- **Why:** `POST /api/auth/login` (legacy route) was an unlimited brute-force oracle; better-auth's own limiter is prod-only and generous (100 req/10 s/IP, memory-based).
 - **Files:** `apps/server/src/app.ts` (add `express-rate-limit` middleware), `apps/server/package.json` (new dep), focused limiter on the legacy login route + a looser global one on `/api/auth/*`.
 - **Est:** 45 min
-- **Done when:** repeated failed logins from one IP get 429s; successful logins are not throttled into lockout during normal use.
+- **Done when:** ✅ **Done.** New `apps/server/src/middleware/rate-limit.ts`: `credentialEntryLimiter` (10 **failed** sign-in/sign-up attempts per IP per 15 min; successes never burn the budget) + `authSurfaceLimiter` (300 req/10 min across all `/api/auth/*`), both answering the standard `{ error, code: "RATE_LIMITED" }` envelope so the web `toFailure` seam decodes them. Mounted in `app.ts` ahead of better-auth. Added `DMS_TRUST_PROXY` (`config/env.ts:44-66` + `.env.example`) so per-IP attribution is correct behind TLS-terminating proxies; memory store documented as single-node. New `rate-limit.test.ts`: 11th failure 429s, successes don't count, addresses isolated. Typecheck clean; 762/762 server tests pass.
 
 ### [ ] P0-4 · Instant updates after every mutation (known issue #1)
 - **Why:** the SWR config (`apps/web/src/main.tsx:12-20`) sets `revalidateIfStale:false` + a 120 s dedupe; mutating forms call **no `mutate()` at all** (`SaleInvoiceForm.tsx:273,249,312`, `PurchaseForm.tsx:188,209`, `ReturnForm.tsx:216`), and list pages revalidate only their own key — so stock, customer ledger, dashboard and sibling-key lists stay stale until reload; no polling/SSE exists, so multi-user screens never converge.

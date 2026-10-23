@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import { toNodeHandler } from "better-auth/node";
 import { createAuth, type Auth } from "./auth";
-import { allowedOrigins } from "./config/env";
+import { allowedOrigins, trustProxy } from "./config/env";
 import { errorHandler, notFoundHandler } from "./http";
 import {
   authContext,
@@ -14,6 +14,7 @@ import {
   sessionAuthContext,
   sessionBootstrapAuthContext,
 } from "./middleware/session";
+import { authSurfaceLimiter, credentialEntryLimiter } from "./middleware/rate-limit";
 import { apiRouter } from "./routes";
 import { organizationRouter } from "./routes/organization";
 import {
@@ -33,6 +34,12 @@ export function createApp(options: AppOptions = {}): Express {
   const app: Express = express();
   const authMode = options.authMode ?? resolveAuthMode();
   const auth = options.auth ?? createAuth();
+
+  // Rate limits and session audit rows key on the client address; behind a
+  // proxy that address is the proxy's unless the forwarded header is trusted.
+  if (trustProxy !== false) {
+    app.set("trust proxy", trustProxy);
+  }
 
   const strict = authMode === "session" ? sessionAuthContext(auth) : authContext;
 
@@ -79,6 +86,14 @@ export function createApp(options: AppOptions = {}): Express {
   // router (an HMAC token that impersonated the first owner of the first
   // organization) was removed, so no unauthenticated caller gets a session
   // anything could vouch for.
+  //
+  // The limiters sit ahead of better-auth so a burst of credential guesses is
+  // refused before reaching the auth service at all.
+  app.use("/api/auth", authSurfaceLimiter);
+  app.use(
+    ["/api/auth/sign-in/email", "/api/auth/sign-up/email"],
+    credentialEntryLimiter
+  );
   app.all("/api/auth/*", toNodeHandler(auth));
 
   app.use(express.json());

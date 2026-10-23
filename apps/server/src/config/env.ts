@@ -43,6 +43,31 @@ export const allowedOrigins = new Set([
 export const port = Number(process.env.PORT ?? 4000);
 
 /**
+ * Whether, and for how many hops, to read `X-Forwarded-For` when attributing a
+ * request to a client (`DMS_TRUST_PROXY`).
+ *
+ * Behind a TLS-terminating proxy (Render, a load balancer) every request
+ * presents the proxy's address, and without trusting the forwarded header the
+ * unit of "per visitor" for rate limits and for the session's recorded
+ * `ipAddress` collapses to one shared address. Only setting it is safe: an
+ * operator who says so is stating the number of proxy layers between the
+ * internet and this process, and Express will then accept client addresses
+ * from exactly that many forwarded headers -- a direct connection (the dev
+ * default) keeps the header untrusted, where a caller could spoof anything.
+ * `"true"` = one hop; an integer = that many; unset or `"false"` = direct.
+ */
+export const trustProxy: boolean | number = (() => {
+  const raw = process.env.DMS_TRUST_PROXY?.trim();
+
+  if (!raw || raw.toLowerCase() === "false") return false;
+  if (raw.toLowerCase() === "true") return 1;
+
+  const parsed = Number(raw);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : false;
+})();
+
+/**
  * Loopback by default in dev/test, and 0.0.0.0 in production so cloud containers
  * (Render, Koyeb, Docker) bind external traffic properly.
  */
