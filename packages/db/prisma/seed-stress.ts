@@ -3,6 +3,7 @@
 // to stress-test pagination, search, sorting, filtering, and database performance.
 import "./load-env";
 import prisma from "../src/client";
+import { assertLocalDatabase } from "./db-target";
 
 const COUNT = parseInt(process.env.STRESS_COUNT || "30000", 10);
 const BATCH_SIZE = 5000;
@@ -33,6 +34,7 @@ async function insertBatch(table: string, columns: string[], rows: string[][]) {
 }
 
 export async function seedStress() {
+  assertLocalDatabase("db:seed:stress");
   console.log(`🚀 Starting high-volume stress seeding (${COUNT.toLocaleString()} entries per entity)...`);
   const totalStart = Date.now();
 

@@ -48,11 +48,11 @@ Decisions locked with the owner:
 - **Est:** 3 h
 - **Done when:** a request with forged `taxAmount/discount/price` either fails validation or the stored invoice equals the server-derived breakdown; existing web flows unchanged (they already preview with the same `calculateSaleBreakdown`).
 
-### [ ] P0-7 · Guard destructive scripts against production DBs
+### [x] P0-7 · Guard destructive scripts against production DBs
 - **Why:** `pnpm db:wipe` delete-many's everything against whatever `DATABASE_URL` points at (`packages/db/prisma/wipe.ts:48-63`); `seed:stress` appends ~300k rows via `$executeRawUnsafe`; `seed:owner` plants `owner@test.com/admin123` and prints it.
 - **Files:** `packages/db/prisma/{wipe,seed,seed-stress,seed-owner}.ts` (shared guard: refuse non-localhost/non-dev host unless `DMS_ALLOW_DESTRUCTIVE=true`).
 - **Est:** 45 min
-- **Done when:** running any of them against a non-local DB aborts with the target host in the error; a local override var is documented in `.env.example`.
+- **Done when:** ✅ **Done.** New `packages/db/prisma/db-target.ts`: `assertLocalDatabase(scriptName)` — throws naming the target host unless `DATABASE_URL` resolves to localhost/127.0.0.1/::1 (an unparseable URL is treated as hostile); `DMS_ALLOW_DESTRUCTIVE=true` overrides but always prints the host it is about to act on. Wired into the entry points of `wipe.ts`, `seed.ts` (both modes), `seed-owner.ts`, `seed-stress.ts`; override documented in `.env.example`. Owner-password targeting was already handled by P0-2's `owner-password.ts`. Verified live via tsx: a Neon host throws with the host in the error, localhost passes, the override warns and proceeds. `@dms/db` typecheck clean.
 
 ### [x] P0-8 · Production security headers + email/domain wiring
 - **Why:** no helmet/CSP/HSTS anywhere; `EMAIL_FROM` defaults to `onboarding@resend.dev`; `am-enterprise.org` appears nowhere in the repo; `.env.example` ships `REQUIRE_EMAIL_VERIFICATION="false"`.

@@ -4,12 +4,14 @@ import "./load-env";
 import prisma from "../src/client";
 import { hashPassword } from "better-auth/crypto";
 import { describeOwnerPassword, resolveOwnerPassword } from "./owner-password";
+import { assertLocalDatabase } from "./db-target";
 
 export const DEFAULT_ORGANIZATION_ID = "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE";
 export const DEFAULT_OWNER_ID = "JEXqru5KeZxSMUhEQ1I6P5hJgMepXMum";
 export const DEFAULT_OWNER_EMAIL = "owner@test.com";
 
 export async function seedOwnerOnly() {
+  assertLocalDatabase("db:seed:owner");
   console.log("🌱 Starting owner credentials seeding...");
 
   // 1. Get or Create Organization

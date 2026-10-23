@@ -13,6 +13,7 @@
  */
 // First import: it fills `process.env` before the client below is built.
 import "./load-env";
+import { assertLocalDatabase } from "./db-target";
 
 /** Same ids `seed.ts` creates and `apps/server/.env` reads. */
 const ORGANIZATION_ID = "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE";
@@ -46,6 +47,8 @@ const wipeOrder = [
 ] as const;
 
 async function main() {
+  assertLocalDatabase("db:wipe");
+
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "DATABASE_URL is not set and neither packages/db/.env nor the repo root .env defines it."

@@ -5,6 +5,7 @@ import "./load-env";
 import prisma from "../src/client";
 import { hashPassword } from "better-auth/crypto";
 import { describeOwnerPassword, resolveOwnerPassword } from "./owner-password";
+import { assertLocalDatabase } from "./db-target";
 import { faker } from "@faker-js/faker";
 import type { InventoryMovement } from "./generated/client";
 
@@ -14,6 +15,7 @@ function daysAgo(days: number) {
 }
 
 async function main() {
+  assertLocalDatabase("db:seed");
   const isOwnerOnly = process.argv.includes("--owner-only") || process.env.SEED_OWNER_ONLY === "true";
   console.log("🌱 Starting database seeding..." + (isOwnerOnly ? " (Owner credentials only)" : ""));
 
