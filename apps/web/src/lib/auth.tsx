@@ -29,17 +29,6 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
-/**
- * The operator the seed creates, shown on the login page so a first run needs
- * no read-through of the env docs to get in. `username` is the account's email
- * address: better-auth signs in by email, so the field that used to be called a
- * username is one.
- */
-export const DEFAULT_CREDENTIALS = {
-  username: "owner@test.com",
-  password: "admin123",
-} as const;
-
 /** localStorage throws in a sandboxed iframe; auth must degrade, not crash. */
 const AuthContext = createContext<AuthContextValue | null>(null);
 

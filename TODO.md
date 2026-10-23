@@ -18,11 +18,11 @@ Decisions locked with the owner:
 - **Est:** 1.5 h
 - **Done when:** ✅ **Done — removed entirely** (owner choice: Better-Auth is the only sign-in surface). `services/auth.ts` + `routes/auth.ts` + `routes/auth.test.ts` deleted; `app.ts` no longer mounts the fallback router; `middleware/session.ts` answers 401 when there is no Better-Auth session (no bearer fallback, no first-owner impersonation); `DMS_AUTH_USERNAME/PASSWORD/NAME/SECRET` gone from code and `.env.example` (nothing signs with them, so the weak-secret startup check became moot); auth diagrams updated. Web login verified to use `authClient.signIn.email` only. 758/758 server tests pass (the deleted test file covered only the removed endpoints); typecheck clean.
 
-### [ ] P0-2 · Remove hardcoded/seeded credentials
+### [x] P0-2 · Remove hardcoded/seeded credentials
 - **Why:** the login page displays working seeded credentials `owner@test.com/admin123`; seeds default to `admin123` and print the password to stdout; anyone copying them gets known prod credentials.
 - **Files:** `apps/web/src/lib/auth.tsx:38-41` (delete `DEFAULT_CREDENTIALS` + the login-page hint), `packages/db/prisma/seed.ts:115`, `packages/db/prisma/seed-owner.ts:78,95` (refuse the default password when targeting a non-local DB; never log it).
 - **Est:** 1 h
-- **Done when:** no literal `admin123` remains in web/src or *db/prisma fallbacks running against a non-local DB; seeds abort with a clear error unless `DMS_OWNER_PASSWORD` is set to a non-default value (local/dev DBs exempt).
+- **Done when:** ✅ **Done.** `DEFAULT_CREDENTIALS` deleted (the login-page panel was already commented out in working-tree code); new `packages/db/prisma/owner-password.ts` — seeds require `DMS_OWNER_PASSWORD` for any non-localhost DB (abort with a clear error), explicitly refuse `DMS_OWNER_PASSWORD=admin123` everywhere, and keep the known literal only for localhost dev; env-supplied passwords are never echoed (masked as "(set from DMS_OWNER_PASSWORD — not shown)"); `scripts/screenshot.mjs` repointed to the seeded local-dev owner so dev tooling survives the change. `admin123` survives only in: screenshot.mjs (localhost-only tooling, labelled) and the localhost fallback in `owner-password.ts`. db + web typecheck clean, 77/77 web tests pass.
 
 ### [ ] P0-3 · Rate-limit auth endpoints
 - **Why:** `POST /api/auth/login` (legacy route) is an unlimited brute-force oracle; better-auth's own limiter is prod-only and generous (100 req/10 s/IP, memory-based).

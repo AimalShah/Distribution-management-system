@@ -3,6 +3,7 @@
 import "./load-env";
 import prisma from "../src/client";
 import { hashPassword } from "better-auth/crypto";
+import { describeOwnerPassword, resolveOwnerPassword } from "./owner-password";
 
 export const DEFAULT_ORGANIZATION_ID = "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE";
 export const DEFAULT_OWNER_ID = "JEXqru5KeZxSMUhEQ1I6P5hJgMepXMum";
@@ -75,7 +76,7 @@ export async function seedOwnerOnly() {
   }
 
   // 4. Ensure owner credential account exists for Better-Auth password authentication
-  const ownerPassword = process.env.DMS_OWNER_PASSWORD?.trim() || "admin123";
+  const ownerPassword = resolveOwnerPassword();
 
   let ownerCredential = await prisma.account.findFirst({
     where: { userId: owner.id, providerId: "credential" },
@@ -88,7 +89,7 @@ export async function seedOwnerOnly() {
         accountId: owner.id,
         providerId: "credential",
         userId: owner.id,
-        password: await hashPassword(ownerPassword),
+        password: await hashPassword(ownerPassword.password),
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -102,7 +103,7 @@ export async function seedOwnerOnly() {
   console.log(`   Organization ID : ${organization.id}`);
   console.log(`   Owner User ID   : ${owner.id}`);
   console.log(`   Owner Email     : ${owner.email}`);
-  console.log(`   Password        : ${ownerPassword}`);
+  console.log(`   Password        : ${describeOwnerPassword(ownerPassword)}`);
   console.log(`   Role            : ${owner.role}`);
 
   return { organization, owner, ownerMember, ownerCredential };

@@ -4,6 +4,7 @@
 import "./load-env";
 import prisma from "../src/client";
 import { hashPassword } from "better-auth/crypto";
+import { describeOwnerPassword, resolveOwnerPassword } from "./owner-password";
 import { faker } from "@faker-js/faker";
 import type { InventoryMovement } from "./generated/client";
 
@@ -110,7 +111,7 @@ async function main() {
   // removed), so without this row there is no way to authenticate at all until
   // a password exists. Hashing here with better-auth's own helper keeps the
   // format in step with what it verifies.
-  const ownerPassword = process.env.DMS_OWNER_PASSWORD?.trim() || "admin123";
+  const ownerPassword = resolveOwnerPassword();
 
   const ownerCredential = await prisma.account.findFirst({
     where: { userId: owner.id, providerId: "credential" },
@@ -124,7 +125,7 @@ async function main() {
         accountId: owner.id,
         providerId: "credential",
         userId: owner.id,
-        password: await hashPassword(ownerPassword),
+        password: await hashPassword(ownerPassword.password),
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -136,7 +137,7 @@ async function main() {
     console.log(`   Organization : ${organization.name} (${organization.id})`);
     console.log(`   Owner Email  : ${owner.email}`);
     console.log(`   Owner User ID: ${owner.id}`);
-    console.log(`   Password     : ${ownerPassword}`);
+    console.log(`   Password     : ${describeOwnerPassword(ownerPassword)}`);
     console.log(`   Role         : ${owner.role}`);
     console.log("🎉 Seeding completed successfully!");
     return;

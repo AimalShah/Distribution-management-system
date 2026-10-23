@@ -175,8 +175,8 @@ async function main() {
   await go("/login");
   await shot("login");
 
-  await page.getByPlaceholder("Enter your username").fill("admin");
-  await page.getByPlaceholder("Enter your password").fill("admin123");
+  await page.getByPlaceholder("Enter your username").fill("owner@test.com");
+  await page.getByPlaceholder("Enter your password").fill("admin123"); // local-dev seed password only (see packages/db/prisma/owner-password.ts)
   await page.getByRole("button", { name: /Sign In/ }).click();
   await page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 15000 });
 
