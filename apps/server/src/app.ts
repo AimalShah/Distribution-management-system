@@ -15,7 +15,6 @@ import {
   sessionBootstrapAuthContext,
 } from "./middleware/session";
 import { apiRouter } from "./routes";
-import { authRouter } from "./routes/auth";
 import { organizationRouter } from "./routes/organization";
 import {
   memberRouter,
@@ -73,13 +72,13 @@ export function createApp(options: AppOptions = {}): Express {
     })
   );
 
-  // Fallback credentials auth (/api/auth/login, /api/auth/me, /api/auth/logout).
-  // Mounted ahead of better-auth; non-matching routes pass through with raw request stream.
-  app.use("/api/auth", authRouter);
-
   // better-auth reads the raw body itself, so it is mounted ahead of
   // global `express.json()` -- a parsed body would leave its handler waiting on a
   // stream that has already been consumed.
+  // better-auth is the only sign-in surface: the former credentials-fallback
+  // router (an HMAC token that impersonated the first owner of the first
+  // organization) was removed, so no unauthenticated caller gets a session
+  // anything could vouch for.
   app.all("/api/auth/*", toNodeHandler(auth));
 
   app.use(express.json());

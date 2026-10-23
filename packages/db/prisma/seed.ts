@@ -106,12 +106,10 @@ async function main() {
   }
 
   // Give the owner a stored password so better-auth can actually sign them in.
-  //
-  // Without this row the only working login was the legacy `/auth/login`, whose
-  // credentials come from environment variables and therefore have nothing to
-  // change: `update-user` and `change-password` both refused the app's own
-  // bearer token because it was never a better-auth session. Hashing here with
-  // better-auth's own helper keeps the format in step with what it verifies.
+  // better-auth is the only sign-in surface (the legacy env-credential login was
+  // removed), so without this row there is no way to authenticate at all until
+  // a password exists. Hashing here with better-auth's own helper keeps the
+  // format in step with what it verifies.
   const ownerPassword = process.env.DMS_OWNER_PASSWORD?.trim() || "admin123";
 
   const ownerCredential = await prisma.account.findFirst({

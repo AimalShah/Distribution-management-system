@@ -7,10 +7,8 @@ sequenceDiagram
 
   C->>BA: GET /api/auth/get-session (cookie | Bearer)
   BA-->>M: session { activeOrganizationId, user }
-  alt no session cookie, Bearer present
-    M->>M: verifySessionToken(bearer)
-    M->>DB: organization.findFirst / user.findFirst(isOwner)
-    M->>M: synthesize dev session
+  alt no session at all
+    M-->>C: 401 UNAUTHORIZED
   end
   M->>M: organizationId = session.activeOrganizationId
   alt no active org
