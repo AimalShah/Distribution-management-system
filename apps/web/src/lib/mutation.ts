@@ -38,6 +38,9 @@ export type Domain =
   | "reports";
 
 const MATCHERS: Record<Domain, RegExp> = {
+  // Payments surface against an invoice row that is also cached under
+  // `/sales/customer/:id...`; both live in whichever domain needs them fresh,
+  // so the sales matcher must cover the customer-scoped invoice keys too.
   sales: /^\/sales(\?|$)|^\/sales\/customer\//,
   payments: /^\/payments(\?|$)/,
   purchases: /^\/purchases(\?|$)/,
@@ -51,8 +54,6 @@ const MATCHERS: Record<Domain, RegExp> = {
   inventory: /^\/inventory(\/batches|\/logs|\/low-stock|\?|$)/,
   roles: /^\/roles(\?|$)/,
   members: /^\/members\/|^\/organizations\/.+\/(members|available-users)/,
-  // Payments surface against an invoice row that is also cached under
-  // `/sales/customer/:id...`; both live in whichever domain needs them fresh.
   dashboard: /^\/dashboard(\/|\?|$)/,
   reports: /^\/reports(\/|\?|$)/,
 };

@@ -25,6 +25,19 @@ const databaseHost = () => {
 };
 
 /**
+ * True only when `DATABASE_URL` points at this machine. Shared with
+ * `owner-password.ts`, which needs the same "may a known literal survive
+ * here?" judgement; `assertLocalDatabase` needs it for its refusal.
+ * `undefined` (no URL at all) and unparseable URL strings both read as
+ * non-local — the caller's job to report with context.
+ */
+export function isLocalDatabase(): boolean {
+  const host = databaseHost();
+
+  return host != null && LOCAL_HOSTS.has(host);
+}
+
+/**
  * Abort unless `DATABASE_URL` points at this machine. `DMS_ALLOW_DESTRUCTIVE=true`
  * overrides for a deliberate run against a remote database — the override is
  * never silent: it echoes the host so an operator who types it has seen where
@@ -33,7 +46,7 @@ const databaseHost = () => {
 export function assertLocalDatabase(script: string): void {
   const host = databaseHost();
 
-  if (host !== null && LOCAL_HOSTS.has(host)) return;
+  if (isLocalDatabase()) return;
 
   if (process.env.DMS_ALLOW_DESTRUCTIVE?.trim().toLowerCase() === "true") {
     console.warn(

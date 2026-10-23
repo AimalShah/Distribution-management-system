@@ -7,26 +7,7 @@
 // known literal survives only for databases on the developer's own machine,
 // where that trade-off is made on purpose.
 import "./load-env";
-
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-
-const databaseHost = () => {
-  const url = process.env.DATABASE_URL?.trim();
-
-  if (!url) return null;
-
-  try {
-    return new URL(url).hostname || null;
-  } catch {
-    return null; // Not a URL: treat as an opaque, non-local target.
-  }
-};
-
-const isLocalDatabase = () => {
-  const host = databaseHost();
-
-  return host !== null && LOCAL_HOSTS.has(host);
-};
+import { isLocalDatabase } from "./db-target";
 
 export interface OwnerPasswordResolution {
   password: string;
