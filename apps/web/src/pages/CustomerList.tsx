@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -89,6 +90,7 @@ export default function CustomerList() {
 
     try {
       await api.delete(`/customers/${confirmTarget.id}`);
+      invalidateDomains("customers");
       toast.success("Customer removed successfully");
       setConfirmTarget(null);
       await mutate();

@@ -10,6 +10,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateEverything } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -158,6 +159,10 @@ export function CompanySettingsPage() {
         returnsEnabled,
       });
       setSaved(true);
+      // Company name/return-window/SKU shape show up on other surfaces (the
+      // header, the company switcher, return-writing flows), so reset the
+      // cache rather than hoping each one re-fetches in time.
+      invalidateEverything();
       toast.success("Company settings saved");
       loadOrganizations();
     } catch (err: unknown) {
@@ -177,9 +182,10 @@ export function CompanySettingsPage() {
       loadSettings();
       loadOrganizations();
 
-      if (typeof window !== "undefined" && window.location?.reload) {
-        window.location.reload();
-      }
+      // The whole cache reset instead of a full page reload: the session's
+      // active org changed under keys that do not name it, so nothing cached
+      // from the previous tenant is trustworthy.
+      invalidateEverything();
     } catch (err: unknown) {
       toast.error(failureMessage(err instanceof Error ? err : new Error(String(err)), "Failed to switch company"));
     } finally {

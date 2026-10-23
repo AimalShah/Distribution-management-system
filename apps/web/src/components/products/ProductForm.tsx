@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { ArrowLeft, Loader2, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import { ProductSchema, type ProductFormData } from "@dms/shared";
 import {
   Button,
@@ -237,9 +238,11 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
 
       if (isEditing && productId) {
         await api.put(`/products/${productId}`, payload);
+        invalidateDomains("products");
         toast.success("Product updated successfully");
       } else {
         await api.post("/products", payload);
+        invalidateDomains("products");
         toast.success("Product created successfully");
       }
 

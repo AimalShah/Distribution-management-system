@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   Button,
   Input,
@@ -125,6 +126,10 @@ export function RecordPaymentDialog({
       if (paidAt) payload.paidAt = new Date(paidAt).toISOString();
 
       await api.post("/payments", payload);
+      // The caller's onSuccess revalidates whichever key it renders; the
+      // invalidation here covers every other surface a payment shifts
+      // (invoice amountPaid rows elsewhere, the ledger, dashboard, reports).
+      invalidateDomains("payments");
       toast.success("Payment recorded successfully");
       onSuccess();
       onClose();

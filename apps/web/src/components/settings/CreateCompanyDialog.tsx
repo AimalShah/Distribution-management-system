@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateEverything } from "../../lib/mutation";
 import {
   Button,
   Dialog,
@@ -100,6 +101,8 @@ export function CreateCompanyDialog({
 
       if (autoActivate && created.id) {
         await api.post("/organizations/set-active", { organizationId: created.id });
+        // The session's tenant changed under keys that do not name it.
+        invalidateEverything();
       }
 
       toast.success("Company created successfully");

@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Avatar,
   AvatarFallback,
@@ -88,12 +89,14 @@ export default function UsersPage() {
   const submitDialog = async (input: { userId?: string; role: string }) => {
     if (editing) {
       await api.patch(`/members/${editing.id}/role`, { role: input.role });
+      invalidateDomains("members");
       toast.success("Role updated");
     } else {
       await api.post(`/organizations/${organizationId}/members`, {
         userId: input.userId,
         role: input.role,
       });
+      invalidateDomains("members");
       toast.success("Member added");
     }
 
@@ -107,6 +110,7 @@ export default function UsersPage() {
 
     try {
       await api.delete(`/members/${removing.id}`);
+      invalidateDomains("members");
       toast.success("Member removed");
       setRemoving(null);
       await mutate();

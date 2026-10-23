@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import useSWR from "swr";
+import { invalidateDomains } from "../lib/mutation";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -104,7 +105,6 @@ export default function InventoryPage() {
   const {
     data: inventoryData,
     isLoading: inventoryLoading,
-    mutate: mutateInventory,
   } = useSWR(
     `/inventory?page=${inventoryPage}&pageSize=${inventoryPageSize}`,
     fetcher
@@ -113,7 +113,6 @@ export default function InventoryPage() {
   const {
     data: logsData,
     isLoading: logsLoading,
-    mutate: mutateLogs,
   } = useSWR(
     `/inventory/logs?page=${logPage}&pageSize=${logPageSize}`,
     fetcher
@@ -156,7 +155,9 @@ export default function InventoryPage() {
   };
 
   const handleRefresh = async () => {
-    await Promise.all([mutateInventory(), mutateLogs()]);
+    // The invalidation helper covers the two keys this page holds plus every
+    // other stock-bound surface (batches, low-stock cards, dashboard, reports).
+    invalidateDomains("inventory");
   };
 
   // Inventory Columns

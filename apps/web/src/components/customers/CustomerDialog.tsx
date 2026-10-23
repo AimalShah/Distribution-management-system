@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import { CustomerSchema, type CustomerInput } from "@dms/shared";
 import {
   Button,
@@ -120,9 +121,11 @@ export function CustomerDialog({
 
       if (isEditing && customer) {
         await api.put(`/customers/${customer.id}`, payload);
+        invalidateDomains("customers");
         toast.success("Customer updated successfully");
       } else {
         await api.post("/customers", payload);
+        invalidateDomains("customers");
         toast.success("Customer created successfully");
       }
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Building2, Plus, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { invalidateEverything } from "../lib/mutation";
 import { api } from "../lib/api";
 import {
   Alert,
@@ -124,6 +125,9 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
       // Activate the new organization on the session
       await api.post("/organizations/set-active", { organizationId: created.id });
 
+      // The tenant changed under keys that do not name it; nothing cached from
+      // the previous org (or the pre-org state) is trustworthy.
+      invalidateEverything();
       toast.success("Company created and activated");
 
       if (onComplete) {
@@ -141,6 +145,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
   const selectOrganization = async (organizationId: string) => {
     try {
       await api.post("/organizations/set-active", { organizationId });
+      invalidateEverything();
       toast.success("Company switched");
 
       if (onComplete) {

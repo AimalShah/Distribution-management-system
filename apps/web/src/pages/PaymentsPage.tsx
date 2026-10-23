@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import useSWR from "swr";
 import { ChevronLeft, ChevronRight, CreditCard, Download, Plus, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -170,6 +171,7 @@ export default function PaymentsPage() {
       }
 
       await api.post("/payments", payload);
+      invalidateDomains("payments");
       toast.success("Payment recorded");
       setDialogOpen(false);
       setDraft(emptyDraft());

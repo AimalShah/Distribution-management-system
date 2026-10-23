@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import useSWR from "swr";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   InventoryCreateSchema,
   type InventoryCreateInput,
@@ -74,6 +75,7 @@ export function AddInventoryDialog({
         maxStockLevel: values.maxStockLevel !== undefined ? Number(values.maxStockLevel) : undefined,
         quantityReserved: values.quantityReserved !== undefined ? Number(values.quantityReserved) : undefined,
       });
+      invalidateDomains("inventory");
       toast.success("Inventory record created successfully");
       form.reset();
       onOpenChange(false);

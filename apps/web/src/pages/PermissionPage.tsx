@@ -13,6 +13,7 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -170,6 +171,7 @@ export default function PermissionPage() {
           description: roleDescription.trim() || undefined,
           permissions: selectedPermissions,
         });
+        invalidateDomains("roles");
         toast.success(`Role "${roleName}" updated successfully`);
       } else {
         await api.post("/roles", {
@@ -177,6 +179,7 @@ export default function PermissionPage() {
           description: roleDescription.trim() || undefined,
           permissions: selectedPermissions,
         });
+        invalidateDomains("roles");
         toast.success(`Custom role "${roleName}" created successfully`);
       }
 
@@ -195,6 +198,7 @@ export default function PermissionPage() {
 
     try {
       await api.delete(`/roles/${deleteTarget.id}`);
+      invalidateDomains("roles");
       toast.success(`Role "${deleteTarget.name}" deleted successfully`);
       setDeleteTarget(null);
       mutate();

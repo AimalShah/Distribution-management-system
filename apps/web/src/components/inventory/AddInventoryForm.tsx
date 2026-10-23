@@ -13,6 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   InventoryCreateSchema,
   type InventoryCreateInput,
@@ -113,6 +114,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
             ? Number(values.quantityReserved)
             : undefined,
       });
+      invalidateDomains("inventory");
       toast.success("Inventory record created successfully");
       form.reset();
       onSuccess?.();
@@ -193,6 +195,7 @@ export function AddInventoryForm({ onSuccess, onCancel }: AddInventoryFormProps)
       setImportResult(result);
 
       if (result.success > 0) {
+        invalidateDomains("inventory");
         toast.success(
           `Successfully imported ${result.success} records (${result.created} created, ${result.updated} updated)`
         );

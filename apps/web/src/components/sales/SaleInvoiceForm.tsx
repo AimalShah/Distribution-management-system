@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { ArrowLeft, Loader2, Save, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   calculateSaleBreakdown,
   isInvalidSaleTotal,
@@ -247,6 +248,7 @@ export function SaleInvoiceForm({
         };
 
         await api.put(`/sales/${saleId}`, updatePayload);
+        invalidateDomains("sales");
         toast.success("Sale invoice updated successfully");
       } else {
         createPayload = {
@@ -271,6 +273,7 @@ export function SaleInvoiceForm({
         };
 
         await api.post("/sales", createPayload);
+        invalidateDomains("sales");
         toast.success("Sale invoice created successfully");
       }
 
@@ -313,6 +316,7 @@ export function SaleInvoiceForm({
         ...creditLimitWarning.pendingPayload,
         overrideCreditLimit: true,
       });
+      invalidateDomains("sales");
       toast.success("Sale invoice created with credit limit override");
       setCreditLimitWarning(null);
       navigate("/sales");

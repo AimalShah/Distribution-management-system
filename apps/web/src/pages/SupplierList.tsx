@@ -12,6 +12,7 @@ import {
   Truck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -87,6 +88,7 @@ export default function SupplierList() {
 
     try {
       await api.delete(`/suppliers/${confirmTarget.id}`);
+      invalidateDomains("suppliers");
       toast.success("Supplier removed successfully");
       setConfirmTarget(null);
       await mutate();

@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import { SupplierSchema } from "@dms/shared";
 import {
   Button,
@@ -117,9 +118,11 @@ export function SupplierDialog({
 
       if (isEditing && supplier) {
         await api.put(`/suppliers/${supplier.id}`, payload);
+        invalidateDomains("suppliers");
         toast.success("Supplier updated successfully");
       } else {
         await api.post("/suppliers", payload);
+        invalidateDomains("suppliers");
         toast.success("Supplier created successfully");
       }
 

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import { PurchaseFormSchema, type PurchaseFormInput } from "@dms/shared";
 import {
   Button,
@@ -186,6 +187,7 @@ export function PurchaseForm({
         };
 
         await api.put(`/purchases/${purchaseId}`, updatePayload);
+        invalidateDomains("purchases");
         toast.success("Purchase order updated successfully");
       } else {
         const createPayload = {
@@ -207,6 +209,7 @@ export function PurchaseForm({
         };
 
         await api.post("/purchases", createPayload);
+        invalidateDomains("purchases");
         toast.success("Purchase order created successfully");
       }
 

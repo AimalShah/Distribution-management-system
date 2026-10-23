@@ -12,10 +12,10 @@ createRoot(document.getElementById("root")!).render(
     <SWRConfig
       value={{
         fetcher,
+        // Cached data is refetched when a mount asks for a key that has data
+        // already; the invalidation helper (lib/mutation.ts) covers the rest.
         revalidateOnFocus: false,
         revalidateOnReconnect: false,
-        revalidateIfStale: false,
-        dedupingInterval: 120_000,
         keepPreviousData: true,
       }}
     >

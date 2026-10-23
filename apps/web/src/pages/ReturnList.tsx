@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -95,6 +96,7 @@ export default function ReturnList() {
 
     try {
       await api.delete(`/returns/${row.id}`);
+      invalidateDomains("returns");
       toast.success("Return deleted and stock reversed successfully");
       setConfirmTarget(null);
       await mutate();
@@ -113,6 +115,7 @@ export default function ReturnList() {
 
     try {
       await api.post(`/returns/${row.id}/restore`);
+      invalidateDomains("returns");
       toast.success(`Return "${row.returnCode}" restored and stock re-applied`);
       setConfirmTarget(null);
       await mutate();

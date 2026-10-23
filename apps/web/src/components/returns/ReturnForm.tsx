@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   ReturnCreateSchema,
   type ReturnTypeValue,
@@ -214,6 +215,7 @@ export function ReturnForm() {
       }
 
       await api.post("/returns", payload);
+      invalidateDomains("returns");
       toast.success("Return processed successfully");
       navigate("/returns");
     } catch (err: any) {

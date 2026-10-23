@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -114,6 +115,7 @@ export default function ProductList() {
 
     try {
       await api.delete(`/products/${confirmTarget.id}`);
+      invalidateDomains("products");
       toast.success("Product deleted successfully");
       setConfirmTarget(null);
       await mutate();

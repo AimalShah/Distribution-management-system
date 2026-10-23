@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../../lib/mutation";
 import {
   InventoryAdjustSchema,
   InventoryMovementValues,
@@ -87,6 +88,7 @@ export function AdjustStockDialog({
         quantity: Number(values.quantity),
         reason: values.reason.trim(),
       });
+      invalidateDomains("inventory");
       toast.success("Inventory adjusted successfully");
       onOpenChange(false);
       onSuccess();

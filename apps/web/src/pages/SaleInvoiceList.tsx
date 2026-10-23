@@ -19,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invalidateDomains } from "../lib/mutation";
 import {
   Badge,
   Button,
@@ -192,6 +193,7 @@ export default function SaleInvoiceList() {
 
     try {
       await api.delete(`/sales/${row.id}`);
+      invalidateDomains("sales");
       toast.success("Invoice deleted, stock returned, and moved to the Deleted tab");
       setConfirmTarget(null);
       await mutate();
@@ -207,6 +209,7 @@ export default function SaleInvoiceList() {
 
     try {
       await api.post(`/sales/${row.id}/restore`);
+      invalidateDomains("sales");
       toast.success(`Invoice "${row.saleCode}" restored and stock re-applied`);
       setConfirmTarget(null);
       await mutate();
@@ -225,6 +228,7 @@ export default function SaleInvoiceList() {
 
     try {
       await api.post(`/sales/${sale.id}/cancel`);
+      invalidateDomains("sales");
       toast.success(`Invoice "${sale.saleCode}" cancelled`);
       setConfirmTarget(null);
       await mutate();
@@ -240,6 +244,7 @@ export default function SaleInvoiceList() {
 
     try {
       await api.post(`/sales/${sale.id}/uncancel`);
+      invalidateDomains("sales");
       toast.success(`Invoice "${sale.saleCode}" restored to its previous status`);
       setConfirmTarget(null);
       await mutate();
@@ -255,6 +260,7 @@ export default function SaleInvoiceList() {
 
     try {
       await api.put(`/sales/${sale.id}`, { status: nextStatus });
+      invalidateDomains("sales");
       toast.success(`Invoice "${sale.saleCode}" status updated to ${nextStatus}`);
       setConfirmTarget(null);
       await mutate();
