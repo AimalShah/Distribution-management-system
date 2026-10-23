@@ -165,6 +165,11 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
   const productMap = new Map(owned.map((product) => [product.id, product]));
   const isInterState = Boolean(data.isInterState);
 
+  // Terms in, figures derived: the only client money inputs are the line
+  // prices, each line's stated rate and the header discount. The CGST/SGST/IGST
+  // split, the tax and the total come back from `calculateSaleBreakdown`
+  // against the product rows' own rates — no field from the request body can
+  // arrive as a figure.
   const money = calculateSaleBreakdown({
     items: data.items.map((item) => {
       const product = productMap.get(item.productId);
@@ -176,20 +181,10 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         gstApplicable: product?.gstApplicable,
         gstRate: product?.gstRate,
         taxPercent: item.taxPercent,
-        cgstRate: item.cgstRate,
-        sgstRate: item.sgstRate,
-        igstRate: item.igstRate,
-        cgstAmount: item.cgstAmount,
-        sgstAmount: item.sgstAmount,
-        igstAmount: item.igstAmount,
       };
     }),
     isInterState,
     discount: data.discount,
-    taxAmount: data.taxAmount,
-    cgstAmount: data.cgstAmount,
-    sgstAmount: data.sgstAmount,
-    igstAmount: data.igstAmount,
   });
 
   if (isInvalidSaleTotal(money.total)) {

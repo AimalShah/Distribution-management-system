@@ -116,7 +116,6 @@ export function SaleInvoiceForm({
       invoiceType: initialData?.invoiceType ?? "regular",
       isInterState: initialData?.isInterState ?? false,
       discount: initialData?.discount ?? 0,
-      taxAmount: initialData?.taxAmount ?? 0,
       items: initialData?.items?.length
         ? initialData.items.map((it: any) => ({
             productId: it.productId,
@@ -146,7 +145,6 @@ export function SaleInvoiceForm({
         invoiceType: initialData.invoiceType ?? "regular",
         isInterState: initialData.isInterState ?? false,
         discount: initialData.discount ?? 0,
-        taxAmount: initialData.taxAmount ?? 0,
         items: initialData.items?.length
           ? initialData.items.map((it: any) => ({
               productId: it.productId,
@@ -161,7 +159,6 @@ export function SaleInvoiceForm({
 
   const watchedItems = form.watch("items") || [];
   const watchedDiscount = form.watch("discount") || 0;
-  const watchedTaxAmount = form.watch("taxAmount") || 0;
   const watchedInvoiceType = form.watch("invoiceType") || "regular";
   const watchedIsInterState = form.watch("isInterState") || false;
 
@@ -195,7 +192,6 @@ export function SaleInvoiceForm({
         }),
         isInterState: watchedIsInterState,
         discount: Number(watchedDiscount) || 0,
-        taxAmount: Number(watchedTaxAmount) > 0 ? Number(watchedTaxAmount) : undefined,
       });
 
       return {
@@ -210,7 +206,6 @@ export function SaleInvoiceForm({
     }, [
       watchedItems,
       watchedDiscount,
-      watchedTaxAmount,
       watchedIsInterState,
       productById,
       isEditing,
@@ -243,8 +238,6 @@ export function SaleInvoiceForm({
           invoiceType: values.invoiceType,
           isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
-          // Absent means "leave the column alone"; a stated figure overwrites.
-          taxAmount: Number(values.taxAmount) > 0 ? Number(values.taxAmount) : undefined,
         };
 
         await api.put(`/sales/${saleId}`, updatePayload);
@@ -259,9 +252,6 @@ export function SaleInvoiceForm({
           invoiceType: values.invoiceType,
           isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
-          // A box at zero means "no opinion": the write path derives the tax
-          // from the lines' rates. A figure above zero states it outright.
-          taxAmount: Number(values.taxAmount) > 0 ? Number(values.taxAmount) : undefined,
           items: values.items.map((it) => ({
             productId: it.productId,
             quantity: Number(it.quantity),
@@ -631,26 +621,21 @@ export function SaleInvoiceForm({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="taxAmount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Invoice Tax (Override)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="h-8 text-xs font-mono"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Display only. The wire contract has no header tax: the API
+                    derives the CGST/SGST/IGST split and the tax from the
+                    lines' rates, so this box shows the figure the server will
+                    store instead of letting a typed number diverge from the
+                    stored invoice. */}
+                <div className="space-y-2">
+                  <span className="text-xs font-medium">Invoice Tax (auto)</span>
+                  <Input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    className="h-8 text-xs font-mono bg-muted/40"
+                    value={totalTax.toFixed(2)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

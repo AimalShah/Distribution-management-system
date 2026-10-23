@@ -320,12 +320,13 @@ describe("POST /api/sales", () => {
     });
   });
 
-  it("computes the total server side as lines plus tax minus discount", async () => {
-    await request(app)
+  it("derives the total server side and refuses to bank a client tax figure", async () => {
+    const res = await request(app)
       .post("/api/sales")
       .set(auth())
       .send({
         ...validBody,
+        // Forged: a client claiming 8 while the terms (2 × 25 at 10%) support 5.
         taxAmount: 8,
         discount: 3,
         items: [
@@ -333,10 +334,13 @@ describe("POST /api/sales", () => {
         ],
       });
 
-    const arg = models.sale.create.mock.calls[0][0] as { data: { totalAmount: number } };
-    // 2*25 = 50, + 8 tax, - 3 discount. The line taxPercent is stored but was
-    // never part of the legacy total.
-    expect(arg.data.totalAmount).toBe(55);
+    expect(res.status).toBe(201);
+
+    const arg = models.sale.create.mock.calls[0][0] as { data: { totalAmount: number; taxAmount: number } };
+    // 2*25 = 50, + derived 10% tax = 5, - 3 discount = 52. The bar of 8 the
+    // body sent is nowhere in the stored figures.
+    expect(arg.data.totalAmount).toBe(52);
+    expect(arg.data.taxAmount).toBe(5);
   });
 
   it("refuses to sell more than is on hand", async () => {
@@ -719,16 +723,19 @@ describe("POST /api/sales", () => {
 });
 
 describe("PUT /api/sales/:id", () => {
-  it("updates header columns scoped to the organization", async () => {
+  it("updates header columns scoped to the organization and drops client money figures", async () => {
     const res = await request(app)
       .put("/api/sales/sal_1")
       .set(auth())
+      // `taxAmount` is no longer part of the update contract: a PUT that could
+      // bank a tax figure would be a second path to the forgery `createSale`
+      // already refuses. It arrives here and must reach the database as nothing.
       .send({ status: "Completed", taxAmount: 5 });
 
     expect(res.status).toBe(200);
     expect(models.sale.update).toHaveBeenCalledWith({
       where: { id: "sal_1", organizationId: ORG, deletedAt: null },
-      data: { status: "Completed", taxAmount: 5 },
+      data: { status: "Completed" },
       include: { customer: true, items: { include: { product: true } } },
     });
   });

@@ -82,7 +82,6 @@ export function PurchaseForm({
         : new Date().toISOString().split("T")[0],
       status: initialData?.status ?? "Pending",
       discount: initialData?.discount ?? 0,
-      taxAmount: initialData?.taxAmount ?? 0,
       items: initialData?.purchaseItems?.length
         ? initialData.purchaseItems.map((pi: any) => ({
             productId: pi.productId,
@@ -115,7 +114,6 @@ export function PurchaseForm({
           : new Date().toISOString().split("T")[0],
         status: initialData.status ?? "Pending",
         discount: initialData.discount ?? 0,
-        taxAmount: initialData.taxAmount ?? 0,
         items: initialData.purchaseItems?.length
           ? initialData.purchaseItems.map((pi: any) => ({
               productId: pi.productId,
@@ -135,12 +133,12 @@ export function PurchaseForm({
 
   const watchedItems = form.watch("items") || [];
   const watchedDiscount = form.watch("discount") || 0;
-  const watchedTaxAmount = form.watch("taxAmount") || 0;
 
   // Real-time totals calculation
-  const { subtotal, itemsTotal, grandTotal } = useMemo(() => {
+  const { subtotal, itemsTotal, grandTotal, orderTax } = useMemo(() => {
     let sub = 0;
     let itemsTot = 0;
+    let tax = 0;
 
     for (const item of watchedItems) {
       const qty = Number(item?.quantity) || 0;
@@ -148,20 +146,21 @@ export function PurchaseForm({
       const gross = qty * cost;
       const itemDisc = Number(item?.itemDiscount) || 0;
       const taxPct = Number(item?.taxPercent) || 0;
-      const tax = (taxPct / 100) * Math.max(0, gross - itemDisc);
-      const line = Math.max(0, gross - itemDisc + tax);
+      const lineTax = (taxPct / 100) * Math.max(0, gross - itemDisc);
+      const line = Math.max(0, gross - itemDisc + lineTax);
 
       sub += gross;
       itemsTot += line;
+      tax += lineTax;
     }
 
-    const total = Math.max(
-      0,
-      itemsTot - (Number(watchedDiscount) || 0) + (Number(watchedTaxAmount) || 0)
-    );
+    // No header tax input exists any more: the API derives the order's tax
+    // from the lines' rates (`linesTax` server-side), so the preview shows
+    // exactly that figure instead of a client-typed number.
+    const total = Math.max(0, itemsTot - (Number(watchedDiscount) || 0));
 
-    return { subtotal: sub, itemsTotal: itemsTot, grandTotal: total };
-  }, [watchedItems, watchedDiscount, watchedTaxAmount]);
+    return { subtotal: sub, itemsTotal: itemsTot, grandTotal: total, orderTax: tax };
+  }, [watchedItems, watchedDiscount]);
 
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
@@ -183,7 +182,6 @@ export function PurchaseForm({
           purchaseDate: values.purchaseDate,
           status: values.status,
           discount: Number(values.discount) || 0,
-          taxAmount: Number(values.taxAmount) || 0,
         };
 
         await api.put(`/purchases/${purchaseId}`, updatePayload);
@@ -196,7 +194,6 @@ export function PurchaseForm({
           purchaseDate: values.purchaseDate,
           status: values.status,
           discount: Number(values.discount) || 0,
-          taxAmount: Number(values.taxAmount) || 0,
           items: values.items.map((it) => ({
             productId: it.productId,
             quantity: Number(it.quantity),
@@ -536,25 +533,20 @@ export function PurchaseForm({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="taxAmount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Order Tax</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Display only. The wire contract has no header tax: the API
+                    derives the order's tax from the lines' rates, so this box
+                    shows the figure the server will store instead of letting a
+                    typed number diverge from the stored purchase. */}
+                <div className="space-y-2">
+                  <FormLabel>Order Tax (auto)</FormLabel>
+                  <Input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    className="bg-muted/40 font-mono"
+                    value={orderTax.toFixed(2)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -578,10 +570,10 @@ export function PurchaseForm({
                   <span className="font-mono tabular-nums">-{formatMoney(Number(watchedDiscount))}</span>
                 </div>
               )}
-              {Number(watchedTaxAmount) > 0 && (
+              {orderTax > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Order Tax:</span>
-                  <span className="font-mono tabular-nums">+{formatMoney(Number(watchedTaxAmount))}</span>
+                  <span className="font-mono tabular-nums">+{formatMoney(orderTax)}</span>
                 </div>
               )}
               <Separator className="my-2" />

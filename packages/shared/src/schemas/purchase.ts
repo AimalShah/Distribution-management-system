@@ -23,8 +23,11 @@ export const PurchaseFormSchema = z.object({
   purchaseCode: z.string().trim().min(1, "Purchase code is required"),
   purchaseDate: requiredDate,
   status: z.string().trim().min(1, "Please select a status"),
+  // Terms only, no figures: the purchase total and its tax are derived from
+  // the line quantities, costs, per-line rate statements and this header
+  // discount (see `calculatePurchaseTotal`). A client-supplied taxAmount was
+  // an arbitrary add-on the API banked verbatim — removed.
   discount: optionalMoney,
-  taxAmount: optionalMoney,
   items: z
     .array(PurchaseItemInputSchema)
     .min(1, "A purchase needs at least one item"),

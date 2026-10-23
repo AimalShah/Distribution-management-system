@@ -8,13 +8,12 @@ export const SaleInvoiceItemSchema = z.object({
   productId: z.string().trim().min(1, "Please select a product"),
   quantity: z.number().int().min(1, "Quantity must be at least 1"),
   unitPrice: z.number().min(0, "Unit price must be positive"),
+  // The one money field the caller is trusted with: the operator's stated GST
+  // rate for the line (`taxPercent` only applies while > 0; unlike the removed
+  // split fields below, it is a rate the form previews with, not a figure the
+  // API banks). Every amount is derived server-side from this and the product
+  // row's own rate — see `calculateSaleBreakdown`.
   taxPercent: optionalPercent,
-  cgstRate: optionalPercent,
-  sgstRate: optionalPercent,
-  igstRate: optionalPercent,
-  cgstAmount: optionalMoney,
-  sgstAmount: optionalMoney,
-  igstAmount: optionalMoney,
 });
 
 /**
@@ -33,11 +32,12 @@ export const SaleInvoiceSchema = z.object({
   status: z.enum(SaleStatus),
   invoiceType: z.enum(["regular", "tax"]).default("regular"),
   isInterState: z.boolean().default(false),
+  // The caller supplies the trade terms (line prices, per-line rate
+  // statements, the invoice discount) and may not supply figures: the
+  // CGST/SGST/IGST split, the tax and the total are derived from those terms
+  // server-side, so nothing a hostile or buggy client sends can bank a GST
+  // number the terms do not support.
   discount: optionalMoney,
-  taxAmount: optionalMoney,
-  cgstAmount: optionalMoney,
-  sgstAmount: optionalMoney,
-  igstAmount: optionalMoney,
   /**
    * Set by the client only after it has seen the credit-limit warning and the
    * user asked to proceed anyway. The route requires `sales.override_credit_limit`

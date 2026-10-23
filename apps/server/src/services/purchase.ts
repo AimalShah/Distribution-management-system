@@ -37,10 +37,16 @@ const lineTotal = (item: PurchaseItemInput) => {
   return gross - itemDiscount + tax;
 };
 
+const linesTax = (data: PurchaseFormInput) =>
+  data.items.reduce(
+    (sum, item) =>
+      sum +
+      (((item.taxPercent ?? 0) / 100) * (item.quantity * item.unitCost - (item.itemDiscount ?? 0))),
+    0
+  );
+
 export const calculatePurchaseTotal = (data: PurchaseFormInput) =>
-  data.items.reduce((sum, item) => sum + lineTotal(item), 0) -
-  (data.discount ?? 0) +
-  (data.taxAmount ?? 0);
+  data.items.reduce((sum, item) => sum + lineTotal(item), 0) - (data.discount ?? 0);
 
 export type PurchaseListArgs = {
   organizationId: string;
@@ -200,7 +206,8 @@ export async function createPurchase(
         purchaseDate: data.purchaseDate,
         totalAmount,
         discount: data.discount,
-        taxAmount: data.taxAmount,
+        // Derived from the lines' rates, never read from the request body.
+        taxAmount: linesTax(data),
         // The legacy service hardcoded "Pending" and dropped the status the
         // form had selected. The stored value is now the requested one.
         status: data.status,

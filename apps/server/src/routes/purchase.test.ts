@@ -351,13 +351,14 @@ describe("POST /api/purchases", () => {
     });
   });
 
-  it("computes the total server side from the legacy form's formula", async () => {
+  it("derives the total from the line formula and ignores a header tax figure", async () => {
     const res = await request(app)
       .post("/api/purchases")
       .set(auth())
       .send({
         ...validBody,
         discount: 5,
+        // Forged: the header used to be added on verbatim.
         taxAmount: 10,
         items: [
           { productId: "prod_1", quantity: 10, unitCost: 5, itemDiscount: 2, taxPercent: 10 },
@@ -366,12 +367,15 @@ describe("POST /api/purchases", () => {
 
     expect(res.status).toBe(201);
 
-    // 10*5 = 50, less 2 item discount, plus 10% of 48, then -5 +10 header amounts.
+    // 10*5 = 50, less 2 item discount, plus 10% of 48, then -5 header discount.
+    // The forged +10 is not in the total.
     const arg = models.purchase.create.mock.calls[0][0] as {
-      data: { totalAmount: number; purchaseItems: { create: { totalCost: number }[] } };
+      data: { totalAmount: number; taxAmount: number; purchaseItems: { create: { totalCost: number }[] } };
     };
 
-    expect(arg.data.totalAmount).toBeCloseTo(57.8, 5);
+    expect(arg.data.totalAmount).toBeCloseTo(47.8, 5);
+    // The stored tax is the lines' own 4.8, not the body's 10.
+    expect(arg.data.taxAmount).toBeCloseTo(4.8, 5);
     expect(arg.data.purchaseItems.create[0].totalCost).toBe(50);
   });
 
