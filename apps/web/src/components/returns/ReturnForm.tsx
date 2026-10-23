@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
@@ -96,7 +96,13 @@ export function ReturnForm() {
   const watchedReturnType = form.watch("returnType");
   const watchedSaleId = form.watch("saleId");
   const watchedPurchaseId = form.watch("purchaseId");
-  const watchedItems = form.watch("items") || [];
+  // `useWatch`, not `form.watch` in the render body: react-hook-form gates the
+  // root re-render on form-state events (errors, dirty, …), and a Controller
+  // input's change publishes only `{ name, type }` — so a plain `form.watch('items')`
+  // snapshot stayed stale while the inputs themselves updated, and the
+  // estimated value froze at the full-quantity figures no matter what the clerk
+  // typed. `useWatch` subscribes to the field and re-renders with fresh values.
+  const watchedItems = useWatch({ control: form.control, name: "items" }) || [];
 
   // Fetch full details of the selected sale or purchase document
   const { data: selectedSale } = useSWR(
@@ -109,29 +115,78 @@ export function ReturnForm() {
     fetcher
   );
 
+  /**
+   * The linked document's lines with the money figures the return service
+   * derives for a document-reversing return (`documentItemMoney` in
+   * `services/return.ts`): the invoice's stored CGST/SGST/IGST split is the
+   * line's tax — an invoice line has no separate rate, and feeding one in here
+   * would tax the line twice — and the header discount is spread over the
+   * lines by value share, exactly as the service prorates it. A receipt line's
+   * tax is its own rate applied to the net, and its discount comes back with it.
+   *
+   * The form previously read `it.taxAmount ?? 0` / `it.discount ?? 0`, fields
+   * that do not exist on a `SaleItem`, so every line was shown and estimated
+   * with tax and discount of zero even though the invoice charged them.
+   */
   const documentItems = useMemo(() => {
+    /** Two decimals, the same rounding the return service stores. */
+    const round2 = (value: number) => Math.round(value * 100) / 100;
+
     if (watchedReturnType === "SALE" && selectedSale?.items) {
-      return selectedSale.items.map((it: any) => ({
-        productId: it.productId,
-        name: it.product?.name ?? "Unknown Product",
-        productCode: it.product?.productCode ?? "",
-        quantity: it.quantity,
-        unitPrice: it.unitPrice,
-        taxAmount: it.taxAmount ?? 0,
-        discount: it.discount ?? 0,
-      }));
+      const items = selectedSale.items as Array<any>;
+      const invoiceSubtotal = items.reduce(
+        (sum: number, it: any) => sum + (it.totalPrice ?? it.quantity * it.unitPrice),
+        0
+      );
+      const headerDiscount = selectedSale.discount ?? 0;
+
+      return items.map((it: any) => {
+        const lineSubtotal = it.totalPrice ?? it.quantity * it.unitPrice;
+
+        return {
+          productId: it.productId,
+          name: it.product?.name ?? "Unknown Product",
+          productCode: it.product?.productCode ?? "",
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          lineTax: round2((it.cgstAmount ?? 0) + (it.sgstAmount ?? 0) + (it.igstAmount ?? 0)),
+          lineDiscount: round2(
+            ((it.discount ?? 0) +
+              (invoiceSubtotal > 0 ? headerDiscount * (lineSubtotal / invoiceSubtotal) : 0))
+          ),
+        };
+      });
     }
+
     if (watchedReturnType === "PURCHASE" && selectedPurchase?.purchaseItems) {
-      return selectedPurchase.purchaseItems.map((it: any) => ({
-        productId: it.productId,
-        name: it.product?.name ?? "Unknown Product",
-        productCode: it.product?.productCode ?? "",
-        quantity: it.quantity,
-        unitPrice: it.unitCost ?? it.unitPrice ?? 0,
-        taxAmount: it.taxAmount ?? 0,
-        discount: it.discount ?? 0,
-      }));
+      const items = selectedPurchase.purchaseItems as Array<any>;
+      const gross = items.reduce(
+        (sum: number, it: any) => sum + it.quantity * (it.unitCost ?? 0),
+        0
+      );
+      const headerDiscount = selectedPurchase.discount ?? 0;
+
+      return items.map((it: any) => {
+        const unitCost = it.unitCost ?? it.unitPrice ?? 0;
+        const net = it.quantity * unitCost - (it.discount ?? 0);
+
+        return {
+          productId: it.productId,
+          name: it.product?.name ?? "Unknown Product",
+          productCode: it.product?.productCode ?? "",
+          quantity: it.quantity,
+          unitPrice: unitCost,
+          // A receipt line's tax is not stored as an amount: it is the rate the
+          // purchase priced the line with, applied to the line's net.
+          lineTax: round2(it.taxPercent ? Math.max(0, (it.taxPercent / 100) * net) : 0),
+          lineDiscount: round2(
+            (it.discount ?? 0) +
+              (gross > 0 ? headerDiscount * ((it.quantity * unitCost) / gross) : 0)
+          ),
+        };
+      });
     }
+
     return [];
   }, [watchedReturnType, selectedSale, selectedPurchase]);
 
@@ -148,8 +203,8 @@ export function ReturnForm() {
         productId: it.productId,
         quantity: it.quantity,
         unitPrice: it.unitPrice,
-        taxAmount: it.taxAmount,
-        discount: it.discount,
+        taxAmount: it.lineTax,
+        discount: it.lineDiscount,
         condition: "RESTOCKABLE",
         reason: "",
         note: "",
@@ -160,12 +215,16 @@ export function ReturnForm() {
 
   const handleProductChange = (index: number, productId: string) => {
     form.setValue(`items.${index}.productId`, productId);
-    
+
     // First check if product was on the selected document
     const docItem = documentItems.find((d: any) => d.productId === productId);
     if (docItem) {
       form.setValue(`items.${index}.unitPrice`, docItem.unitPrice);
       form.setValue(`items.${index}.quantity`, docItem.quantity);
+      // The document's own figures, at the document's own quantity — a line
+      // priced without them would estimate a credit the ledger never grants.
+      form.setValue(`items.${index}.taxAmount`, docItem.lineTax);
+      form.setValue(`items.${index}.discount`, docItem.lineDiscount);
       return;
     }
 
@@ -176,16 +235,47 @@ export function ReturnForm() {
     }
   };
 
+  /**
+   * The prorated money for a document-backed form row, scaled by the share of
+   * the line the clerk is actually returning — the same returnedQty/docQty
+   * proration `documentItemMoney` applies on the server. Null for rows that do
+   * not sit on the document (free-typed write-off lines), which keep whatever
+   * the clerk entered.
+   *
+   * View-state, not form state, on purpose: react-hook-form's `watch` snapshot
+   * does not observe Controller-level `setValue`s that came from an effect (the
+   * footer stayed at the full-quantity figure while the row inputs updated),
+   * and the server derives every figure itself for document-backed returns —
+   * so the single source here is this computation, shared by the row inputs,
+   * the estimate footer and the submitted payload.
+   */
+  const docMoneyForRow = (row: unknown) => {
+    const entry = row as { productId?: string; quantity?: number; taxAmount?: number; discount?: number } | null;
+    const docItem = documentItems.find((d: any) => d.productId === entry?.productId);
+
+    if (!entry || !docItem || !docItem.quantity) return null;
+
+    const round2 = (value: number) => Math.round(value * 100) / 100;
+    const ratio = (Number(entry.quantity) || 0) / docItem.quantity;
+
+    return {
+      taxAmount: round2(docItem.lineTax * ratio),
+      discount: round2(docItem.lineDiscount * ratio),
+    };
+  };
+
   const totalReturnAmount = useMemo(() => {
     return watchedItems.reduce((sum: number, it: any) => {
       const qty = Number(it?.quantity) || 0;
       const price = Number(it?.unitPrice) || 0;
-      const tax = Number(it?.taxAmount) || 0;
-      const disc = Number(it?.discount) || 0;
+      const doc = docMoneyForRow(it);
+      const tax = doc ? doc.taxAmount : Number(it?.taxAmount) || 0;
+      const disc = doc ? doc.discount : Number(it?.discount) || 0;
 
       return sum + qty * price + tax - disc;
     }, 0);
-  }, [watchedItems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedItems, documentItems]);
 
   const onSubmit = async (values: any) => {
     setSubmitting(true);
@@ -196,16 +286,23 @@ export function ReturnForm() {
         returnType: values.returnType,
         returnDate: values.returnDate ? values.returnDate : undefined,
         reason: values.reason?.trim() || undefined,
-        items: values.items.map((it: any) => ({
-          productId: it.productId,
-          quantity: Number(it.quantity),
-          unitPrice: Number(it.unitPrice),
-          taxAmount: Number(it.taxAmount) || 0,
-          discount: Number(it.discount) || 0,
-          condition: it.condition || "RESTOCKABLE",
-          reason: it.reason?.trim() || undefined,
-          note: it.note?.trim() || undefined,
-        })),
+        items: values.items.map((it: any, index: number) => {
+          const derived = docMoneyForRow(it);
+
+          return {
+            productId: it.productId,
+            quantity: Number(it.quantity),
+            unitPrice: Number(it.unitPrice),
+            // The display and the wire agree: document-backed lines send the
+            // prorated derivation (the server re-derives anyway); a write-off
+            // keeps the clerk's own figures.
+            taxAmount: derived ? derived.taxAmount : Number(it.taxAmount) || 0,
+            discount: derived ? derived.discount : Number(it.discount) || 0,
+            condition: it.condition || "RESTOCKABLE",
+            reason: it.reason?.trim() || undefined,
+            note: it.note?.trim() || undefined,
+          };
+        }),
       };
 
       if (values.returnType === "SALE" && values.saleId) {
@@ -545,49 +642,71 @@ export function ReturnForm() {
                         />
                       </TableCell>
 
-                      {/* Tax Amount */}
+                      {/* Tax Amount — derived for document-backed lines */}
                       <TableCell>
                         <FormField
                           control={form.control}
                           name={`items.${index}.taxAmount`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  className="h-9"
-                                  {...field}
-                                  onChange={(e) => field.onChange(Number(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const derived = docMoneyForRow(watchedItems[index]);
+
+                            return (
+                              <FormItem className="space-y-0">
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className="h-9"
+                                    {...field}
+                                    value={derived ? derived.taxAmount : (field.value ?? "")}
+                                    readOnly={Boolean(derived)}
+                                    title={
+                                      derived
+                                        ? "Derived from the document and the returned quantity"
+                                        : undefined
+                                    }
+                                    onChange={(e) => field.onChange(Number(e.target.value))}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
                       </TableCell>
 
-                      {/* Discount */}
+                      {/* Discount — derived for document-backed lines */}
                       <TableCell>
                         <FormField
                           control={form.control}
                           name={`items.${index}.discount`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  className="h-9"
-                                  {...field}
-                                  onChange={(e) => field.onChange(Number(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const derived = docMoneyForRow(watchedItems[index]);
+
+                            return (
+                              <FormItem className="space-y-0">
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className="h-9"
+                                    {...field}
+                                    value={derived ? derived.discount : (field.value ?? "")}
+                                    readOnly={Boolean(derived)}
+                                    title={
+                                      derived
+                                        ? "Derived from the document and the returned quantity"
+                                        : undefined
+                                    }
+                                    onChange={(e) => field.onChange(Number(e.target.value))}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
                       </TableCell>
 
