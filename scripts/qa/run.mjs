@@ -50,6 +50,63 @@ async function rowTextFor(page, productName) {
   }
 }
 
+/**
+ * The New Return form's items table, read the way a human sees it: one record
+ * per drawn row, cell values keyed off the header they sit under. Radix
+ * selects render as buttons (their text), money/quantity columns as number
+ * inputs, the note as a text input.
+ */
+async function readReturnItemsTable(page) {
+  return page
+    .locator("table")
+    .first()
+    .locator("tbody tr")
+    .evaluateAll((rows) =>
+      rows.map((tr) => {
+        const table = tr.closest("table");
+        const ths = Array.from(table.querySelectorAll("thead th")).map((th) =>
+          (th.textContent ?? "").trim()
+        );
+
+        const cellValue = (td) => {
+          const numberInput = td.querySelector("input[type='number']");
+          if (numberInput) return numberInput.value;
+
+          const textInput = td.querySelector("input[type='text']");
+          if (textInput) return textInput.value;
+
+          return (td.textContent ?? "").trim();
+        };
+
+        const row = {};
+
+        Array.from(tr.children).forEach((td, i) => {
+          row[ths[i] ?? `col${i}`] = cellValue(td);
+        });
+
+        return {
+          product: row["Product *"],
+          quantity: row["Quantity *"],
+          unitPrice: row["Unit Price *"],
+          condition: row["Condition"],
+          tax: row["Tax"],
+          discount: row["Discount"],
+          note: row["Note"],
+        };
+      })
+    );
+}
+
+/** The number the "Estimated Return Value:" footer currently displays. */
+async function readEstimatedValue(page) {
+  return page.getByText(/Estimated Return Value/).evaluate((el) => {
+    const text = el.closest("div")?.textContent ?? "";
+    const match = text.match(/([\d.,]+)\s*$/);
+
+    return match ? Number(match[1].replace(/,/g, "")) : NaN;
+  });
+}
+
 const scenarios = {
   /**
    * P0-1/P0-2: better-auth is the only sign-in path, and nothing on the page
@@ -301,6 +358,216 @@ const scenarios = {
         throw new Error(`stored taxAmount is ${tax}, expected the derived 5`);
       }
     });
+  },
+
+  /**
+   * The New Return form — pinned against the two symptoms reported on a real
+   * return:
+   *   1. the line's price/tax/discount did not follow the invoice;
+   *   2. a returned quantity was displayed as a line count — "pcs" column read
+   *      the number of rows.
+   *
+   * Fixture: a 3-line invoice (325 + 240 + 25 = 590, tax 10% = 59, header
+   * discount 20 → total 629). The form's estimate must reproduce the credit
+   * the ledger actually grants for the same return shape.
+   */
+  async returnForm({ page, api, spaNavigate, assertNoReload, ensure }) {
+    const stamp = Date.now().toString().slice(-8);
+
+    const prices = [25, 40, 12.5];
+    const quantities = [13, 6, 2];
+    const products = [];
+
+    for (const [index, price] of prices.entries()) {
+      const product = await api("POST", "/products", {
+        name: `QA Return Line ${index} ${stamp}`,
+        category: ensure.product.categoryId,
+        brand: ensure.product.brandId,
+        unit: "piece",
+        unitCost: 10,
+        unitPrice: price,
+        gstApplicable: true,
+        gstRate: 10,
+        isActive: true,
+      });
+
+      products.push(product);
+
+      await api("POST", "/inventory", { productId: product.id, quantityOnHand: 100 });
+    }
+
+    await api("POST", "/sales", {
+      saleCode: `QA-RET-SRC-${stamp}`,
+      customerId: ensure.customer.id,
+      status: "Completed",
+      invoiceType: "regular",
+      isInterState: false,
+      discount: 20,
+      items: quantities.map((quantity, index) => ({
+        productId: products[index].id,
+        quantity,
+        unitPrice: prices[index],
+        taxPercent: 10,
+      })),
+    });
+
+    // Reaching the form client-side keeps the no-reload marker standing.
+    await spaNavigate("/returns");
+
+    await step(page, "returnForm: opens the new-return form", async () => {
+      await page.getByRole("link", { name: /New Return/ }).first().click();
+      await page.waitForURL((url) => url.pathname.includes("/returns/new"), { timeout: 15_000 });
+    });
+
+    await step(page, "returnForm: selecting the invoice points the return at it", async () => {
+      const trigger = page
+        .getByRole("combobox")
+        .filter({ has: page.locator("span", { hasText: "Select sale invoice" }) })
+        .first();
+
+      await trigger.click();
+      await page.getByRole("option", { name: /QA-RET-SRC/ }).first().click();
+    });
+
+    await step(page, "returnForm: populate-from-invoice bar appears for the 3-line document", async () => {
+      await page.getByText(/has 3 line item/).first().waitFor({ timeout: 10_000 });
+    });
+
+    await step(page, "returnForm: populate fills all three lines with quantities and prices", async () => {
+      await page.getByRole("button", { name: /Populate items from/ }).click();
+      await page.waitForTimeout(400);
+
+      const contents = await readReturnItemsTable(page);
+
+      if (contents.length !== 3) {
+        throw new Error(
+          `the items table shows ${contents.length} line(s) after populating a 3-line invoice (rows: ${JSON.stringify(contents)})`
+        );
+      }
+
+      for (const [index, row] of contents.entries()) {
+        if (Number(row.unitPrice) !== prices[index]) {
+          throw new Error(
+            `line ${index + 1} shows unitPrice ${row.unitPrice}, expected ${prices[index]} — the form did not fill the price from the invoice`
+          );
+        }
+
+        if (Number(row.quantity) !== quantities[index]) {
+          throw new Error(`line ${index + 1} shows quantity ${row.quantity}, expected ${quantities[index]}`);
+        }
+      }
+    });
+
+    await step(page, "returnForm: switching a line's product re-fills its price and quantity", async () => {
+      // Line 3 (12.50 @ 2) → the 25.00 product, then back. Both directions must
+      // re-derive from the document; a stale price here is the reported
+      // "form does not update the price" symptom.
+      const row = page.locator("table tbody tr").nth(2);
+
+      await row.getByRole("combobox").first().click();
+      await page.getByRole("option", { name: /QA Return Line 0/ }).first().click();
+      await page.waitForTimeout(400);
+
+      let switched = await readReturnItemsTable(page);
+
+      if (Number(switched[2]?.unitPrice) !== 25 || Number(switched[2]?.quantity) !== 13) {
+        throw new Error(
+          `after switching line 3 to the 25.00 document product, the row shows price ${switched[2]?.unitPrice} / qty ${switched[2]?.quantity}, expected 25 / 13`
+        );
+      }
+
+      await row.getByRole("combobox").first().click();
+      await page.getByRole("option", { name: /QA Return Line 2/ }).first().click();
+      await page.waitForTimeout(400);
+
+      switched = await readReturnItemsTable(page);
+
+      if (Number(switched[2]?.unitPrice) !== 12.5 || Number(switched[2]?.quantity) !== 2) {
+        throw new Error(
+          `after switching line 3 back to the 12.50 product, the row shows price ${switched[2]?.unitPrice} / qty ${switched[2]?.quantity}, expected 12.5 / 2`
+        );
+      }
+    });
+
+    await step(page, "returnForm: estimate mirrors the invoice tax and discount at full quantities", async () => {
+      // A full return of every line credits 590 goods + 59 tax − 20 discount
+      // share = 629 — exactly what the ledger grants. A form that leaves the
+      // tax/discount columns at 0 shows 590, so the clerk signs a number that
+      // is not the money it settles at.
+      const estimate = await readEstimatedValue(page);
+
+      if (Math.round(estimate) !== Math.round(628.99)) {
+        throw new Error(
+          `Estimated Return Value shows ${estimate}, expected 629 (590 + 59 tax − 20 discount from the invoice's own figures)`
+        );
+      }
+    });
+
+    await step(page, "returnForm: editing a quantity to 12 updates the row and the estimate", async () => {
+      const row = page.locator("table tbody tr").nth(0);
+      const quantity = row.locator("td").nth(1).locator("input");
+
+      await quantity.fill("12");
+      await quantity.blur();
+      await page.waitForTimeout(300);
+
+      const visible = (await readReturnItemsTable(page))[0];
+
+      if (visible?.quantity !== "12") {
+        throw new Error(
+          `after typing 12 into the quantity, the row shows "${visible?.quantity}" — the table does not take the edit (the "returned 12, shows 1" symptom)`
+        );
+      }
+
+      // goods 300 + 240 + 25 = 565; derived tax 32.5×12/13 + 24 + 2.5 = 56.5;
+      // discount shares (r2 per line) 10.17 + 8.14 + 0.85 = 19.16 → 602.34.
+      // The PKR money format shows whole rupees, so compare rounded.
+      const estimate = await readEstimatedValue(page);
+
+      if (Math.round(estimate) !== Math.round(602.34)) {
+        throw new Error(
+          `estimate after the 12-pc edit shows ${estimate}, expected ≈602 (602.34 with tax/discount scaled by the returned share)`
+        );
+      }
+    });
+
+    let returnCode = "";
+
+    await step(page, "returnForm: submitting lands on the list without a reload", async () => {
+      returnCode = await page.getByPlaceholder("RET-YYYY-XXXXX").inputValue();
+      await page.getByRole("button", { name: /Process Return/ }).click();
+      await page.waitForURL((url) => url.pathname.includes("/returns"), { timeout: 15_000 });
+      await assertNoReload();
+    });
+
+    await step(page, "returnForm: the list shows the true piece count, not the line count", async () => {
+      await page.getByText(returnCode, { exact: false }).first().waitFor({ timeout: 10_000 });
+
+      const row = page.locator("tr", { hasText: returnCode }).first();
+      const text = await row.textContent();
+
+      // 12 + 6 + 2 = 20 pieces across 3 lines.
+      if (!/20/.test(text ?? "")) {
+        throw new Error(
+          `the returns table row shows "${(text ?? "").replace(/\s+/g, " ").slice(0, 120)}" — a 20-piece return must not be displayed as a line count`
+        );
+      }
+    });
+
+    await step(page, "returnForm: API truth — three lines stored with the edited quantity", async () => {
+      const detail = await api("GET", `/returns/${returnCode}`);
+      const items = detail?.items ?? [];
+
+      if (items.length !== 3) {
+        throw new Error(`the stored return has ${items.length} line(s), expected 3`);
+      }
+
+      if (items[0]?.quantity !== 12) {
+        throw new Error(`the stored first line has quantity ${items[0]?.quantity}, expected the edited 12`);
+      }
+    });
+
+    await assertNoReload();
   },
 
   /**

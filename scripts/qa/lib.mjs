@@ -292,6 +292,7 @@ export async function ensureFixtures({ api }) {
     if (existing?.id) return existing;
 
     return api("POST", "/customers", {
+      customerCode: `QA-CUST-${stamp}`,
       name: `QA Customer ${stamp}`,
       phone: null,
       address: null,
