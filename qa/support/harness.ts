@@ -311,9 +311,15 @@ export async function seedTenant(taxRate = 10): Promise<Tenant> {
   };
 }
 
-/** Delete everything a `seedTenant` created, leaf-first, org-scoped only. */
+/** Delete everything a `seedTenant` created, leaf-first, org-scoped only.
+ *  BOTH tenants go: seedTenant mints org A and org B (the isolation probe),
+ *  and leaving org B behind would leak its catalog rows — a fresh org B
+ *  restarts its SKU sequence at 1, and `productCode` uniqueness is global, so
+ *  the next run's `seedTenant` would collide with the leaked `QAB-QAC-00001`
+ *  and never seed. This leak is real: five orphaned `QA Org B` tenants were
+ *  found in the QA DB after the returns-suite sessions (2026-10). */
 export async function teardownTenant(t: Tenant): Promise<void> {
-  const orgs = { in: [t.organizationId] };
+  const orgs = { in: [t.organizationId, t.other.organizationId] };
 
   await prisma.payment.deleteMany({ where: { organizationId: orgs } });
   await prisma.returnItem.deleteMany({ where: { return: { organizationId: orgs } } });
@@ -330,8 +336,9 @@ export async function teardownTenant(t: Tenant): Promise<void> {
   await prisma.category.deleteMany({ where: { organizationId: orgs } });
   await prisma.customer.deleteMany({ where: { organizationId: orgs } });
   await prisma.supplier.deleteMany({ where: { organizationId: orgs } });
+  await prisma.role.deleteMany({ where: { organizationId: orgs } });
   await prisma.member.deleteMany({ where: { organizationId: orgs } });
-  await prisma.organization.deleteMany({ where: { id: { in: [t.organizationId] } } });
+  await prisma.organization.deleteMany({ where: { id: { in: [t.organizationId, t.other.organizationId] } } });
   await prisma.user.deleteMany({ where: { id: { in: [t.userId, t.other.userId] } } });
 }
 
