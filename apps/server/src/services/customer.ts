@@ -337,14 +337,28 @@ export async function getCustomerLedger({
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || typeRank[a.type] - typeRank[b.type]);
 
-  let running = openingBalance;
+  // Store credit is applied against the balance due (ADR 0006; the term
+  // definition in CONTEXT.md): a return credit can reduce what the customer owes
+  // but never turn the customer into somebody the store owes money to on this
+  // ledger. What a credit could not absorb — a return against an invoice that
+  // cash already settled — is not a negative trade balance: it is unspent store
+  // credit, which the store-credit pool in `services/payment.ts` tracks
+  // independently from the very same return rows. Flooring the running balance
+  // creates and destroys nothing and keeps the statement's running column and
+  // its closing balance telling one story.
+  const applyAgainstBalanceDue = (balance: number) => Math.max(0, balance);
+
+  let running = applyAgainstBalanceDue(openingBalance);
 
   const entries: LedgerEntry[] = drafts.map((draft) => {
-    running += draft.debit - draft.credit;
+    running = applyAgainstBalanceDue(running + draft.debit - draft.credit);
 
     return { ...draft, balance: running };
   });
 
+  // The window's own sums, as the totals row reports them; these stay raw so a
+  // credit that overflowed the balance is still visible in `credits` — it is
+  // only the balances that never go negative.
   const invoices = sumDebits(windowSales);
   const credits = sumCredits(windowCredits);
   const payments = sumPayments(windowPayments);
@@ -353,13 +367,15 @@ export async function getCustomerLedger({
     customer,
     from: from ? from.toISOString() : null,
     to: to ? to.toISOString() : null,
-    openingBalance,
+    openingBalance: applyAgainstBalanceDue(openingBalance),
     entries,
     totals: {
       invoices,
       credits,
       payments,
-      closingBalance: openingBalance + invoices - credits - payments,
+      // The closing balance is what the running column ends on, floored the
+      // same way — not a separate formula, so the two can never disagree.
+      closingBalance: running,
     },
   };
 }
