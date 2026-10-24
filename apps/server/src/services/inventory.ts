@@ -374,7 +374,8 @@ export interface BulkImportResult {
 
 export async function bulkImportInventory(
   rows: InventoryBulkImportRow[],
-  organizationId: string
+  organizationId: string,
+  userId: string
 ): Promise<BulkImportResult> {
   const errors: BulkImportError[] = [];
   const validCandidates: { rowNum: number; data: InventoryBulkImportRow }[] = [];
@@ -513,23 +514,42 @@ export async function bulkImportInventory(
           updateData.maxStockLevel = item.data.maxStockLevel;
         }
 
-        await tx.inventory.update({
-          where: { id: existing.id },
-          data: updateData,
+        await applyStockMovement({
+          tx,
+          organizationId,
+          userId,
+          productId: item.product.id,
+          direction: "count",
+          quantity: item.data.quantityOnHand,
+          movementType: "ADJUSTMENT",
+          reason: "Bulk inventory import",
+          reference: `bulk-import-row-${item.rowNum}`,
         });
+
+        await tx.inventory.update({ where: { id: existing.id }, data: updateData });
 
         updated++;
       } else {
-        await tx.inventory.create({
-          data: {
-            productId: item.product.id,
-            organizationId,
-            quantityOnHand: item.data.quantityOnHand,
-            reorderLevel: item.data.reorderLevel ?? 0,
-            maxStockLevel: item.data.maxStockLevel ?? null,
-            quantityReserved: 0,
-          },
+        const movement = await applyStockMovement({
+          tx,
+          organizationId,
+          userId,
+          productId: item.product.id,
+          direction: "in",
+          quantity: item.data.quantityOnHand,
+          movementType: "ADJUSTMENT",
+          reason: "Bulk inventory import",
+          reference: `bulk-import-row-${item.rowNum}`,
+          opening: { reorderLevel: item.data.reorderLevel ?? 0 },
+          batch: { untracked: true },
         });
+
+        if (item.data.maxStockLevel !== undefined) {
+          await tx.inventory.update({
+            where: { id: movement.inventoryId },
+            data: { maxStockLevel: item.data.maxStockLevel },
+          });
+        }
         created++;
       }
     }
@@ -544,5 +564,4 @@ export async function bulkImportInventory(
     errors,
   };
 }
-
 

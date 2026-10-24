@@ -156,7 +156,8 @@ inventoryRouter.post(
       );
     }
 
-    const result = await bulkImportInventory(rows, req.auth.organizationId);
+    const userId = requireUserId(req.auth.userId);
+    const result = await bulkImportInventory(rows, req.auth.organizationId, userId);
     res.json(result);
   })
 );
