@@ -79,6 +79,39 @@ beforeEach(() => {
 });
 
 describe("ProductList Brand Filter (issue #45)", () => {
+  it("shows a retryable error instead of an empty catalog when loading fails", async () => {
+    let productAttempts = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url.startsWith("/products")) {
+        productAttempts += 1;
+        return productAttempts === 1
+          ? Promise.reject(new Error("Catalog is temporarily unavailable"))
+          : Promise.resolve({ data: mockProducts, total: 2 });
+      }
+      if (url.startsWith("/categories")) return Promise.resolve({ data: [] });
+      if (url.startsWith("/brands")) return Promise.resolve({ data: mockBrands });
+      return Promise.resolve({});
+    });
+
+    render(
+      <MemoryRouter>
+        <SWRConfig value={{ provider: () => new Map(), errorRetryCount: 0 }}>
+          <ProductList />
+        </SWRConfig>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Catalog is temporarily unavailable"
+    );
+    expect(screen.queryByText("No products found")).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("Cola 500ml")).toBeInTheDocument();
+    expect(productAttempts).toBe(2);
+  });
+
   it("renders products and passes brandId query when filter is selected", async () => {
     renderComponent();
 

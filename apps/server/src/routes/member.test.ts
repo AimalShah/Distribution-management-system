@@ -97,18 +97,22 @@ describe("GET /api/organizations/:id/members", () => {
   });
 
   it("selects only what a member row needs to render", async () => {
-    // The legacy getUsers returned whole User rows, carrying banned, banReason,
+    // The legacy getUsers returned whole User rows, carrying banReason,
     // isOwner, role and isFormComplete into a table that has no use for them.
+    // P0-5 needs `banned` and `mustChangePassword` on the row to render the
+    // deactivation state and the right action; authority stays on the
+    // membership, so `isOwner`, `role` and the rest remain out.
     await asCaller(request(app).get(`/api/organizations/${ORG}/members`));
 
     const select = memberModel.findMany.mock.calls[0][0].select;
     expect(Object.keys(select.user.select).sort()).toEqual([
+      "banned",
       "email",
       "id",
       "image",
+      "mustChangePassword",
       "name",
     ]);
-    expect(select.user.select.banned).toBeUndefined();
     expect(select.user.select.isOwner).toBeUndefined();
   });
 
@@ -279,6 +283,25 @@ describe("POST /api/organizations/:id/members", () => {
     memberModel.findFirst.mockImplementation(async ({ where }) =>
       where.userId === OWNER
         ? memberFixture({ userId: where.userId, role: "adminRole" })
+        : null
+    );
+
+    const res = await add({ userId: TARGET });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("treats custom role with users permission as elevated (P2-11)", async () => {
+    memberModel.findFirst.mockImplementation(async ({ where }) =>
+      where.userId === OWNER
+        ? memberFixture({
+            userId: where.userId,
+            role: "member",
+            roleId: "role_custom_admin",
+            customRole: {
+              permissions: [{ resource: "users", action: "create" }],
+            },
+          })
         : null
     );
 

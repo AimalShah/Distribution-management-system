@@ -20,7 +20,7 @@ export const PurchaseItemInputSchema = z.object({
 
 export const PurchaseFormSchema = z.object({
   supplierId: z.string().trim().min(1, "Please select a supplier"),
-  purchaseCode: z.string().trim().min(1, "Purchase code is required"),
+  purchaseCode: z.string().trim().optional(),
   purchaseDate: requiredDate,
   status: z.string().trim().min(1, "Please select a status"),
   // Terms only, no figures: the purchase total and its tax are derived from
@@ -41,6 +41,7 @@ export const PurchaseFormSchema = z.object({
  */
 export const PurchaseUpdateSchema = PurchaseFormSchema.partial().omit({
   items: true,
+  purchaseCode: true,
 });
 
 export const purchaseListQuerySchema = paginationQuerySchema.extend({

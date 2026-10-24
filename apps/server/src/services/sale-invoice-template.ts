@@ -1,4 +1,4 @@
-import { calculateSaleBreakdown } from "@dms/shared";
+import { calculateSaleBreakdown, formatMoney } from "@dms/shared";
 import { escapeHtml } from "./html-utils";
 
 export interface SaleInvoiceRenderData {
@@ -130,8 +130,8 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
             ${gstRate > 0 ? `<span class="item-gst">GST: ${gstRate}%</span>` : ""}
           </td>
           <td class="num">${item.quantity}</td>
-          <td class="num">Rs ${item.unitPrice.toFixed(2)}</td>
-          <td class="num strong">Rs ${lineTotal.toFixed(2)}</td>
+          <td class="num">${formatMoney(item.unitPrice)}</td>
+          <td class="num strong">${formatMoney(lineTotal)}</td>
         </tr>
       `;
     })
@@ -272,36 +272,36 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
       <table class="totals-table">
         <tr>
           <td class="lbl">Subtotal</td>
-          <td class="amt">Rs ${subtotal.toFixed(2)}</td>
+          <td class="amt">${formatMoney(subtotal)}</td>
         </tr>
         ${discount > 0 ? `
         <tr>
           <td class="lbl">Discount</td>
-          <td class="amt">-Rs ${discount.toFixed(2)}</td>
+          <td class="amt">-${formatMoney(discount)}</td>
         </tr>` : ""}
         ${(sale.cgstAmount ?? 0) > 0 ? `
         <tr>
           <td class="lbl">CGST</td>
-          <td class="amt">Rs ${(sale.cgstAmount ?? 0).toFixed(2)}</td>
+          <td class="amt">${formatMoney(sale.cgstAmount ?? 0)}</td>
         </tr>` : ""}
         ${(sale.sgstAmount ?? 0) > 0 ? `
         <tr>
           <td class="lbl">SGST</td>
-          <td class="amt">Rs ${(sale.sgstAmount ?? 0).toFixed(2)}</td>
+          <td class="amt">${formatMoney(sale.sgstAmount ?? 0)}</td>
         </tr>` : ""}
         ${(sale.igstAmount ?? 0) > 0 ? `
         <tr>
           <td class="lbl">IGST</td>
-          <td class="amt">Rs ${(sale.igstAmount ?? 0).toFixed(2)}</td>
+          <td class="amt">${formatMoney(sale.igstAmount ?? 0)}</td>
         </tr>` : ""}
         ${tax > 0 ? `
         <tr>
           <td class="lbl">Total Tax</td>
-          <td class="amt">Rs ${tax.toFixed(2)}</td>
+          <td class="amt">${formatMoney(tax)}</td>
         </tr>` : ""}
         <tr class="gline">
           <td>Total</td>
-          <td class="amt">Rs ${total.toFixed(2)}</td>
+          <td class="amt">${formatMoney(total)}</td>
         </tr>
       </table>
     </div>

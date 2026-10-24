@@ -15,7 +15,6 @@ import {
 import { PaymentMethods, type PaymentMethodValue } from "@dms/shared";
 import { api, failureMessage, fetcher } from "../../lib/api";
 import { formatMoney } from "../../lib/format";
-import { generateCode } from "../../lib/code";
 
 const METHODS = PaymentMethods;
 
@@ -114,7 +113,6 @@ export function RecordPaymentDialog({
 
     try {
       const payload: any = {
-        paymentCode: generateCode("PMT"),
         customerId,
         amount: amountNumber,
         method,

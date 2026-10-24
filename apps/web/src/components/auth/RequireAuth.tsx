@@ -9,7 +9,7 @@ import { useAuth } from "../../lib/auth";
  * and the router resumes it once the credentials check out.
  */
 export function RequireAuth() {
-  const { status, activeOrganizationId } = useAuth();
+  const { status, activeOrganizationId, user } = useAuth();
   const location = useLocation();
 
   if (status === "loading") {
@@ -27,6 +27,16 @@ export function RequireAuth() {
     const from = `${location.pathname}${location.search}`;
 
     return <Navigate to="/login" replace state={{ from }} />;
+  }
+
+  if (status === "authenticated" && user?.mustChangePassword) {
+    // P0-5: a provisioned staff member must replace their temporary password
+    // before doing anything else. The server independently refuses every
+    // tenant request they make; this is the nudge that takes them where the
+    // server is telling them to go.
+    if (location.pathname !== "/change-password") {
+      return <Navigate to="/change-password" replace />;
+    }
   }
 
   if (

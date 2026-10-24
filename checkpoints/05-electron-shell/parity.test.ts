@@ -38,7 +38,7 @@ describe("Checkpoint 5 — Electron Shell: Package & Config", () => {
 
     const content = fs.readFileSync(builderPath, "utf-8");
     expect(content).toContain("appId: com.inventioo.dms");
-    expect(content).toContain("productName: Inventioo DMS");
+    expect(content).toContain("productName: AM-Enterprise");
     expect(content).toContain("output: release");
     expect(content).toContain("win:");
     expect(content).toContain("mac:");

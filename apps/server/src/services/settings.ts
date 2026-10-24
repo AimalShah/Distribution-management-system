@@ -1,8 +1,8 @@
 import prisma from "@dms/db";
 import { parseSkuFormat, type CompanySettingsUpdateInput } from "@dms/shared";
 import { badRequest } from "../http";
-
 import { serverCache } from "../utils/cache";
+import { recordAuditLog } from "./audit";
 
 /** The shape the Settings page reads, stored or defaulted. */
 export interface CompanySettingsView {
@@ -84,6 +84,14 @@ export async function updateCompanySettings(
     where: { organizationId },
     create: { organizationId, ...data },
     update: { ...data },
+  });
+
+  await recordAuditLog({
+    organizationId,
+    entityType: "SETTINGS",
+    entityId: organizationId,
+    action: "UPDATE",
+    details: data as Record<string, unknown>,
   });
 
   serverCache.delete(`settings:${organizationId}`);

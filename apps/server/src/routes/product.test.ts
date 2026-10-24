@@ -24,6 +24,7 @@ const { productModel, categoryModel, brandModel, companySettingsModel } = vi.hoi
 
 vi.mock("@dms/db", () => ({
   default: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     product: productModel,
     category: categoryModel,
@@ -31,6 +32,7 @@ vi.mock("@dms/db", () => ({
     companySettings: companySettingsModel,
   },
   prisma: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     product: productModel,
     category: categoryModel,
@@ -119,7 +121,7 @@ describe("organization context", () => {
     const res = await request(app).get("/api/health");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body).toMatchObject({ status: "ok", db: "ok" });
   });
 });
 
@@ -635,7 +637,6 @@ describe("transport level errors", () => {
   });
 
   it("returns 500 without leaking internals when a handler throws", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     productModel.findMany.mockRejectedValue(new Error("connection terminated"));
 
     const res = await request(app)
@@ -644,7 +645,5 @@ describe("transport level errors", () => {
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Internal server error", code: "INTERNAL_ERROR" });
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
   });
 });

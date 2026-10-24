@@ -7,9 +7,11 @@ import type {
   ReturnTypeValue,
   ReturnUpdateInput,
 } from "@dms/shared";
+import { fromPaise, percentagePaise, toMoneyNumber, toPaise } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement } from "./stock-movement";
 import { invalidateTenantMetrics } from "../utils/cache";
+import { nextDocumentCode } from "./document-code";
 
 /**
  * The legacy list embedded every line with its product, so one row carried an
@@ -82,8 +84,6 @@ const sumByProduct = (lines: { productId: string; quantity: number }[]) => {
 };
 
 /** Money is reported to two decimals, exactly as the sale module rounds it. */
-const round2 = (value: number) => Number(value.toFixed(2));
-
 /**
  * The money figures a return line stores, as the service derives them.
  */
@@ -136,31 +136,35 @@ const documentItemMoney = (
   returnedQty: number
 ): DerivedMoney => {
   const docQty = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const goodsValue = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+  const goodsPaise = lines.reduce((sum, line) => sum + BigInt(line.quantity) * toPaise(line.unitPrice), 0n);
   // An invoice's per-line tax is the stored split; a receipt's is the rate
   // applied to the line's net as `services/purchase.ts` priced it.
-  const lineTax = lines.reduce(
-    (sum, line) =>
-      sum +
-      (line.cgstAmount + line.sgstAmount + line.igstAmount) +
-      (line.taxPercent
-        ? Math.max(0, ((line.taxPercent / 100) * (line.quantity * line.unitPrice - (line.discount ?? 0))))
-        : 0),
-    0
-  );
-  const lineDiscount = lines.reduce((sum, line) => sum + (line.discount ?? 0), 0);
-  const lineSubtotal = lines.reduce(
-    (sum, line) => sum + (line.totalPrice ?? line.quantity * line.unitPrice),
-    0
+  const lineTaxPaise = lines.reduce((sum, line) => {
+    const storedTax = toPaise(line.cgstAmount) + toPaise(line.sgstAmount) + toPaise(line.igstAmount);
+    const taxable = BigInt(line.quantity) * toPaise(line.unitPrice) - toPaise(line.discount ?? 0);
+    const rateTax = line.taxPercent ? percentagePaise(taxable, line.taxPercent) : 0n;
+
+    return sum + storedTax + (rateTax > 0n ? rateTax : 0n);
+  }, 0n);
+  const lineDiscountPaise = lines.reduce((sum, line) => sum + toPaise(line.discount ?? 0), 0n);
+  const lineSubtotalPaise = lines.reduce(
+    (sum, line) => sum + toPaise(line.totalPrice ?? fromPaise(BigInt(line.quantity) * toPaise(line.unitPrice))),
+    0n
   );
   // The header discount is spread over the document by line value; a receipt's
   // line discount is the line's own and comes back with it.
-  const subtotalShare = documentSubtotal > 0 ? lineSubtotal / documentSubtotal : 0;
+  const subtotalPaise = toPaise(documentSubtotal);
+  const discountSharePaise = subtotalPaise > 0n
+    ? (toPaise(headerDiscount) * lineSubtotalPaise + subtotalPaise / 2n) / subtotalPaise
+    : 0n;
+  const returnedRatio = docQty > 0 ? BigInt(returnedQty) : 0n;
+  const divisor = BigInt(docQty || 1);
+  const prorate = (value: bigint) => (value * returnedRatio + divisor / 2n) / divisor;
 
   return {
-    unitPrice: docQty > 0 ? round2(goodsValue / docQty) : 0,
-    taxAmount: round2(lineTax * (docQty > 0 ? returnedQty / docQty : 0)),
-    discount: round2((headerDiscount * subtotalShare + lineDiscount) * (docQty > 0 ? returnedQty / docQty : 0)),
+    unitPrice: docQty > 0 ? fromPaise((goodsPaise + BigInt(docQty) / 2n) / BigInt(docQty)) : 0,
+    taxAmount: fromPaise(prorate(lineTaxPaise)),
+    discount: fromPaise(prorate(discountSharePaise + lineDiscountPaise)),
   };
 };
 
@@ -362,6 +366,8 @@ export async function createReturn(
    */
   const result = await prisma.$transaction(
     async (tx) => {
+
+      const returnCode = await nextDocumentCode(tx, organizationId, "return");
       /**
        * Money figures for document-backed returns, resolved per product from
        * the document branches below. Unset for write-offs, whose rows store
@@ -512,14 +518,23 @@ export async function createReturn(
           // here as well would tax the line twice.
           linesByProduct.set(line.productId, [
             ...(linesByProduct.get(line.productId) ?? []),
-            { ...line, discount: null, taxPercent: null },
+            {
+              ...line,
+              unitPrice: toMoneyNumber(line.unitPrice ?? 0),
+              totalPrice: line.totalPrice == null ? null : toMoneyNumber(line.totalPrice),
+              cgstAmount: toMoneyNumber(line.cgstAmount ?? 0),
+              sgstAmount: toMoneyNumber(line.sgstAmount ?? 0),
+              igstAmount: toMoneyNumber(line.igstAmount ?? 0),
+              discount: null,
+              taxPercent: null,
+            },
           ]);
         }
         const invoiceSubtotal = sale.items.reduce(
-          (sum, line) => sum + (line.totalPrice ?? line.quantity * line.unitPrice),
+          (sum, line) => sum + toMoneyNumber(line.totalPrice ?? line.quantity * toMoneyNumber(line.unitPrice ?? 0)),
           0
         );
-        const headerDiscount = sale.discount ?? 0;
+        const headerDiscount = toMoneyNumber(sale.discount ?? 0);
 
         for (const [productId, lines] of linesByProduct) {
           docMoney.set(productId, (returnedQty) =>
@@ -584,8 +599,8 @@ export async function createReturn(
           linesByProduct.set(line.productId, [
             ...(linesByProduct.get(line.productId) ?? []),
             {
-              unitPrice: line.unitCost,
-              discount: line.discount,
+              unitPrice: toMoneyNumber(line.unitCost ?? 0),
+              discount: line.discount == null ? null : toMoneyNumber(line.discount),
               taxPercent: line.taxPercent,
               totalPrice: null,
               cgstAmount: 0,
@@ -596,13 +611,13 @@ export async function createReturn(
           ]);
         }
         const purchaseGross = purchase.purchaseItems.reduce(
-          (sum, line) => sum + line.quantity * line.unitCost,
+          (sum, line) => sum + line.quantity * toMoneyNumber(line.unitCost ?? 0),
           0
         );
 
         for (const [productId, lines] of linesByProduct) {
           docMoney.set(productId, (returnedQty) =>
-            documentItemMoney(lines, purchaseGross, purchase.discount ?? 0, returnedQty)
+            documentItemMoney(lines, purchaseGross, toMoneyNumber(purchase.discount ?? 0), returnedQty)
           );
         }
       }
@@ -652,7 +667,7 @@ export async function createReturn(
 
       const created = await tx.return.create({
         data: {
-          returnCode: data.returnCode,
+          returnCode,
           returnType,
           returnDate: data.returnDate,
           reason: data.reason,
@@ -708,9 +723,9 @@ export async function createReturn(
           quantity,
           movementType: movementTypeFor(returnType),
           reason: data.reason
-            ? `${labelFor(returnType)} ${data.returnCode}: ${data.reason}`
-            : `${labelFor(returnType)} ${data.returnCode}`,
-          reference: data.returnCode,
+            ? `${labelFor(returnType)} ${returnCode}: ${data.reason}`
+            : `${labelFor(returnType)} ${returnCode}`,
+          reference: returnCode,
           // Consulted only when the direction takes stock out: an inbound
           // handback never reaches the guard.
           refusal: (available) =>

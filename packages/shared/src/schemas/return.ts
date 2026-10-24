@@ -90,7 +90,7 @@ const labelFor = (field: "saleId" | "purchaseId") =>
  * `.superRefine`, so the update schema can still `.omit()` off it.
  */
 const returnBaseSchema = z.object({
-  returnCode: z.string().trim().min(3, "Return code must be at least 3 characters"),
+  returnCode: z.string().trim().optional(),
   returnType: z.enum(ReturnTypes),
   // Absent means "now", which is the column default. The legacy form always sent
   // `new Date()`, so the date the user picked was overwritten with the moment
@@ -140,7 +140,7 @@ export const ReturnCreateSchema = returnBaseSchema.superRefine((data, ctx) => {
  *   whose already-returned total has been counted against the wrong figure.
  */
 export const ReturnUpdateSchema = returnBaseSchema
-  .omit({ returnType: true, saleId: true, purchaseId: true, items: true })
+  .omit({ returnCode: true, returnType: true, saleId: true, purchaseId: true, items: true })
   .partial()
   /**
    * Unknown keys are refused rather than stripped.

@@ -1,4 +1,7 @@
 import { mutate as globalMutate } from "swr";
+import { z } from "zod";
+import { apiBaseUrl } from "./api";
+import { AUTH_TOKEN_KEY } from "./auth-client";
 
 /**
  * Instant updates: which cached queries a successful mutation makes stale, and
@@ -36,6 +39,43 @@ export type Domain =
   | "members"
   | "dashboard"
   | "reports";
+
+const DOMAINS = [
+  "sales", "payments", "purchases", "returns", "products", "categories", "brands",
+  "suppliers", "customers", "inventory", "roles", "members", "dashboard", "reports",
+] as const satisfies readonly Domain[];
+
+const MutationEventSchema = z.object({
+  domain: z.union([z.enum(DOMAINS), z.literal("all")]),
+});
+
+export type MutationEvent = z.infer<typeof MutationEventSchema>;
+
+export const parseMutationEvent = (raw: string): MutationEvent | undefined => {
+  try {
+    const result = MutationEventSchema.safeParse(JSON.parse(raw));
+
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const applyTenantMutation = (
+  event: MutationEvent,
+  handlers: { domain: (domain: Domain) => void; all: () => void } = {
+    domain: invalidateDomains,
+    all: invalidateEverything,
+  }
+): void => {
+  if (event.domain === "all") {
+    handlers.all();
+
+    return;
+  }
+
+  handlers.domain(event.domain);
+};
 
 const MATCHERS: Record<Domain, RegExp> = {
   // Payments surface against an invoice row that is also cached under
@@ -116,4 +156,110 @@ export const invalidateDomains = (primary: Domain): void => {
  */
 export const invalidateEverything = (): void => {
   void globalMutate(() => true, undefined, { revalidate: true });
+};
+
+/**
+ * Listen for writes made by another member of this organization. Fetch is used
+ * instead of EventSource so Electron and bearer-token sessions can authenticate
+ * the stream without putting a credential in its URL.
+ */
+export const startTenantMutationStream = (organizationId: string): (() => void) => {
+  const controller = new AbortController();
+  let closed = false;
+  let reconnects = 0;
+
+  const connect = async () => {
+    while (!closed) {
+      try {
+        let token = "";
+
+        try {
+          token = localStorage.getItem(AUTH_TOKEN_KEY) ?? "";
+        } catch {
+          // Cookie auth still works when storage is unavailable.
+        }
+
+        const headers = new Headers({
+          Accept: "text/event-stream",
+          "X-Organization-Id": organizationId,
+        });
+
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
+        const response = await fetch(`${apiBaseUrl.replace(/\/+$/, "")}/events`, {
+          method: "GET",
+          headers,
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (response.status === 401) {
+          window.dispatchEvent(new Event("dms:unauthorized"));
+
+          return;
+        }
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Mutation stream failed with ${response.status}`);
+        }
+
+        if (reconnects > 0) invalidateEverything();
+
+        reconnects = 0;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!closed) {
+          const { value, done } = await reader.read();
+
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+          let boundary = buffer.indexOf("\n\n");
+
+          while (boundary !== -1) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const event = frame.split("\n").find((line) => line.startsWith("event: "));
+            const data = frame.split("\n").find((line) => line.startsWith("data: "));
+
+            if (event?.slice(7) === "mutation" && data) {
+              try {
+                const event = parseMutationEvent(data.slice(6));
+
+                if (event) applyTenantMutation(event);
+              } catch {
+                // Ignore malformed frames; a reconnect refreshes active queries.
+              }
+            }
+
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } catch {
+        if (closed || controller.signal.aborted) return;
+      }
+
+      if (closed) return;
+      reconnects += 1;
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(reconnects - 1, 5));
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, delay);
+        controller.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
+    }
+  };
+
+  void connect();
+
+  return () => {
+    closed = true;
+    controller.abort();
+  };
 };

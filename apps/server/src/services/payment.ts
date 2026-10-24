@@ -1,8 +1,10 @@
 import prisma from "@dms/db";
+import { fromPaise, paiseToDecimal, toPaise } from "@dms/shared";
 import type { Prisma } from "@dms/db";
 import type { PaymentCreateInput, PaymentListQuery } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { serverCache, invalidateTenantMetrics } from "../utils/cache";
+import { nextDocumentCode } from "./document-code";
 
 const listInclude = {
   customer: { select: { id: true, customerCode: true, name: true, phone: true } },
@@ -93,6 +95,8 @@ export async function createPayment(
       );
     }
 
+    const paymentCode = await nextDocumentCode(tx, organizationId, "payment");
+
     if (data.method === "Store Credit") {
       const returnRows = await tx.return.findMany({
         where: {
@@ -113,15 +117,15 @@ export async function createPayment(
         },
       });
 
-      const totalReturnCredits = returnRows.reduce(
+      const totalReturnCreditsPaise = returnRows.reduce(
         (sum, ret) =>
           sum +
           ret.items.reduce(
             (lineSum, item) =>
-              lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
-            0
+              lineSum + BigInt(item.quantity) * toPaise(item.unitPrice) + toPaise(item.taxAmount) - toPaise(item.discount),
+            0n
           ),
-        0
+        0n
       );
 
       const storeCreditPayments = await tx.payment.aggregate({
@@ -134,10 +138,11 @@ export async function createPayment(
         _sum: { amount: true },
       });
 
-      const usedStoreCredit = storeCreditPayments._sum.amount ?? 0;
-      const availableStoreCredit = Math.max(0, totalReturnCredits - usedStoreCredit);
+      const usedStoreCreditPaise = toPaise(storeCreditPayments._sum.amount ?? 0);
+      const availableStoreCreditPaise = totalReturnCreditsPaise - usedStoreCreditPaise;
+      const availableStoreCredit = fromPaise(availableStoreCreditPaise > 0n ? availableStoreCreditPaise : 0n);
 
-      if (data.amount > availableStoreCredit) {
+      if (toPaise(data.amount) > (availableStoreCreditPaise > 0n ? availableStoreCreditPaise : 0n)) {
         throw conflict(
           "The customer does not have enough store credit to cover this payment",
           "INSUFFICIENT_STORE_CREDIT",
@@ -192,16 +197,18 @@ export async function createPayment(
         );
       }
 
-      const remaining = sale.totalAmount - sale.amountPaid;
+      const remainingPaise = toPaise(sale.totalAmount) - toPaise(sale.amountPaid);
+      const remaining = fromPaise(remainingPaise);
+      const maximumPaidPaise = toPaise(sale.totalAmount) - toPaise(data.amount);
 
       const claimed = await tx.sale.updateMany({
         where: {
           id: sale.id,
           organizationId,
           deletedAt: null,
-          amountPaid: { lte: sale.totalAmount - data.amount },
+          amountPaid: { lte: paiseToDecimal(maximumPaidPaise) },
         },
-        data: { amountPaid: { increment: data.amount } },
+        data: { amountPaid: { increment: paiseToDecimal(toPaise(data.amount)) } },
       });
 
       if (claimed.count === 0) {
@@ -215,11 +222,11 @@ export async function createPayment(
 
     return tx.payment.create({
       data: {
-        paymentCode: data.paymentCode,
+        paymentCode,
         organizationId,
         customerId: data.customerId,
         saleId: data.saleId ?? null,
-        amount: data.amount,
+        amount: paiseToDecimal(toPaise(data.amount)),
         method: data.method,
         reference: data.reference,
         note: data.note,

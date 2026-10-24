@@ -25,8 +25,8 @@ import {
 import { api, failureMessage, fetcher } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
-import { generateCode } from "../lib/code";
 import { PageHead } from "../components/list/PageHead";
+import { LoadErrorState } from "../components/list/LoadErrorState";
 import { StatTileRow } from "../components/list/StatTileRow";
 import { PaymentMethods, type PaymentMethodValue } from "@dms/shared";
 
@@ -63,7 +63,6 @@ interface SaleOption {
 
 /** The wire body for POST /payments; optional fields are only sent when set. */
 interface PaymentBody {
-  paymentCode: string;
   customerId: string;
   saleId?: string;
   amount: number;
@@ -104,7 +103,7 @@ export default function PaymentsPage() {
   const [confirmTarget, setConfirmTarget] = useState<PaymentRow | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/payments?page=${page}&pageSize=${pageSize}${deletedView ? "&deleted=true" : ""}`,
     fetcher
   );
@@ -148,7 +147,6 @@ export default function PaymentsPage() {
 
     try {
       const payload: PaymentBody = {
-        paymentCode: generateCode("PMT"),
         customerId: draft.customerId,
         amount: amountNumber,
         method: draft.method,
@@ -301,6 +299,8 @@ export default function PaymentsPage() {
               <Skeleton className="h-10 w-full rounded-lg" />
               <Skeleton className="h-10 w-full rounded-lg" />
             </div>
+          ) : error && rows.length === 0 ? (
+            <LoadErrorState error={error} onRetry={() => void mutate()} />
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-14 h-14 rounded-lg bg-muted/40 flex items-center justify-center mb-4">
@@ -317,6 +317,9 @@ export default function PaymentsPage() {
             </div>
           ) : (
             <>
+              {error ? (
+                <LoadErrorState error={error} onRetry={() => void mutate()} compact />
+              ) : null}
               <Table className="data-table">
               <TableHeader className="[&_tr]:border-0">
                 <TableRow>

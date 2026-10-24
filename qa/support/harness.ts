@@ -80,7 +80,7 @@ export const ok = async (
 const headers = (t: Caller, extra?: Record<string, string>) => ({
   [ORGANIZATION_HEADER]: t.organizationId,
   [USER_HEADER]: t.userId,
-  ...(extra ?? {}),
+  ...extra,
 });
 
 export const api = {

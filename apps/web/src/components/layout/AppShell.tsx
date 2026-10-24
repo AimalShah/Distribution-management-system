@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import useSWR from "swr";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { AppSidebar } from "./AppSidebar";
 import { Topbar } from "./Topbar";
@@ -9,9 +9,9 @@ import { initialNotifications, type NotificationItem } from "../../data/mockData
 import { cn } from "@dms/ui";
 
 export function AppShell() {
-  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       return localStorage.getItem("dms-theme") === "dark";
@@ -41,6 +41,7 @@ export function AppShell() {
       setNotifications((prev) => {
         const existingIds = new Set(prev.map((n) => n.id));
         const toAdd = realAlerts.filter((a) => !existingIds.has(a.id));
+
         return toAdd.length > 0 ? [...toAdd, ...prev] : prev;
       });
     }
@@ -140,11 +141,10 @@ export function AppShell() {
 
         {/* Footer */}
         <footer className="border-t border-stone-200 py-3 px-6 text-center text-xs text-stone-400">
-          DistroManager &copy; 2026
+          AM-Enterprise &copy; 2026
         </footer>
       </div>
 
-      <Toaster position="top-right" richColors />
     </div>
   );
 }

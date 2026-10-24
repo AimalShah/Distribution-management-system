@@ -4,6 +4,7 @@ import {
   SaleUpdateSchema,
   paginationQuerySchema,
   saleListQuerySchema,
+  normalizeDecimalValues,
 } from "@dms/shared";
 import { asyncHandler } from "../http";
 import { forbidden } from "../http/errors";
@@ -23,7 +24,7 @@ import { checkPermission } from "../services/rbac";
 
 import { requireUserId } from "../middleware/auth-context";
 
-import { renderSaleInvoiceHtml } from "../services/sale-invoice-template";
+import { renderSaleInvoiceHtml, type SaleInvoiceRenderData } from "../services/sale-invoice-template";
 import { generateSalePdf } from "../services/sale-pdf";
 import { getCompanySettings } from "../services/settings";
 
@@ -83,7 +84,7 @@ saleRouter.get(
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
 
-    const html = renderSaleInvoiceHtml(await withCompany(sale, req.auth.organizationId));
+    const html = renderSaleInvoiceHtml(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
     res.type("html").send(html);
   })
 );
@@ -93,7 +94,7 @@ saleRouter.get(
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
 
-    const pdf = await generateSalePdf(await withCompany(sale, req.auth.organizationId));
+    const pdf = await generateSalePdf(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
     res
       .type("pdf")
       .set("Content-Disposition", `inline; filename="invoice-${sale.saleCode}.pdf"`)
@@ -107,7 +108,7 @@ saleRouter.get(
     const sale = await getSaleInvoiceData(req.params.id, req.auth.organizationId);
 
     if (req.accepts("html") && !req.accepts("json")) {
-      const html = renderSaleInvoiceHtml(await withCompany(sale, req.auth.organizationId));
+      const html = renderSaleInvoiceHtml(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
 
       return res.type("html").send(html);
     }

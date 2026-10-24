@@ -122,6 +122,26 @@ export const GATE: readonly GateEntry[] = [
     status: "gated",
   },
   {
+    dir: "13-invenza-ui-dashboard",
+    status: "gated",
+  },
+  {
+    dir: "14-soft-delete-restore",
+    status: "gated",
+  },
+  {
+    dir: "15-payments-invoice-lifecycle",
+    status: "gated",
+  },
+  {
+    dir: "16-customer-ledger-whatsapp",
+    status: "gated",
+  },
+  {
+    dir: "17-confirmation-dialogs",
+    status: "gated",
+  },
+  {
     dir: "04-react-web-app",
     status: "pending",
     reason:

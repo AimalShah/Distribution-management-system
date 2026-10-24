@@ -16,6 +16,7 @@ const { models, transaction } = vi.hoisted(() => {
       findMany: vi.fn(),
       count: vi.fn(),
       create: vi.fn(),
+      upsert: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
       // Stands in for the field reference the service compares `quantityOnHand`
@@ -126,6 +127,7 @@ beforeEach(() => {
   models.inventory.findMany.mockResolvedValue([inventoryFixture()]);
   models.inventory.count.mockResolvedValue(1);
   models.inventory.create.mockResolvedValue(inventoryFixture());
+  models.inventory.upsert.mockResolvedValue(inventoryFixture({ quantityOnHand: 60 }));
   models.inventory.update.mockResolvedValue(inventoryFixture());
   // The guarded decrement claimed the units by default.
   models.inventory.updateMany.mockResolvedValue({ count: 1 });
@@ -815,7 +817,12 @@ describe("POST /api/inventory/bulk-import", () => {
     expect(res.body.success).toBe(1);
     expect(res.body.created).toBe(1);
     expect(res.body.errors).toHaveLength(0);
-    expect(models.inventory.create).toHaveBeenCalled();
+    expect(models.inventory.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { productId: "prod_1" },
+        create: expect.objectContaining({ quantityOnHand: 50, organizationId: ORG }),
+      })
+    );
   });
 
   it("updates existing inventory record if already present", async () => {

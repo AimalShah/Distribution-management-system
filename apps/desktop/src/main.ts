@@ -22,6 +22,14 @@ function createWindow() {
   } else {
     const webDistPath = path.join(__dirname, "../../web/dist");
     mainWindow.loadFile(path.join(webDistPath, "index.html"));
+
+    // P2-12: Background update check in production builds
+    try {
+      const updater = require("electron-updater");
+      updater.autoUpdater?.checkForUpdatesAndNotify?.();
+    } catch {
+      // Updater package optional during local packaging
+    }
   }
 
   mainWindow.on("closed", () => {

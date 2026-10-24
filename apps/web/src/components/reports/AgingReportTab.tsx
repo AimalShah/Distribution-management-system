@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { AlertCircle, Clock, DollarSign, AlertTriangle } from "lucide-react";
 import { fetcher } from "../../lib/api";
+import { LoadErrorState } from "../list/LoadErrorState";
 import { formatDate, formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -86,7 +87,7 @@ export interface AgingReportResponse {
 }
 
 export function AgingReportTab({ queryString }: AgingReportTabProps) {
-  const { data, isLoading } = useSWR<AgingReportResponse>(
+  const { data, error, isLoading, mutate } = useSWR<AgingReportResponse>(
     `/reports/sales/aging?${queryString}`,
     fetcher
   );
@@ -128,8 +129,12 @@ export function AgingReportTab({ queryString }: AgingReportTabProps) {
     [data, buckets]
   );
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return <ReportTabsSkeleton />;
+  }
+
+  if (error && !data) {
+    return <LoadErrorState error={error} onRetry={() => void mutate()} />;
   }
 
   const byCustomer = data?.byCustomer ?? [];
@@ -137,6 +142,7 @@ export function AgingReportTab({ queryString }: AgingReportTabProps) {
 
   return (
     <div className="space-y-6">
+      {error ? <LoadErrorState error={error} onRetry={() => void mutate()} compact /> : null}
       {/* KPI Cards */}
       <KpiCardGrid cards={cards} />
 

@@ -1,5 +1,5 @@
 import prisma from "@dms/db";
-import type { PurchaseReportQuery } from "@dms/shared";
+import { toMoneyNumber, type PurchaseReportQuery } from "@dms/shared";
 import {
   productScope,
   purchaseItemScope,
@@ -86,18 +86,19 @@ export async function getBasicPurchaseReport(
       // the day back out rather than shifting it, and a "daily total" bucket is
       // the day the entry was made on.
       const day = purchase.purchaseDate.toISOString().slice(0, 10);
-      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + purchase.totalAmount);
+      const purchaseAmount = toMoneyNumber(purchase.totalAmount);
+      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + purchaseAmount);
 
       const status = purchase.status || "Unspecified";
       const bucket = byStatus.get(status) ?? { orders: 0, totalAmount: 0 };
       bucket.orders += 1;
-      bucket.totalAmount += purchase.totalAmount;
+      bucket.totalAmount += purchaseAmount;
       byStatus.set(status, bucket);
     }
 
     return {
       totalPurchaseAmount: purchases.reduce(
-        (sum, p) => sum + p.totalAmount,
+        (sum, p) => sum + toMoneyNumber(p.totalAmount),
         0
       ),
       totalOrders: purchases.length,
@@ -137,7 +138,7 @@ export async function getBasicPurchaseReport(
 export async function getPurchaseBySupplier(
   organizationId: string,
   query: PurchaseReportQuery
-) {
+): Promise<unknown> {
   const cacheKey = buildCacheKey(
     "reports:purchase",
     organizationId,
@@ -254,8 +255,8 @@ export async function getPurchaseByProduct(
           productCode: product.productCode,
           unit: product.unit,
           quantity: group._sum.quantity ?? 0,
-          totalCost: group._sum.totalCost ?? 0,
-          averageUnitCost: lineCount > 0 ? costSum / lineCount : 0,
+          totalCost: toMoneyNumber(group._sum.totalCost ?? 0),
+          averageUnitCost: lineCount > 0 ? toMoneyNumber(costSum) / lineCount : 0,
         },
       ];
     });
@@ -341,7 +342,7 @@ export async function getPurchaseByBrand(
 
       existing.productCount += 1;
       existing.quantity += group._sum.quantity ?? 0;
-      existing.totalCost += group._sum.totalCost ?? 0;
+      existing.totalCost += toMoneyNumber(group._sum.totalCost ?? 0);
       existing.lineItems += group._count._all;
       brandMap.set(bId, existing);
     }
@@ -354,7 +355,7 @@ export async function getPurchaseByBrand(
 export async function getFullPurchaseReport(
   organizationId: string,
   query: PurchaseReportQuery
-) {
+): Promise<unknown> {
   const [basic, bySupplier, byProduct, byBrand] = await Promise.all([
     getBasicPurchaseReport(organizationId, query),
     getPurchaseBySupplier(organizationId, query),

@@ -5,6 +5,7 @@ import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/au
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    documentSequence: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     member: { findFirst: async () => ({ role: "owner" }) },
     payment: {
       findMany: vi.fn(),
@@ -191,11 +192,19 @@ describe("POST /api/payments", () => {
     const res = await request(app).post("/api/payments").set(auth()).send(validBody);
 
     expect(res.status).toBe(201);
-    expect(res.body.paymentCode).toBe("PMT-001");
+    expect(models.documentSequence.upsert).toHaveBeenCalledWith({
+      where: { organizationId_type: { organizationId: ORG, type: "payment" } },
+      create: { organizationId: ORG, type: "payment", lastNumber: 1 },
+      update: { lastNumber: { increment: 1 } },
+      select: { lastNumber: true },
+    })
+    expect(models.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ paymentCode: "PMT-00001" }) })
+    );
     expect(models.sale.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ id: "sal_1", organizationId: ORG }),
-        data: { amountPaid: { increment: 25 } },
+        data: { amountPaid: { increment: "25.00" } },
       })
     );
     expect(models.payment.create).toHaveBeenCalledWith(
@@ -204,7 +213,7 @@ describe("POST /api/payments", () => {
           organizationId: ORG,
           customerId: "cus_1",
           saleId: "sal_1",
-          amount: 25,
+          amount: "25.00",
           userId: USER,
         }),
       })
@@ -225,7 +234,7 @@ describe("POST /api/payments", () => {
     expect(res.status).toBe(201);
     expect(models.sale.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ amountPaid: { lte: 60 } }),
+        where: expect.objectContaining({ amountPaid: { lte: "60.00" } }),
       })
     );
   });
@@ -302,14 +311,14 @@ describe("POST /api/payments", () => {
     expect(res.status).toBe(201);
     expect(models.sale.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { amountPaid: { increment: 30 } },
+        data: { amountPaid: { increment: "30.00" } },
       })
     );
     expect(models.payment.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           method: "Store Credit",
-          amount: 30,
+          amount: "30.00",
         }),
       })
     );

@@ -1,6 +1,7 @@
 import prisma from "@dms/db";
 import type { Prisma } from "@dms/db";
 import type { CustomerInput, CustomerLedgerQuery, CustomerUpdateInput } from "@dms/shared";
+import { toMoneyNumber } from "@dms/shared";
 import { conflict, notFound } from "../http";
 import {
   beforeWindow,
@@ -226,15 +227,16 @@ export async function getCustomerLedger({
 
   const windowBound = statementWindow(from, to);
 
-  type SaleLine = { saleCode: string; saleDate: Date; totalAmount: number; dueDate: Date | null };
+  type DecimalAmount = number | { toString(): string };
+  type SaleLine = { saleCode: string; saleDate: Date; totalAmount: DecimalAmount; dueDate: Date | null };
 
   type CreditLine = {
     returnCode: string;
     returnDate: Date;
-    items: { quantity: number; unitPrice: number; taxAmount: number; discount: number }[];
+    items: { quantity: number; unitPrice: DecimalAmount; taxAmount: DecimalAmount; discount: DecimalAmount }[];
   };
 
-  type PaymentLine = { paymentCode: string; paidAt: Date; amount: number; method: string };
+  type PaymentLine = { paymentCode: string; paidAt: Date; amount: DecimalAmount; method: string };
 
   const saleSelect = { saleCode: true, saleDate: true, totalAmount: true, dueDate: true } as const;
 
@@ -294,13 +296,13 @@ export async function getCustomerLedger({
   // line value as invoiced, not a re-derived figure, so a statement's credit
   // always matches the credit note they were given.
   const returnCredit = (
-    lines: { quantity: number; unitPrice: number; taxAmount: number; discount: number }[]
+    lines: { quantity: number; unitPrice: DecimalAmount; taxAmount: DecimalAmount; discount: DecimalAmount }[]
   ) =>
-    lines.reduce((sum, line) => sum + line.quantity * line.unitPrice + line.taxAmount - line.discount, 0);
+    lines.reduce((sum, line) => sum + line.quantity * toMoneyNumber(line.unitPrice) + toMoneyNumber(line.taxAmount) - toMoneyNumber(line.discount), 0);
 
-  const sumDebits = (rows: SaleLine[]) => rows.reduce((s, r) => s + r.totalAmount, 0);
+  const sumDebits = (rows: SaleLine[]) => rows.reduce((s, r) => s + toMoneyNumber(r.totalAmount), 0);
   const sumCredits = (rows: CreditLine[]) => rows.reduce((s, r) => s + returnCredit(r.items), 0);
-  const sumPayments = (rows: PaymentLine[]) => rows.reduce((s, r) => s + r.amount, 0);
+  const sumPayments = (rows: PaymentLine[]) => rows.reduce((s, r) => s + toMoneyNumber(r.amount), 0);
 
   const openingBalance =
     sumDebits(openingSales) - sumCredits(openingCredits) - sumPayments(openingPayments);
@@ -315,7 +317,7 @@ export async function getCustomerLedger({
       type: "invoice" as const,
       reference: s.saleCode,
       description: `Invoice ${s.saleCode}`,
-      debit: s.totalAmount,
+      debit: toMoneyNumber(s.totalAmount),
       credit: 0,
       dueDate: s.dueDate ? s.dueDate.toISOString() : null,
     })),
@@ -333,7 +335,7 @@ export async function getCustomerLedger({
       reference: p.paymentCode,
       description: `Payment (${p.method})`,
       debit: 0,
-      credit: p.amount,
+      credit: toMoneyNumber(p.amount),
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || typeRank[a.type] - typeRank[b.type]);
 

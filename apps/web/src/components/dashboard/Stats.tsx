@@ -10,10 +10,6 @@ import {
   Users,
 } from "lucide-react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Skeleton,
 } from "@dms/ui";
 import type { PurchaseBasicReport, SalesBasicReport } from "../../lib/dashboard";

@@ -1,4 +1,5 @@
 import prisma from "@dms/db";
+import { toMoneyNumber } from "@dms/shared";
 import type { Prisma } from "@dms/db";
 import type { InventoryReportQuery } from "@dms/shared";
 import {
@@ -183,8 +184,8 @@ export async function getStockValuationReport(
         productCode: inv.product.productCode,
         unit: inv.product.unit,
         quantityOnHand: inv.quantityOnHand,
-        averageUnitCost: unitCost,
-        totalValue: inv.quantityOnHand * unitCost,
+        averageUnitCost: toMoneyNumber(unitCost),
+        totalValue: inv.quantityOnHand * toMoneyNumber(unitCost),
       };
     });
 
@@ -341,8 +342,8 @@ export async function getLowStockReport(
         reorderLevel: inv.reorderLevel,
         maxStockLevel: inv.maxStockLevel,
         shortfall,
-        unitCost: inv.product.unitCost,
-        estimatedRestockCost: shortfall * inv.product.unitCost,
+        unitCost: toMoneyNumber(inv.product.unitCost ?? 0),
+        estimatedRestockCost: shortfall * toMoneyNumber(inv.product.unitCost ?? 0),
         supplier: lastPurchase?.purchase.supplier ?? null,
         lastPurchaseDate: lastPurchase?.purchase.purchaseDate ?? null,
       };

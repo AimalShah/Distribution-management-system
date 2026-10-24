@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import {
   LayoutDashboard,
   ReceiptText,
@@ -117,13 +118,13 @@ export function AppSidebar({
         onClick={() => navigate("/")}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-stone-900 font-bold text-sm shrink-0">
-            D
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-stone-900 font-bold text-xs shrink-0">
+            AM
           </div>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-bold tracking-tight text-stone-900 leading-tight">
-                DistroManager
+                AM-Enterprise
               </span>
             </div>
           )}
@@ -168,19 +169,26 @@ export function AppSidebar({
         ))}
       </nav>
 
-      {/* User */}
-      <div className={`p-2 border-t border-stone-200 flex items-center gap-3 ${
-        isCollapsed ? "justify-center" : ""
-      }`}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-stone-900 font-bold text-xs shrink-0">
-          {initials}
+      {/* Language Toggle & User */}
+      <div className="p-2 border-t border-stone-200 space-y-2">
+        <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between px-1"}`}>
+          {!isCollapsed && <span className="text-[11px] text-stone-500 font-medium">Language</span>}
+          <LanguageSwitcher />
         </div>
-        {!isCollapsed && (
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold text-stone-900 truncate">{displayName}</span>
-            <span className="text-[11px] text-stone-400 truncate">Administrator</span>
+
+        <div className={`flex items-center gap-3 pt-1 ${
+          isCollapsed ? "justify-center" : ""
+        }`}>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-stone-900 font-bold text-xs shrink-0">
+            {initials}
           </div>
-        )}
+          {!isCollapsed && (
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold text-stone-900 truncate">{displayName}</span>
+              <span className="text-[11px] text-stone-400 truncate">Administrator</span>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );

@@ -6,6 +6,7 @@ import type {
 } from "@dms/shared";
 import { conflict, forbidden, notFound } from "../http";
 import { isElevated, isOwner, MEMBER_ROLES } from "../roles";
+import { checkPermission } from "./rbac";
 
 /**
  * The transaction-scoped client `prisma.$transaction` hands to its callback.
@@ -31,7 +32,7 @@ const countOwners = (tx: TransactionTx, organizationId: string) =>
 export async function findMembership(userId: string, organizationId: string) {
   return prisma.member.findFirst({
     where: { userId, organizationId },
-    select: { id: true, userId: true, organizationId: true, role: true },
+    select: { id: true, userId: true, organizationId: true, role: true, roleId: true },
   });
 }
 
@@ -92,7 +93,7 @@ async function requireMember(userId: string, organizationId: string) {
  * a tenant with no owner is a tenant nobody can add an owner back to, because
  * every route that could is behind this same guard.
  */
-async function requireOwnerForRoleChange(
+export async function requireOwnerForRoleChange(
   callerMembership: { role: string },
   currentRole: string,
   nextRole: string
@@ -128,7 +129,12 @@ async function requireOwnerForRoleChange(
  * table that does not exist yet. Full permission modelling is Checkpoint 6; this
  * is the floor.
  */
-async function requireElevatedMember(userId: string, organizationId: string) {
+/**
+ * Consumed beyond member management too: P0-5's `user-provisioning` service
+ * creates staff accounts and deactivates members, and both writes are behind
+ * the same elevated guard the member routes answer behind.
+ */
+export async function requireElevatedMember(userId: string, organizationId: string) {
   const membership = await findMembership(userId, organizationId);
 
   if (!membership) {
@@ -140,14 +146,25 @@ async function requireElevatedMember(userId: string, organizationId: string) {
     );
   }
 
-  if (!isElevated(membership.role)) {
-    throw forbidden(
-      "Only an owner or admin can manage members of this organization",
-      "INSUFFICIENT_ROLE"
-    );
+  if (isElevated(membership.role)) {
+    return membership;
   }
 
-  return membership;
+  // P2-11: Custom roles with user-management permissions can manage members.
+  if (membership.roleId) {
+    const hasUserPerm =
+      (await checkPermission(userId, organizationId, "users", "create")) ||
+      (await checkPermission(userId, organizationId, "users", "update"));
+
+    if (hasUserPerm) {
+      return membership;
+    }
+  }
+
+  throw forbidden(
+    "Only an owner or admin can manage members of this organization",
+    "INSUFFICIENT_ROLE"
+  );
 }
 
 /**
@@ -170,7 +187,17 @@ export async function listMembers(
       role: true,
       createdAt: true,
       user: {
-        select: { id: true, name: true, email: true, image: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          // P0-5: the table row needs these two to render the deactivation
+          // state and offer the right action. `isOwner` and `role` stay out:
+          // authority is carried by the membership row, not the user row.
+          banned: true,
+          mustChangePassword: true,
+        },
       },
     },
     orderBy: { createdAt: "asc" },

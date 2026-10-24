@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { Tag, TrendingUp, ShoppingBag, DollarSign } from "lucide-react";
 import { fetcher } from "../../lib/api";
+import { LoadErrorState } from "../list/LoadErrorState";
 import { formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -33,17 +34,20 @@ export interface BrandPurchaseItem {
 }
 
 export function BrandReportTab({ queryString }: BrandReportTabProps) {
-  const { data: salesBrands = [], isLoading: salesLoading } = useSWR<BrandSalesItem[]>(
+  const { data: salesData, error: salesError, isLoading: salesLoading, mutate: mutateSales } = useSWR<BrandSalesItem[]>(
     `/reports/sales/by-brand?${queryString}`,
     fetcher
   );
 
-  const { data: purchaseBrands = [], isLoading: purchaseLoading } = useSWR<BrandPurchaseItem[]>(
+  const { data: purchaseData, error: purchaseError, isLoading: purchaseLoading, mutate: mutatePurchases } = useSWR<BrandPurchaseItem[]>(
     `/reports/purchase/by-brand?${queryString}`,
     fetcher
   );
 
   const isLoading = salesLoading || purchaseLoading;
+  const salesBrands = salesData ?? [];
+  const purchaseBrands = purchaseData ?? [];
+  const error = salesError ?? purchaseError;
 
   const totalSalesRevenue = useMemo(
     () => salesBrands.reduce((sum, b) => sum + (b.totalAmount || 0), 0),
@@ -93,12 +97,34 @@ export function BrandReportTab({ queryString }: BrandReportTabProps) {
     [allBrandIds.size, totalSalesRevenue, totalPurchaseSpend]
   );
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return <ReportTabsSkeleton />;
+  }
+
+  if (error && (!salesData || !purchaseData)) {
+    return (
+      <LoadErrorState
+        error={error}
+        onRetry={() => {
+          void mutateSales();
+          void mutatePurchases();
+        }}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
+      {error ? (
+        <LoadErrorState
+          error={error}
+          onRetry={() => {
+            void mutateSales();
+            void mutatePurchases();
+          }}
+          compact
+        />
+      ) : null}
       {/* Brand KPIs */}
       <KpiCardGrid cards={cards} />
 

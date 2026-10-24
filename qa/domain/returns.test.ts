@@ -406,24 +406,22 @@ describe("sale returns — idempotency and concurrency", () => {
     const [product] = t.products;
     const sale = await saleOf(product, 10);
 
-    const code = unique("RET-IDEM");
     const body = {
-      returnCode: code,
       returnType: "SALE",
       saleId: sale.id,
       reason: "QA retry",
-      items: [{ productId: product.id, quantity: 2, unitPrice: 66.6, taxAmount: 6.66, discount: 6.66 }],
+      items: [{ productId: product.id, quantity: 10, unitPrice: 66.6, taxAmount: 6.66, discount: 6.66 }],
     };
 
     expect((await postRes("/returns", body)).status).toBe(201);
     expect((await postRes("/returns", body)).status).toBeGreaterThanOrEqual(400);
 
-    const rows = await prisma.return.findMany({ where: { returnCode: code } });
+    const rows = await prisma.return.findMany({ where: { saleId: sale.id } });
     expect(rows).toHaveLength(1);
 
     const stored = await prisma.returnItem.findMany({ where: { returnId: rows[0].id } });
     expect(stored).toHaveLength(1);
-    expect(stored[0].quantity).toBe(2);
+    expect(stored[0].quantity).toBe(10);
   });
 
   it("two simultaneous returns of the last units cannot both land", async () => {

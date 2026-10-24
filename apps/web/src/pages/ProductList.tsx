@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Download,
   Edit,
   Filter,
   Layers,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { invalidateDomains } from "../lib/mutation";
+import { exportProductsCSV } from "../lib/csv";
 import {
   Badge,
   Button,
@@ -88,7 +90,7 @@ export default function ProductList() {
     return params.toString();
   }, [page, pageSize, search, statusFilter, brandFilter, categoryFilter]);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/products?${queryString}`,
     fetcher
   );
@@ -292,6 +294,17 @@ export default function ProductList() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => exportProductsCSV(data?.data || [])}
+              disabled={isLoading || !data?.data?.length}
+              className="h-8"
+              data-testid="btn-export-products-csv"
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => mutate()}
               disabled={isLoading}
               className="h-8"
@@ -338,6 +351,8 @@ export default function ProductList() {
       <ListTablePanel
         isLoading={isLoading}
         isEmpty={productList.length === 0}
+        error={error}
+        onRetry={() => void mutate()}
         search={{
           value: search,
           onChange: (value) => {

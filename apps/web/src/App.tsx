@@ -1,10 +1,15 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { Skeleton } from "@dms/ui";
+import { Toaster } from "sonner";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const AcceptInvitationPage = lazy(() => import("./pages/AcceptInvitationPage"));
+const ChangePasswordPage = lazy(() => import("./pages/ChangePasswordPage"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ProductList = lazy(() => import("./pages/ProductList"));
 const ProductNew = lazy(() => import("./pages/ProductNew"));
@@ -37,7 +42,26 @@ function PageFallback() {
 }
 
 export function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const redirectToLogin = () => {
+      if (location.pathname === "/login") return;
+      navigate("/login", {
+        replace: true,
+        state: { from: `${location.pathname}${location.search}` },
+      });
+    };
+
+    window.addEventListener("dms:unauthorized", redirectToLogin);
+
+    return () => window.removeEventListener("dms:unauthorized", redirectToLogin);
+  }, [location.pathname, location.search, navigate]);
+
   return (
+    <>
+    <Toaster position="top-right" richColors />
     <Routes>
       {/* Outside the guard on purpose: it is the one page reachable signed out. */}
       <Route
@@ -45,6 +69,38 @@ export function App() {
         element={
           <Suspense fallback={<PageFallback />}>
             <LoginPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <ForgotPasswordPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <ResetPasswordPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/accept-invitation/:id"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <AcceptInvitationPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/organization/accept-invitation"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <AcceptInvitationPage />
           </Suspense>
         }
       />
@@ -56,6 +112,18 @@ export function App() {
           element={
             <Suspense fallback={<PageFallback />}>
               <OnboardingPage />
+            </Suspense>
+          }
+        />
+
+        {/* P0-5: a provisioned staff member lands here before anything else.
+            Outside the app shell on purpose -- it is the one authenticated
+            page used while every tenant request is refused. */}
+        <Route
+          path="/change-password"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <ChangePasswordPage />
             </Suspense>
           }
         />
@@ -239,5 +307,6 @@ export function App() {
         </Route>
       </Route>
     </Routes>
+    </>
   );
 }

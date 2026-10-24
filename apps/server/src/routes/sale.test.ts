@@ -5,6 +5,7 @@ import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/au
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    documentSequence: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     member: { findFirst: vi.fn(async () => ({ role: "owner" })) },
     sale: {
       findMany: vi.fn(),
@@ -279,7 +280,7 @@ describe("POST /api/sales", () => {
     expect(models.sale.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          saleCode: "SAL-001",
+          saleCode: "SALE-2026-00001",
           organizationId: ORG,
           totalAmount: 50,
           items: {
@@ -316,7 +317,7 @@ describe("POST /api/sales", () => {
         quantity: 2,
         previousQty: 10,
         newQty: 8,
-        reference: "SAL-001",
+        reference: "SALE-2026-00001",
       }),
     });
   });

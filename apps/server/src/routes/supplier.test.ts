@@ -18,7 +18,7 @@ const { supplierModel, purchaseModel } = vi.hoisted(() => ({
 }));
 
 vi.mock("@dms/db", () => ({
-  default: { member: { findFirst: async () => ({ role: "owner" }) }, supplier: supplierModel, purchase: purchaseModel },
+  default: { $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]), member: { findFirst: async () => ({ role: "owner" }) }, supplier: supplierModel, purchase: purchaseModel },
   prisma: { member: { findFirst: async () => ({ role: "owner" }) }, supplier: supplierModel, purchase: purchaseModel },
 }));
 
@@ -87,7 +87,7 @@ describe("organization context", () => {
     const res = await request(app).get("/api/health");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body).toMatchObject({ status: "ok", db: "ok" });
   });
 });
 

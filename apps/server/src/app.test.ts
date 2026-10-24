@@ -1,10 +1,12 @@
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 
+const { queryRaw } = vi.hoisted(() => ({ queryRaw: vi.fn() }));
+
 vi.mock("@dms/db", () => ({
-  default: {},
-  prisma: {},
+  default: { $queryRaw: queryRaw },
+  prisma: { $queryRaw: queryRaw },
 }));
 
 const app = createApp();
@@ -13,12 +15,37 @@ const allowed = "http://localhost:5173";
 
 const hostile = "https://attacker.example";
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  queryRaw.mockResolvedValue([{ result: 1 }]);
+});
+
 describe("CORS", () => {
   it("answers a request from the dev origin", async () => {
-    const res = await request(app).get("/api/health").set("Origin", allowed);
+    const res = await request(app)
+      .get("/api/health")
+      .set("Origin", allowed)
+      .set("X-Request-Id", "health-check-1");
 
     expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: "ok", db: "ok" });
+    expect(res.body.uptimeSeconds).toBeTypeOf("number");
+    expect(res.body.timestamp).toBeDefined();
+    expect(res.body.checks.database.status).toBe("ok");
+    expect(res.body.checks.memory.heapUsedMb).toBeTypeOf("number");
+    expect(res.headers["x-request-id"]).toBe("health-check-1");
     expect(res.headers["access-control-allow-origin"]).toBe(allowed);
+  });
+
+  it("reports the database as down without exposing the database error", async () => {
+    queryRaw.mockRejectedValue(new Error("database secret detail"));
+
+    const res = await request(app).get("/api/health");
+
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ status: "error", db: "down" });
+    expect(res.body.checks.database.status).toBe("down");
+    expect(res.text).not.toContain("database secret detail");
   });
 
   it("withholds the header from an origin that is not on the allowlist", async () => {

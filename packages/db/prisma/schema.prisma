@@ -30,10 +30,18 @@ model User {
 
   returns    Return[]
   payments   Payment[]
+  auditLogs  AuditLog[]
   role       String?
   banned     Boolean?
   banReason  String?
   banExpires DateTime?
+
+  // P0-5 staff provisioning: set by the server when an owner creates a staff
+  // account with a temporary password, cleared only by the server after the
+  // staff's first login replaces that password. It is never client-writable;
+  // the strict middlewares refuse every tenant route while it stands
+  // (PASSWORD_CHANGE_REQUIRED).
+  mustChangePassword Boolean @default(false)
 
   @@unique([email])
   @@map("user")
@@ -111,8 +119,21 @@ model Organization {
   roles       Role[]
   batches     StockBatch[]
   settings    CompanySettings?
+  documentSequences DocumentSequence[]
+  auditLogs   AuditLog[]
 
   @@map("organization")
+}
+
+model DocumentSequence {
+  id             String       @id @default(cuid())
+  organizationId String
+  type           String
+  lastNumber     Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, type])
+  @@map("document_sequences")
 }
 
 /**
@@ -250,7 +271,7 @@ model Customer {
   phone        String?
   address      String?
   city         String?
-  creditLimit  Float?
+  creditLimit  Decimal? @db.Decimal(12, 2)
   // Per-customer override of the Company's default credit term (ADR 0009).
   creditTermDays Int?
   isActive     Boolean      @default(true)
@@ -276,8 +297,8 @@ model Product {
   categoryId  String
   brandId     String
   unit        String // e.g., 'box', 'piece', etc.
-  unitPrice   Float // base/unit price
-  unitCost    Float
+  unitPrice   Decimal @db.Decimal(12, 2) // base/unit price
+  unitCost    Decimal @db.Decimal(12, 2)
   isActive    Boolean  @default(true)
   gstApplicable Boolean @default(true)
   gstRate       Float   @default(0) // GST rate in percentage (e.g., 18 for 18%)
@@ -304,12 +325,12 @@ model Product {
 
 model Purchase {
   id             String         @id @default(cuid())
-  purchaseCode   String         @unique
+  purchaseCode   String
   organizationId String
   supplierId     String
-  totalAmount    Float
-  taxAmount      Float?
-  discount       Float?
+  totalAmount    Decimal  @db.Decimal(12, 2)
+  taxAmount      Decimal? @db.Decimal(12, 2)
+  discount       Decimal? @db.Decimal(12, 2)
   status         String // e.g. 'Pending', 'Completed'
   purchaseDate   DateTime       @default(now())
   deletedAt      DateTime?
@@ -324,6 +345,7 @@ model Purchase {
 
   @@index([organizationId, purchaseDate(sort: Desc)])
   @@index([organizationId, status])
+  @@unique([organizationId, purchaseCode])
   @@map("purchases")
 }
 
@@ -332,12 +354,12 @@ model PurchaseItem {
   purchaseId  String
   productId   String
   quantity    Int
-  unitCost    Float
-  totalCost   Float
+  unitCost    Decimal @db.Decimal(12, 2)
+  totalCost   Decimal @db.Decimal(12, 2)
   batchNumber String?
   expiryDate  DateTime?
   taxPercent  Float?
-  discount    Float?
+  discount    Decimal? @db.Decimal(12, 2)
 
   // Relations
   purchase Purchase     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -351,19 +373,19 @@ model PurchaseItem {
 
 model Sale {
   id             String @id @default(cuid())
-  saleCode       String @unique
+  saleCode       String
   customerId     String
   organizationId String
 
-  totalAmount  Float
-  taxAmount    Float?
-  discount     Float?
+  totalAmount  Decimal  @db.Decimal(12, 2)
+  taxAmount    Decimal? @db.Decimal(12, 2)
+  discount     Decimal? @db.Decimal(12, 2)
   status       String // 'Pending', 'Completed', 'Cancelled'
   invoiceType  String   @default("regular") // "regular" | "tax"
   isInterState Boolean  @default(false)
-  cgstAmount   Float    @default(0)
-  sgstAmount   Float    @default(0)
-  igstAmount   Float    @default(0)
+  cgstAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  sgstAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  igstAmount   Decimal  @default(0) @db.Decimal(12, 2)
   saleDate     DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -375,7 +397,7 @@ model Sale {
   // Sum of the payments allocated to this invoice, maintained inside the same
   // transaction that writes the Payment row, so `amountPaid <= totalAmount` can
   // be guarded with one conditional update instead of a read-then-write.
-  amountPaid Float @default(0)
+  amountPaid Decimal @default(0) @db.Decimal(12, 2)
 
   // What the invoice was before it was cancelled, so un-cancel puts back the
   // status it had rather than guessing between Pending and Completed.
@@ -398,6 +420,7 @@ model Sale {
   @@index([organizationId, saleDate(sort: Desc)])
   @@index([organizationId, status])
   @@index([customerId])
+  @@unique([organizationId, saleCode])
   @@map("sales")
 }
 
@@ -406,18 +429,18 @@ model SaleItem {
   saleId     String
   productId  String
   quantity   Int
-  unitPrice  Float
-  totalPrice Float
+  unitPrice  Decimal @db.Decimal(12, 2)
+  totalPrice Decimal @db.Decimal(12, 2)
   taxPercent Float?
-  discount   Float?
+  discount   Decimal? @db.Decimal(12, 2)
   batchId    String?
 
   cgstRate   Float @default(0)
   sgstRate   Float @default(0)
   igstRate   Float @default(0)
-  cgstAmount Float @default(0)
-  sgstAmount Float @default(0)
-  igstAmount Float @default(0)
+  cgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount Decimal @default(0) @db.Decimal(12, 2)
 
   // Relations
   sale    Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
@@ -526,7 +549,7 @@ enum InventoryMovement {
 
 model Return {
   id             String @id @default(cuid())
-  returnCode     String @unique
+  returnCode     String
   organizationId String
 
   returnType ReturnType
@@ -561,6 +584,7 @@ model Return {
   @@index([organizationId, returnType])
   @@index([saleId])
   @@index([purchaseId])
+  @@unique([organizationId, returnCode])
   @@map("returns")
 }
 
@@ -569,9 +593,9 @@ model ReturnItem {
   returnId  String
   productId String
   quantity  Int
-  taxAmount Float
-  discount  Float
-  unitPrice Float
+  taxAmount Decimal @db.Decimal(12, 2)
+  discount  Decimal @db.Decimal(12, 2)
+  unitPrice Decimal @db.Decimal(12, 2)
   note      String?
   // The condition gate (ADR 0008): a restockable line goes back on the shelf, a
   // damaged one is credited but not put back on hand. `reason` says why *this*
@@ -604,12 +628,12 @@ enum ReturnCondition {
  */
 model Payment {
   id             String  @id @default(cuid())
-  paymentCode    String  @unique
+  paymentCode    String
   organizationId String
   customerId     String
   saleId         String?
 
-  amount   Float
+  amount   Decimal @db.Decimal(12, 2)
   method   String // 'Cash', 'Bank Transfer', 'Mobile Wallet', 'Cheque', 'Other'
   reference String?
   note     String?
@@ -632,6 +656,7 @@ model Payment {
   @@index([organizationId, customerId])
   @@index([customerId])
   @@index([saleId])
+  @@unique([organizationId, paymentCode])
   @@map("payments")
 }
 
@@ -650,7 +675,7 @@ model StockBatch {
   expiryDate        DateTime?
   quantityRemaining Int       @default(0)
   quantityReceived  Int       @default(0)
-  unitCost          Float     @default(0)
+  unitCost          Decimal   @default(0) @db.Decimal(12, 2)
   purchaseItemId    String?
   receivedAt        DateTime  @default(now())
   createdAt         DateTime  @default(now())
@@ -664,4 +689,23 @@ model StockBatch {
   @@unique([productId, batchNumber, organizationId])
   @@index([organizationId, expiryDate])
   @@map("stock_batches")
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  entityType     String
+  entityId       String
+  action         String
+  details        String?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+  @@map("audit_logs")
 }

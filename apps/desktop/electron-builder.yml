@@ -1,5 +1,5 @@
 appId: com.inventioo.dms
-productName: Inventioo DMS
+productName: AM-Enterprise
 directories:
   output: release
   buildResources: build
@@ -30,3 +30,8 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
+publish:
+  provider: github
+  owner: AM-Enterprise
+  repo: Distribution-management-system
+  releaseType: release

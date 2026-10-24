@@ -250,3 +250,161 @@ export function downloadInventoryCSVTemplate(filename = "inventory-bulk-import-t
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Triggers a browser download for any CSV content string.
+ */
+export function downloadCSV(filename: string, content: string): void {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename.endsWith(".csv") ? filename : `${filename}.csv`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Serializes an array of records to a CSV string with escaped fields.
+ */
+export function recordsToCSV(
+  rows: Record<string, unknown>[],
+  columns: { key: string; label: string }[]
+): string {
+  const headerLine = columns.map((col) => `"${col.label.replace(/"/g, '""')}"`).join(",");
+
+  const dataLines = rows.map((row) =>
+    columns
+      .map((col) => {
+        const val = row[col.key];
+
+        if (val === null || val === undefined) return '""';
+
+        const str = String(val).replace(/"/g, '""');
+
+        return `"${str}"`;
+      })
+      .join(",")
+  );
+
+  return [headerLine, ...dataLines].join("\n");
+}
+
+export function exportProductsCSV(products: any[], filename = "products-export.csv"): void {
+  const columns = [
+    { key: "productCode", label: "Product Code" },
+    { key: "name", label: "Product Name" },
+    { key: "brand", label: "Brand" },
+    { key: "category", label: "Category" },
+    { key: "unitPrice", label: "Unit Price (PKR)" },
+    { key: "costPrice", label: "Cost Price (PKR)" },
+    { key: "quantityOnHand", label: "Quantity On Hand" },
+    { key: "reorderLevel", label: "Reorder Level" },
+    { key: "taxPercent", label: "Tax %" },
+  ];
+
+  const rows = (products || []).map((p) => ({
+    productCode: p.productCode ?? "",
+    name: p.name ?? "",
+    brand: p.brand?.name ?? p.brandName ?? "",
+    category: p.category?.name ?? p.categoryName ?? "",
+    unitPrice: p.unitPrice ?? 0,
+    costPrice: p.costPrice ?? 0,
+    quantityOnHand: p.inventory?.quantityOnHand ?? p.quantityOnHand ?? 0,
+    reorderLevel: p.inventory?.reorderLevel ?? p.reorderLevel ?? 0,
+    taxPercent: p.taxPercent ?? 0,
+  }));
+
+  downloadCSV(filename, recordsToCSV(rows, columns));
+}
+
+export function exportCustomersCSV(customers: any[], filename = "customers-export.csv"): void {
+  const columns = [
+    { key: "customerCode", label: "Customer Code" },
+    { key: "name", label: "Customer Name" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "address", label: "Address" },
+    { key: "gstin", label: "GSTIN / NTN" },
+    { key: "creditLimit", label: "Credit Limit (PKR)" },
+    { key: "balance", label: "Outstanding Balance (PKR)" },
+  ];
+
+  const rows = (customers || []).map((c) => ({
+    customerCode: c.customerCode ?? "",
+    name: c.name ?? "",
+    phone: c.phone ?? "",
+    email: c.email ?? "",
+    address: c.address ?? "",
+    gstin: c.gstin ?? "",
+    creditLimit: c.creditLimit ?? 0,
+    balance: c.balance ?? 0,
+  }));
+
+  downloadCSV(filename, recordsToCSV(rows, columns));
+}
+
+export function exportSalesCSV(sales: any[], filename = "sales-invoices-export.csv"): void {
+  const columns = [
+    { key: "saleCode", label: "Invoice Code" },
+    { key: "saleDate", label: "Invoice Date" },
+    { key: "customer", label: "Customer Name" },
+    { key: "status", label: "Status" },
+    { key: "totalAmount", label: "Total Amount (PKR)" },
+    { key: "amountPaid", label: "Amount Paid (PKR)" },
+    { key: "balanceDue", label: "Balance Due (PKR)" },
+  ];
+
+  const rows = (sales || []).map((s) => {
+    const total = Number(s.totalAmount ?? 0);
+    const paid = Number(s.amountPaid ?? 0);
+
+    return {
+      saleCode: s.saleCode ?? "",
+      saleDate: s.saleDate ? new Date(s.saleDate).toLocaleDateString() : "",
+      customer: s.customer?.name ?? s.customerName ?? "",
+      status: s.status ?? "",
+      totalAmount: total,
+      amountPaid: paid,
+      balanceDue: Math.max(0, total - paid),
+    };
+  });
+
+  downloadCSV(filename, recordsToCSV(rows, columns));
+}
+
+export function exportCustomerLedgerCSV(
+  customerName: string,
+  entries: any[],
+  filename?: string
+): void {
+  const columns = [
+    { key: "date", label: "Date" },
+    { key: "type", label: "Type" },
+    { key: "reference", label: "Reference" },
+    { key: "description", label: "Description" },
+    { key: "debit", label: "Debit (PKR)" },
+    { key: "credit", label: "Credit (PKR)" },
+    { key: "balance", label: "Running Balance (PKR)" },
+  ];
+
+  const rows = (entries || []).map((e) => ({
+    date: e.date ? new Date(e.date).toLocaleDateString() : "",
+    type: e.type ?? "",
+    reference: e.reference ?? "",
+    description: e.description ?? e.reason ?? "",
+    debit: e.debit ?? (e.amount > 0 && e.direction === "debit" ? e.amount : ""),
+    credit: e.credit ?? (e.amount > 0 && e.direction === "credit" ? e.amount : ""),
+    balance: e.runningBalance ?? e.balance ?? "",
+  }));
+
+  const name = customerName.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+  downloadCSV(filename || `ledger-${name}.csv`, recordsToCSV(rows, columns));
+}

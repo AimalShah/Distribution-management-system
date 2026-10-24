@@ -18,6 +18,7 @@ import {
 import { fetcher } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
+import { exportCustomerLedgerCSV } from "../lib/csv";
 import { ListPageHeader } from "../components/list/ListPageHeader";
 import { StatTileRow } from "../components/list/StatTileRow";
 
@@ -229,6 +230,17 @@ export default function CustomerLedgerPage() {
             >
               <RefreshCw className="size-3.5 mr-2" />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportCustomerLedgerCSV(ledger?.customer?.name || "customer", ledger?.entries || [])}
+              disabled={isLoading || !ledger || ledger.entries.length === 0}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+              data-testid="btn-export-ledger-csv"
+            >
+              <Download className="size-3.5 mr-2" />
+              Export CSV
             </Button>
             <Button
               variant="outline"

@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { fetcher } from "../../lib/api";
+import { LoadErrorState } from "../list/LoadErrorState";
 import { formatDate, formatDay, formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -34,7 +35,7 @@ const tooltipStyle = {
 } as const;
 
 export function SalesReportTab({ queryString }: SalesReportTabProps) {
-  const { data, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/reports/sales/full?${queryString}`,
     fetcher
   );
@@ -74,12 +75,17 @@ export function SalesReportTab({ queryString }: SalesReportTabProps) {
     [basic]
   );
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return <ReportTabsSkeleton />;
+  }
+
+  if (error && !data) {
+    return <LoadErrorState error={error} onRetry={() => void mutate()} />;
   }
 
   return (
     <div className="space-y-6">
+      {error ? <LoadErrorState error={error} onRetry={() => void mutate()} compact /> : null}
       {/* KPI Cards */}
       <KpiCardGrid cards={cards} />
 

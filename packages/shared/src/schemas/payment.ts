@@ -25,7 +25,7 @@ export const PaymentMethods = [
  * be named, because the ledger is keyed by customer, not by invoice.
  */
 export const PaymentCreateSchema = z.object({
-  paymentCode: z.string().trim().min(3, "Payment code must be at least 3 characters"),
+  paymentCode: z.string().trim().optional(),
   customerId: z.string().trim().min(1, "Please select a customer"),
   saleId: z.string().trim().min(1, "Please select an invoice").optional(),
   amount: z

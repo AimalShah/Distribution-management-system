@@ -28,7 +28,6 @@ import {
   Separator,
 } from "@dms/ui";
 import { api, failureMessage, fetcher } from "../../lib/api";
-import { generateCode } from "../../lib/code";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
 
@@ -76,7 +75,7 @@ export function PurchaseForm({
     resolver: zodResolver(PurchaseFormSchema),
     defaultValues: {
       supplierId: initialData?.supplierId ?? "",
-      purchaseCode: initialData?.purchaseCode ?? generateCode("PO"),
+      purchaseCode: initialData?.purchaseCode ?? "",
       purchaseDate: initialData?.purchaseDate
         ? new Date(initialData.purchaseDate).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
@@ -178,7 +177,6 @@ export function PurchaseForm({
       if (isEditing && purchaseId) {
         const updatePayload = {
           supplierId: values.supplierId,
-          purchaseCode: values.purchaseCode,
           purchaseDate: values.purchaseDate,
           status: values.status,
           discount: Number(values.discount) || 0,
@@ -190,7 +188,6 @@ export function PurchaseForm({
       } else {
         const createPayload = {
           supplierId: values.supplierId,
-          purchaseCode: values.purchaseCode,
           purchaseDate: values.purchaseDate,
           status: values.status,
           discount: Number(values.discount) || 0,
@@ -233,11 +230,14 @@ export function PurchaseForm({
                 name="purchaseCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase Order Code *</FormLabel>
+                    <FormLabel>Purchase Order Code</FormLabel>
                     <FormControl>
-                      <Input placeholder="PO-XXXXX" {...field} />
+                      <Input
+                        {...field}
+                        value={initialData?.purchaseCode ?? "Assigned automatically when saved"}
+                        readOnly
+                      />
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />

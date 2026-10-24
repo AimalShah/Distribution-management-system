@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "@dms/ui";
@@ -60,7 +60,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-lg bg-primary/10 p-3">
             <ShieldCheck className="text-primary" size={22} />
-            <span className="font-semibold text-primary">DMS</span>
+            <span className="font-semibold text-primary">AM-Enterprise</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to manage inventory and sales</p>
@@ -90,9 +90,17 @@ export default function LoginPage() {
 
           {/* Password */}
           <div className="mb-2">
-            <label className="mb-1.5 block text-sm font-medium text-muted-foreground" htmlFor="login-password">
-              Password <span className="text-destructive" aria-label="required">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-muted-foreground" htmlFor="login-password">
+                Password <span className="text-destructive" aria-label="required">*</span>
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input

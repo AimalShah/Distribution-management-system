@@ -19,7 +19,7 @@
  *   plugin). The cookie path is asserted once; after that the bearer header is
  *   simpler to thread through supertest and exercises the same session lookup.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../../apps/server/src/app";
 import { createAuth } from "../../apps/server/src/auth";
 import type { Email } from "../../apps/server/src/auth/email";
@@ -188,7 +188,9 @@ describe.skipIf(!hasDatabase)("Checkpoint 3 — Auth", () => {
         .post("/api/auth/sign-in/email")
         .send({ email, password: PASSWORD });
 
-      const cookies = ([] as string[]).concat(signIn.headers["set-cookie"] ?? []);
+      // SAFETY: Array cast ensures supertest header string or array homogenizes into string[]
+      const rawCookies: string[] = [];
+      const cookies = rawCookies.concat(signIn.headers["set-cookie"] ?? []);
       expect(cookies.some((c) => c.includes("session_token"))).toBe(true);
 
       const res = await request(app)

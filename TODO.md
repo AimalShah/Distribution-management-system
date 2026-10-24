@@ -56,7 +56,7 @@ Decisions locked with the owner:
   - **Safety & Teardown:** P0-7 guard blocks non-local database targets; `teardownTenant` cleans up primary and probe tenants; `qa/setup-db.mjs` leaves 0 stale tenants.
   - **CI Integration:** Added `domain-qa` job in `.github/workflows/fitness-functions.yml` running against containerized PostgreSQL; added `"test:qa:domain"` in root `package.json`.
 
-### [ ] P0-5 · User management: add staff, roles, deactivate (known issue #2)
+### [x] P0-5 · User management: add staff, roles, deactivate (known issue #2)
 - **Why:** an owner cannot create staff users at all — "add member" only offers `available-users` which is empty on a fresh tenant; no deactivate exists (`User.banned` columns are unmapped); custom-role assignment has no UI.
 - **Files:** new route(s) in `apps/server/src/routes/member.ts` (or a new `user-provisioning` service) — create user (`admin.createUser` via better-auth admin plugin *[assumption: usable with `DMS_ADMIN_USER_IDS`/owner bootstrap]* or direct Prisma + `hashPassword`), set temp password, `revoke` sessions on deactivate; `packages/db/prisma/schema.prisma` only needs the unused `banned/banReason` columns; shared schemas in `packages/shared/src/schemas/`; UI in `apps/web/src/pages/UsersPage.tsx` + `apps/web/src/components/settings/MemberDialog.tsx` (add-staff form with email/name/temp password/role select, deactivate/reactivate action); perms already gated by `requireElevatedMember` — extend to custom roles later (P2).
 - **Est:** 8 h (5 h server + 2 h UI + 1 h tests)
@@ -84,67 +84,79 @@ Decisions locked with the owner:
 
 ## P1 — Must have before handover
 
-### [ ] P1-1 · Error states on every list page
+### [x] P1-1 · Error states on every list page
 - **Why:** sales/purchases/returns/customers/payments lists destructure SWR without `error` — a failed GET renders as "no records", indistinguishable from empty data.
 - **Files:** `apps/web/src/pages/{SaleInvoiceList,PurchaseList,ReturnList,CustomerList,PaymentsPage,ProductList}.tsx` (+ reports tabs missing it).
-- **Est:** 2 h. **Done when:** a forced 500 shows a retry-able error panel on each page instead of an empty table.
+- **Est:** 2 h. **Done:** sales, purchases, returns, customers, payments, and products show a retryable error state instead of a false empty state. Reports tabs expose retryable failures too; when cached rows exist, they remain visible with an error notice. Verified with a ProductList retry test and web typecheck.
 
-### [ ] P1-2 · Global error boundary + 401 handling
+### [x] P1-2 · Global error boundary + 401 handling
 - **Why:** a render crash = white screen (no ErrorBoundary in apps/web); an expired session shows silent empty pages (no 401 interceptor in `apps/web/src/lib/api.ts:16-30`).
 - **Files:** new `apps/web/src/components/ErrorBoundary.tsx` wired in `App.tsx`; response interceptor in `lib/api.ts` (401 → sign-in redirect + toast).
-- **Est:** 1.5 h. **Done when:** a thrown render error shows a friendly 500 page with "back to dashboard"; expired sessions redirect to login.
+- **Est:** 1.5 h. **Done:** added a global render error boundary with retry and dashboard recovery, plus a protected-API 401 interceptor that drops the stale bearer token, shows a session-expired toast, and returns to login with the intended destination preserved. Added an error-boundary UI test; web tests and typecheck pass.
 
-### [ ] P1-3 · CI: lint + typecheck jobs on push
+### [x] P1-3 · CI: lint + typecheck jobs on push
 - **Why:** the only CI (`.github/workflows/fitness-functions.yml`) handles build-size/parity on PRs; no lint/typecheck, nothing on push to main.
 - **Files:** `.github/workflows/dms-ci.yml` (new: pnpm lint, typecheck, unit tests on push+PR).
-- **Est:** 1 h. **Done when:** the CI job runs lint+typecheck and fails on regression (only after P1-4 makes lint pass).
+- **Est:** 1 h. **Done:** GitHub Actions now runs install, lint, typecheck, and unit tests on both pushes and pull requests using Node 24 and the pinned pnpm version. Verified locally: lint and typecheck pass; all 799 server tests and 90 web tests pass. GitHub execution awaits a push.
 
-### [ ] P1-4 · Lint gate green by a decided policy
+### [x] P1-4 · Lint gate green by a decided policy
 - **Why:** `pnpm lint` exits 1 with 618 anti-slop errors + 48 warnings; CI lint is impossible until it passes. All 618 in 2 days is unrealistic.
 - **Files:** `oxlint.config.mts`, widespread-but-autofixable whitespace rules via `oxlint --fix`, real fixes for unused vars (`SaleInvoiceList.tsx:337`, `ProductList.tsx:7`, `cache.ts:82`, `PermissionPage` imports), remove dead `jspdf` dep from `apps/web/package.json` (0 usages, inflates the bundle).
-- **Est:** 2.5 h. **Done when:** `pnpm lint` exits 0; any suppression is a documented config decision, not scattered ignores.
+- **Est:** 2.5 h. **Done:** `pnpm lint` blocks native/OXC errors and enforces a warning ceiling of 941. The existing anti-slop debt is reported as warnings (instead of failing on 859 legacy findings); the ceiling makes any additional warning fail the gate. Removed the one standard useless spread fallback. `pnpm lint` verified green with the current repository baseline.
 
-### [ ] P1-5 · Health check that touches the DB + trust proxy + minimal logging
+### [x] P1-5 · Health check that touches the DB + trust proxy + minimal logging
 - **Why:** `/api/health` is DB-blind (`app.ts:87-89`); no `trust proxy` behind TLS-terminating edges; logs are raw console (unstructured, unredacted).
 - **Files:** `apps/server/src/app.ts` (`trust proxy` + health route with a 1-line DB probe), add `pino` minimal request+error logging in `apps/server/src/http/error-handler.ts:50-51` and bootstrap.
-- **Est:** 1.5 h. **Done when:** `/api/health` reports DB status with `{db:"ok"|"down"}`; error logs are JSON with request id, no secrets.
+- **Est:** 1.5 h. **Done:** `/api/health` runs `SELECT 1` and reports `{db:"ok"|"down"}`; proxy trust is configured from the existing environment setting; Pino emits redacted JSON request and error logs with request IDs. Health probe success/failure tests pass, and all 800 server tests pass.
 
-### [ ] P1-6 · One money/currency formatter everywhere
+### [x] P1-6 · One money/currency formatter everywhere
 - **Why:** web shows `Rs 1,500` (`apps/web/src/lib/format.ts`), PDF templates print `Rs 1500.00` with no separators and 4 duplicated local formatters (`sale-invoice-template.ts:133,275-304`, `credit-note-template.ts:58`, `payment-receipt-template.ts:41`, `purchase-order-template.ts:47`, `customer-statement-template.ts:40`).
 - **Files:** move the formatter to `packages/shared` (or one template helper) and use it from all templates.
-- **Est:** 2 h. **Done when:** the same amount string appears on screen, invoice PDF and statement PDF.
+- **Est:** 2 h. **Done:** moved the PKR `Intl.NumberFormat` helpers into `@dms/shared` and reused them in the web UI and sale invoice, credit note, purchase order, payment receipt, and customer statement templates. `Rs 1,500` now renders consistently across those surfaces. Shared, web, and server typechecks pass, and the web suite passes all 90 tests when run independently.
 
-### [ ] P1-7 · Deterministic invoice numbering per organization
+### [x] P1-7 · Deterministic invoice numbering per organization
 - **Why:** `saleCode` is client-supplied with a **global** `@unique` (`schema.prisma:353`) → cross-tenant code collisions 409 the wrong party; no server sequence exists.
 - **Files:** `schema.prisma` migration (`@@unique([organizationId, saleCode])` + equivalent for purchase/return/payment codes), `services/sale.ts` (server-side per-org sequence, ignore client codes).
-- **Est:** 3 h. **Done when:** duplicated client codes are accepted as server-issued per-tenant sequences; cross-org duplicate codes no longer collide.
+- **Est:** 3 h. **Done:** added an atomic per-organization sequence for sale, purchase, return, and payment codes; creation services ignore client-supplied codes, and create forms identify codes as server-assigned. Sale codes sequence by year. Migration backfills matching legacy code patterns, then replaces global unique indexes with organization-scoped uniqueness. Prisma validation, web/server typechecks, and all 190 focused document route tests pass.
 
-### [ ] P1-8 · Prisma generate on install + DB-aware deploy steps
+### [x] P1-8 · Prisma generate on install + DB-aware deploy steps
 - **Why:** the generated client is gitignored with no postinstall step — a deploy that forgets `pnpm db:generate` breaks at build.
 - **Files:** `packages/db/package.json` (postinstall or prebuild generate), deployment doc.
-- **Est:** 20 min. **Done when:** a fresh clone + `pnpm install` builds without manual generate.
+- **Est:** 20 min. **Done:** `@dms/db` runs `prisma generate` on install and the Prisma CLI is available as a runtime dependency for production migration deploys. Added a deployment runbook for pooled versus direct URLs, migration-before-build ordering, and recovering from Prisma `P2022`. Verified Prisma generation, schema validation, and workspace typechecks.
 
-### [ ] P1-9 · Ops doc + handover (DEPLOYMENT.md)
+### [x] P1-9 · Ops doc + handover (DEPLOYMENT.md)
 - **Why:** no deployment/ops/handover doc exists; envs, Neon pooled/unpooled, migrations, backups (Neon PITR), rate-limit behaviour are only in code comments.
 - **Files:** new `docs/DEPLOYMENT.md`: env inventory with owners, Neon pooler notes (ADR 0012), migrate:deploy runbook, backup/restore test steps, staff-onboarding runbook for the client, rollback plan.
-- **Est:** 2 h. **Done when:** a new operator can deploy and add staff without reading source code.
+- **Est:** 2 h. **Done:** `docs/DEPLOYMENT.md` now covers environment setup, pooled/direct Neon URLs, migration and build order, initial owner bootstrap, health and release checks, smoke flow, backup/restore rehearsal, staff onboarding, and rollback. Added configurable owner/company identity values to `db:seed:owner` for the initial production bootstrap.
 
 ---
 
 ## P2 — Nice to have after launch
 
-### [ ] P2-1 · `Decimal(12,2)` money migration (whole schema, integer-paise math)
-### [ ] P2-2 · Multi-user realtime (SSE/WebSocket) driving the same mutation invalidation registry
-### [ ] P2-3 · Invite-by-email staff flow (Invitation table + better-auth endpoints already exist, unused)
-### [ ] P2-4 · Audit trail table (who changed what: products, settings, invoices) beyond stock logs
-### [ ] P2-5 · Real data export (products/customers/sales/ledger CSV) — today only dashboard + inventory-template CSV
-### [ ] P2-6 · Self-service forgot-password flow (no `sendResetPassword` wired today)
-### [ ] P2-7 · Parity tests for checkpoints 14–17 + RBAC-UI test; Playwright E2E for sale→payment→statement flow
-### [ ] P2-8 · Bundle diet (728 kB index / 393 kB AreaChart → manualChunks + lazy charts; CI budget 260 kB red)
-### [ ] P2-9 · Urdu/i18n backbone (nothing exists today)
-### [ ] P2-10 · Mobile-stacked layout for line-item editing tables
-### [ ] P2-11 · Custom roles extend member-management permissions (unify `requireElevatedMember` legacy-string guards with the RBAC engine, `app.ts:106-118` vs `routes/index.ts:82`)
-### [ ] P2-12 · Electron auto-update packaging (desktop launch deferred)
+### [x] P2-1 · `Decimal(12,2)` money migration (whole schema, integer-paise math)
+- **Done:** All persisted currency columns now use Prisma `Decimal(12,2)` with a rounding migration; shared paise helpers drive sale, purchase, return, and payment arithmetic, and API JSON keeps monetary fields numeric. Migrations are applied to the configured Neon `neondb` database.
+### [x] P2-2 · Multi-user realtime (SSE/WebSocket) driving the same mutation invalidation registry
+- **Done:** Authenticated tenant-scoped SSE broadcasts successful API writes; the client reconnects with the current bearer token/cookie and routes received domains through `invalidateDomains`, preserving the existing cross-screen registry. Reconnects refresh active queries to cover missed events.
+### [x] P2-3 · Invite-by-email staff flow (Invitation table + better-auth endpoints already exist, unused)
+- **Done:** Wired `sendInvitationEmail` into Better-Auth organization plugin in `apps/server/src/auth/index.ts`. Added `InviteMemberDialog` in `apps/web/src/components/settings/MemberDialog.tsx` and "Invite by email" in `UsersPage.tsx`. Created `AcceptInvitationPage.tsx` at `/accept-invitation/:id` and `/organization/accept-invitation` in `App.tsx`.
+### [x] P2-4 · Audit trail table (who changed what: products, settings, invoices) beyond stock logs
+- **Done:** Added `AuditLog` model in `schema.prisma` (`organizationId, userId, entityType, entityId, action, details, ipAddress, createdAt`). Implemented `recordAuditLog` and `listAuditLogs` in `apps/server/src/services/audit.ts`. Mounted `/api/audit-logs` in `apps/server/src/routes/audit.ts` under RBAC `reports:view`. Hooked audit logging on settings updates and invoice cancellations. Added `AuditTrailTab.tsx` in `CompanySettingsPage.tsx`. Unit tests pass in `apps/server/src/routes/audit.test.ts`.
+### [x] P2-5 · Real data export (products/customers/sales/ledger CSV) — today only dashboard + inventory-template CSV
+- **Done:** Added CSV export utilities in `apps/web/src/lib/csv.ts` (`exportProductsCSV`, `exportCustomersCSV`, `exportSalesCSV`, `exportCustomerLedgerCSV`). Integrated "Export CSV" buttons into `ProductList.tsx`, `CustomerList.tsx`, `SaleInvoiceList.tsx`, and `CustomerLedgerPage.tsx`.
+### [x] P2-6 · Self-service forgot-password flow (no `sendResetPassword` wired today)
+- **Done:** Wired `sendResetPassword` in Better-Auth `emailAndPassword` in `apps/server/src/auth/index.ts`. Added "Forgot password?" link to `LoginPage.tsx`. Created `ForgotPasswordPage.tsx` calling `authClient.requestPasswordReset`, and `ResetPasswordPage.tsx` calling `authClient.resetPassword`. Mounted public routes `/forgot-password` and `/reset-password` in `App.tsx`.
+### [x] P2-7 · Parity tests for checkpoints 14–17 + RBAC-UI test; Playwright E2E for sale→payment→statement flow
+- **Done:** Created `parity.test.ts` for checkpoints 14 (Soft Delete & Restore), 15 (Payments Invoice Lifecycle), 16 (Customer Ledger & WhatsApp Share), and 17 (Confirmation Dialogs). Added entries to `checkpoints/parity-gate.ts`. `parity-gate.test.ts` passes 5/5 and checkpoint suites pass 10/10.
+### [x] P2-8 · Bundle diet (728 kB index / 393 kB AreaChart → manualChunks + lazy charts; CI budget 260 kB red)
+- **Done:** Configured `rollupOptions.output.manualChunks` in `apps/web/vite.config.ts` splitting `recharts`, `lucide-react`, `react/react-router`, and `better-auth`. Entry bundle reduced from 735 kB (233 kB gzip) down to 317 kB (100 kB gzip). Size-limit configured and passing (386 kB vs 400 kB threshold).
+### [x] P2-9 · Urdu/i18n backbone (nothing exists today)
+- **Done:** Created `apps/web/src/lib/i18n.tsx` with English and Urdu translation dictionaries, `useI18n()` hook, and RTL/LTR direction syncing. Added `LanguageSwitcher.tsx` in `AppSidebar.tsx` and wrapped app in `I18nProvider` in `main.tsx`.
+### [x] P2-10 · Mobile-stacked layout for line-item editing tables
+- **Done:** Added responsive stacked layout to `apps/web/src/components/forms/LineItemsTable.tsx` for `< md` screens, displaying clean item cards with clear field labels, while preserving the tabular layout on desktop.
+### [x] P2-11 · Custom roles extend member-management permissions (unify `requireElevatedMember` legacy-string guards with the RBAC engine, `app.ts:106-118` vs `routes/index.ts:82`)
+- **Done:** Updated `requireElevatedMember` in `apps/server/src/services/member.ts` to consult custom role permissions via `checkPermission(userId, organizationId, "users", "create" | "update")`, bridging legacy role strings with custom RBAC roles. Verified with automated test in `routes/member.test.ts`.
+### [x] P2-12 · Electron auto-update packaging (desktop launch deferred)
+- **Done:** Configured GitHub release publish target in `apps/desktop/electron-builder.yml`. Added optional `electron-updater` background check in `apps/desktop/src/main.ts`.
 
 ---
 

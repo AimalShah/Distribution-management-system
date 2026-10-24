@@ -24,7 +24,7 @@ export const SaleInvoiceItemSchema = z.object({
  * legacy form's payload validates against it once renamed.
  */
 export const SaleInvoiceSchema = z.object({
-  saleCode: z.string().trim().min(1, "Sale code is required"),
+  saleCode: z.string().trim().optional(),
   customerId: z.string().trim().min(1, "Please select a customer"),
   // Absent means "now", which is the column default. The legacy form always
   // sent `new Date()` and ignored anything the user picked.
@@ -55,6 +55,7 @@ export const SaleInvoiceSchema = z.object({
 export const SaleUpdateSchema = SaleInvoiceSchema.partial()
   .omit({
     items: true,
+    saleCode: true,
     // The override is a create-time decision, not a column; omitting it keeps
     // the update body from carrying a field the service would try to write.
     overrideCreditLimit: true,

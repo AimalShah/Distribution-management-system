@@ -16,6 +16,7 @@ import { roleRouter } from "./role";
 import { saleRouter } from "./sale";
 import { settingsRouter } from "./settings";
 import { supplierRouter } from "./supplier";
+import { auditRouter } from "./audit";
 
 export const apiRouter: Router = Router();
 
@@ -69,6 +70,7 @@ const PERMISSIONS: RoutePermissionTable = {
   },
   reports: { resource: "reports" },
   dashboard: { resource: "reports" },
+  audit: { resource: "reports" },
 };
 
 /**
@@ -102,6 +104,8 @@ apiRouter.use("/categories", categoryRouter);
 apiRouter.use("/brands", brandRouter);
 
 apiRouter.use("/settings", settingsRouter);
+
+apiRouter.use("/audit", auditRouter);
 
 apiRouter.use("/roles", roleRouter);
 

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { invalidateDomains } from "../lib/mutation";
+import { exportSalesCSV } from "../lib/csv";
 import {
   Badge,
   Button,
@@ -162,7 +163,7 @@ export default function SaleInvoiceList() {
     return params.toString();
   }, [page, pageSize, search, statusFilter, view]);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/sales?${queryString}`,
     fetcher
   );
@@ -774,6 +775,17 @@ export default function SaleInvoiceList() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => exportSalesCSV(data?.data || [])}
+              disabled={isLoading || !data?.data?.length}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+              data-testid="btn-export-sales-csv"
+            >
+              <Download className="size-3.5 mr-2" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => mutate()}
               disabled={isLoading}
               className="btn-secondary h-9 rounded-md cursor-pointer"
@@ -831,6 +843,8 @@ export default function SaleInvoiceList() {
       <ListTablePanel
         isLoading={isLoading}
         isEmpty={salesList.length === 0}
+        error={error}
+        onRetry={() => void mutate()}
         search={{
           value: search,
           onChange: (value) => {

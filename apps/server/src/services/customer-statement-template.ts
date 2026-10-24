@@ -1,3 +1,4 @@
+import { formatMoney } from "@dms/shared";
 import { escapeHtml } from "./html-utils";
 
 export interface CustomerStatementRenderData {
@@ -37,15 +38,9 @@ export interface CustomerStatementRenderData {
   };
 }
 
-function formatMoney(amount: number): string {
-  return `Rs. ${amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function formatDate(isoOrDate?: string | Date | null): string {
   if (!isoOrDate) return "-";
+
   try {
     return new Date(isoOrDate).toLocaleDateString("en-US", {
       year: "numeric",

@@ -1,10 +1,14 @@
 import cors from "cors";
 import express, { type Express, type RequestHandler } from "express";
 import helmet from "helmet";
+import pinoHttp from "pino-http";
+import { randomUUID } from "node:crypto";
+import prisma from "@dms/db";
 import { toNodeHandler } from "better-auth/node";
 import { createAuth, type Auth } from "./auth";
 import { allowedOrigins, trustProxy } from "./config/env";
-import { errorHandler, notFoundHandler } from "./http";
+import { asyncHandler, errorHandler, notFoundHandler } from "./http";
+import { logger } from "./logger";
 import {
   authContext,
   bootstrapAuthContext,
@@ -14,6 +18,7 @@ import {
 import {
   sessionAuthContext,
   sessionBootstrapAuthContext,
+  sessionBootstrapOpenAuthContext,
 } from "./middleware/session";
 import { authSurfaceLimiter, credentialEntryLimiter } from "./middleware/rate-limit";
 import { apiRouter } from "./routes";
@@ -22,7 +27,11 @@ import {
   memberRouter,
   organizationMemberRouter,
 } from "./routes/member";
+import { accountRouter } from "./routes/account";
 import { debugRouter } from "./routes/__debug";
+import { normalizeDecimalValues } from "@dms/shared";
+import { publishSuccessfulMutation } from "./middleware/mutation-events";
+import { subscribeToTenantEvents } from "./utils/tenant-events";
 
 export interface AppOptions {
   /** Defaults to `resolveAuthMode()`: `session` unless `DMS_TRUSTED_PROXY_AUTH=true`. */
@@ -41,6 +50,59 @@ export function createApp(options: AppOptions = {}): Express {
   if (trustProxy !== false) {
     app.set("trust proxy", trustProxy);
   }
+
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId(req, res) {
+        const requestedId = req.headers["x-request-id"];
+
+        const requestId =
+          typeof requestedId === "string" && /^[A-Za-z0-9._-]{1,128}$/.test(requestedId)
+            ? requestedId
+            : randomUUID();
+
+        res.setHeader("x-request-id", requestId);
+
+        return requestId;
+      },
+      customAttributeKeys: {
+        req: "request",
+        res: "response",
+        err: "error",
+        reqId: "requestId",
+        responseTime: "responseTimeMs",
+      },
+      quietReqLogger: true,
+      customLogLevel: (_req, res, error) =>
+        error || res.statusCode >= 500
+          ? "error"
+          : res.statusCode >= 400
+            ? "warn"
+            : "info",
+      customSuccessObject: (req, res, values) => ({
+        event: "http_request",
+        method: req.method,
+        path: req.url?.split("?")[0],
+        statusCode: res.statusCode,
+        responseTimeMs: values.responseTimeMs,
+      }),
+      customErrorObject: (req, res, error, values) => ({
+        event: "http_request",
+        method: req.method,
+        path: req.url?.split("?")[0],
+        statusCode: res.statusCode,
+        responseTimeMs: values.responseTimeMs,
+        errorType: error.name,
+      }),
+      customSuccessMessage: () => "request completed",
+      customErrorMessage: () => "request failed",
+      serializers: {
+        req: (req) => ({ method: req.method, path: req.url?.split("?")[0] }),
+        res: (res) => ({ statusCode: res.statusCode }),
+      },
+    })
+  );
 
   const strict = authMode === "session" ? sessionAuthContext(auth) : authContext;
 
@@ -104,9 +166,66 @@ export function createApp(options: AppOptions = {}): Express {
 
   app.use(express.json());
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok" });
+  // Keep Prisma Decimal values numeric in the public API contract. Prisma
+  // returns Decimal instances after the schema migration; JSON.stringify
+  // would otherwise turn those amounts into strings.
+  app.use((_req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = ((body?: unknown) => json(normalizeDecimalValues(body))) as typeof res.json;
+    next();
   });
+
+  app.get(
+    "/api/health",
+    asyncHandler(async (req, res) => {
+      const dbStart = Date.now();
+
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        const latencyMs = Date.now() - dbStart;
+        const memory = process.memoryUsage();
+
+        res.json({
+          status: "ok",
+          db: "ok",
+          timestamp: new Date().toISOString(),
+          uptimeSeconds: Math.floor(process.uptime()),
+          environment: process.env.NODE_ENV ?? "development",
+          version: "0.1.0",
+          checks: {
+            database: {
+              status: "ok",
+              latencyMs,
+            },
+            memory: {
+              heapUsedMb: Math.round((memory.heapUsed / (1024 * 1024)) * 100) / 100,
+              heapTotalMb: Math.round((memory.heapTotal / (1024 * 1024)) * 100) / 100,
+              rssMb: Math.round((memory.rss / (1024 * 1024)) * 100) / 100,
+            },
+          },
+        });
+      } catch {
+        req.log.warn(
+          { event: "database_health_check_failed" },
+          "database health check failed"
+        );
+
+        res.status(503).json({
+          status: "error",
+          db: "down",
+          timestamp: new Date().toISOString(),
+          uptimeSeconds: Math.floor(process.uptime()),
+          environment: process.env.NODE_ENV ?? "development",
+          checks: {
+            database: {
+              status: "down",
+              error: "Database connectivity check failed",
+            },
+          },
+        });
+      }
+    })
+  );
 
   // Mounted ahead of the strict `authContext` below, and not through `apiRouter`,
   // because POST /organizations is how a user creates their first organization
@@ -126,6 +245,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.use(
     "/api/organizations",
     bootstrap,
+    publishSuccessfulMutation,
     organizationMemberRouter,
     organizationRouter,
     notFoundHandler
@@ -136,6 +256,22 @@ export function createApp(options: AppOptions = {}): Express {
   // 400 ORGANIZATION_REQUIRED for a by-id member route that needs no tenant
   // header of its own.
   app.use("/api/members", bootstrap, memberRouter, notFoundHandler);
+
+  // The first-login password change (P0-5). A provisioned staff member signs
+  // in with a temporary password and lands here before anything else: the
+  // gated `bootstrap` above refuses their session with
+  // PASSWORD_CHANGE_REQUIRED, so this mount uses the open variant, which only
+  // checks the session itself. Mounted beside the other bootstraps rather than
+  // on the strict `/api` line for the same reason those are -- every route on
+  // the strict line answers 400 ORGANIZATION_REQUIRED first, and a staff
+  // member with a temporary password does not have an organization answer to
+  // give yet.
+  app.use(
+    "/api/users",
+    sessionBootstrapOpenAuthContext(auth),
+    accountRouter(auth),
+    notFoundHandler
+  );
 
   // Authenticated tenant data is per-session, per-organization and money: no
   // intermediary is licensed to hand a cached copy to the next viewer. The
@@ -148,7 +284,26 @@ export function createApp(options: AppOptions = {}): Express {
 
   app.use("/api/organizations", noStore);
   app.use("/api/members", noStore);
-  app.use("/api", strict, noStore, apiRouter);
+  app.get("/api/events", strict, noStore, (req, res) => {
+    res.status(200);
+    res.set({
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-store, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+    res.write(": connected\n\n");
+
+    const unsubscribe = subscribeToTenantEvents(req.auth.organizationId, res);
+    const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 20_000);
+
+    res.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  });
+  app.use("/api", strict, noStore, publishSuccessfulMutation, apiRouter);
 
   if (process.env.NODE_ENV !== "production") {
     app.use("/__debug", debugRouter);

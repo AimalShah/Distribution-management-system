@@ -1,5 +1,5 @@
 import prisma from "@dms/db";
-import type { SalesReportQuery, SalesAgingQuery } from "@dms/shared";
+import { toMoneyNumber, type SalesReportQuery, type SalesAgingQuery } from "@dms/shared";
 import { customerScope, productScope, reportWindow, saleItemScope, saleScope, type ScopeInput } from "../scope";
 import { serverCache, buildCacheKey } from "../../utils/cache";
 
@@ -74,7 +74,7 @@ export async function getBasicSalesReport(
     const subtotalBySale = new Map<string, number>();
 
     for (const group of lines) {
-      subtotalBySale.set(group.saleId, group._sum.totalPrice ?? 0);
+      subtotalBySale.set(group.saleId, toMoneyNumber(group._sum.totalPrice ?? 0));
     }
 
     const totalLineSubtotal = [...subtotalBySale.values()].reduce(
@@ -91,12 +91,13 @@ export async function getBasicSalesReport(
       // whose UTC fields are the stored calendar date. `toISOString()` reads the
       // day back out rather than shifting it.
       const day = sale.saleDate.toISOString().slice(0, 10);
-      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + sale.totalAmount);
+      const saleAmount = toMoneyNumber(sale.totalAmount);
+      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + saleAmount);
 
       const status = sale.status || "Unspecified";
       const bucket = byStatus.get(status) ?? { orders: 0, totalAmount: 0 };
       bucket.orders += 1;
-      bucket.totalAmount += sale.totalAmount;
+      bucket.totalAmount += saleAmount;
       byStatus.set(status, bucket);
 
       // `Sale.totalAmount` is written straight from the request body by
@@ -106,13 +107,13 @@ export async function getBasicSalesReport(
       // reported and the count says how far apart they are.
       const subtotal = subtotalBySale.get(sale.id);
 
-      if (subtotal !== undefined && Math.abs(subtotal - sale.totalAmount) > 0.005) {
+      if (subtotal !== undefined && Math.abs(subtotal - saleAmount) > 0.005) {
         unreconciledOrders += 1;
       }
     }
 
     return {
-      totalSales: sales.reduce((sum, s) => sum + s.totalAmount, 0),
+      totalSales: sales.reduce((sum, s) => sum + toMoneyNumber(s.totalAmount), 0),
       totalLineSubtotal,
       totalOrders: sales.length,
       uniqueCustomers: new Set(sales.map((s) => s.customerId)).size,
@@ -153,7 +154,7 @@ export async function getBasicSalesReport(
 export async function getSalesByCustomer(
   organizationId: string,
   query: SalesReportQuery
-) {
+): Promise<unknown> {
   const cacheKey = buildCacheKey(
     "reports:sales",
     organizationId,
@@ -277,8 +278,8 @@ export async function getSalesByProduct(
           productCode: product.productCode,
           unit: product.unit,
           quantity: group._sum.quantity ?? 0,
-          totalPrice: group._sum.totalPrice ?? 0,
-          averageUnitPrice: lineCount > 0 ? priceSum / lineCount : 0,
+          totalPrice: toMoneyNumber(group._sum.totalPrice ?? 0),
+          averageUnitPrice: lineCount > 0 ? toMoneyNumber(priceSum) / lineCount : 0,
         },
       ];
     });
@@ -364,7 +365,7 @@ export async function getSalesByBrand(
 
       existing.productCount += 1;
       existing.quantity += group._sum.quantity ?? 0;
-      existing.totalAmount += group._sum.totalPrice ?? 0;
+      existing.totalAmount += toMoneyNumber(group._sum.totalPrice ?? 0);
       existing.lineItems += group._count._all;
       brandMap.set(bId, existing);
     }
@@ -377,7 +378,7 @@ export async function getSalesByBrand(
 export async function getFullSalesReport(
   organizationId: string,
   query: SalesReportQuery
-) {
+): Promise<unknown> {
   const [basic, byCustomer, byProduct, byBrand] = await Promise.all([
     getBasicSalesReport(organizationId, query),
     getSalesByCustomer(organizationId, query),
@@ -445,6 +446,7 @@ export async function getSalesAgingReport(
       "61-90": 0,
       "90+": 0,
     };
+
     let current = 0;
     let totalOverdue = 0;
     let totalOutstanding = 0;
@@ -494,7 +496,10 @@ export async function getSalesAgingReport(
     }> = [];
 
     for (const sale of sales) {
-      const rawBalance = sale.totalAmount - (sale.amountPaid ?? 0);
+      const totalAmount = toMoneyNumber(sale.totalAmount);
+      const amountPaid = toMoneyNumber(sale.amountPaid ?? 0);
+      const rawBalance = totalAmount - amountPaid;
+
       if (rawBalance <= 0.005) {
         continue;
       }
@@ -505,6 +510,7 @@ export async function getSalesAgingReport(
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
       let bucket: "current" | "0-30" | "31-60" | "61-90" | "90+";
+
       if (diffDays < 0) {
         bucket = "current";
       } else if (diffDays <= 30) {
@@ -534,8 +540,8 @@ export async function getSalesAgingReport(
         customerCode: sale.customer?.customerCode,
         saleDate: sale.saleDate,
         dueDate: sale.dueDate,
-        totalAmount: sale.totalAmount,
-        amountPaid: sale.amountPaid ?? 0,
+        totalAmount,
+        amountPaid,
         balance,
         daysOverdue: Math.max(0, diffDays),
         bucket,
@@ -545,6 +551,7 @@ export async function getSalesAgingReport(
 
       const custId = sale.customerId;
       let customerEntry = customerMap.get(custId);
+
       if (!customerEntry) {
         customerEntry = {
           customerId: custId,
@@ -565,12 +572,14 @@ export async function getSalesAgingReport(
       }
 
       customerEntry.totalOutstanding += balance;
+
       if (bucket === "current") {
         customerEntry.current += balance;
       } else {
         customerEntry.buckets[bucket] += balance;
         customerEntry.totalOverdue += balance;
       }
+
       customerEntry.invoices.push(invoiceEntry);
     }
 

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Filter, Search, X } from "lucide-react";
 import { Input } from "@dms/ui";
+import { LoadErrorState } from "./LoadErrorState";
 
 export interface ListTablePanelProps {
   search?: {
@@ -12,6 +13,8 @@ export interface ListTablePanelProps {
   actions?: React.ReactNode;
   isLoading: boolean;
   isEmpty: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   skeleton: React.ReactNode;
   table: React.ReactNode;
   empty: React.ReactNode;
@@ -23,6 +26,8 @@ export function ListTablePanel({
   actions,
   isLoading,
   isEmpty,
+  error,
+  onRetry,
   skeleton,
   table,
   empty,
@@ -66,12 +71,17 @@ export function ListTablePanel({
         </div>
       )}
       <div className="p-0 overflow-x-auto">
-        {isLoading ? (
+        {error && !isLoading && isEmpty && onRetry ? (
+          <LoadErrorState error={error} onRetry={onRetry} />
+        ) : isLoading ? (
           <div className="p-4">{skeleton}</div>
-        ) : !isEmpty ? (
-          table
         ) : (
-          <div className="p-8 text-center">{empty}</div>
+          <>
+            {error && onRetry ? (
+              <LoadErrorState error={error} onRetry={onRetry} compact />
+            ) : null}
+            {!isEmpty ? table : <div className="p-8 text-center">{empty}</div>}
+          </>
         )}
       </div>
     </div>

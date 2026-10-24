@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { App } from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthProvider } from "./lib/auth";
+import { I18nProvider } from "./lib/i18n";
 import { fetcher } from "./lib/api";
 import "./index.css";
 
@@ -20,9 +22,13 @@ createRoot(document.getElementById("root")!).render(
       }}
     >
       <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <ErrorBoundary>
+          <I18nProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </I18nProvider>
+        </ErrorBoundary>
       </BrowserRouter>
     </SWRConfig>
   </StrictMode>

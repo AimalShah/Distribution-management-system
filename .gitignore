@@ -24,6 +24,7 @@ build/
 tmp/
 .DS_Store
 *.pem
+*.zip
 
 # debug
 npm-debug.log*
@@ -36,6 +37,8 @@ yarn-error.log*
 !.env.example
 !apps/web/.env.example
 !apps/web/.env.production
+!apps/web/.env.production.example
+!apps/server/.env.production.example
 
 # typescript
 *.tsbuildinfo

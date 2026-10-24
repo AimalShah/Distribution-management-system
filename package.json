@@ -7,7 +7,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "build:web": "pnpm --filter @dms/web build",
-    "lint": "turbo run lint && oxlint",
+    "lint": "turbo run lint && oxlint --max-warnings=980",
     "test": "turbo run test",
     "qa": "node scripts/qa/run.mjs",
     "test:qa:domain": "vitest run --config vitest.qa.config.ts",

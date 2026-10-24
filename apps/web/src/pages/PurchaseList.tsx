@@ -77,7 +77,7 @@ export default function PurchaseList() {
     return params.toString();
   }, [page, pageSize, search, statusFilter]);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/purchases?${queryString}`,
     fetcher
   );
@@ -338,6 +338,8 @@ export default function PurchaseList() {
       <ListTablePanel
         isLoading={isLoading}
         isEmpty={purchaseList.length === 0}
+        error={error}
+        onRetry={() => void mutate()}
         search={{
           value: search,
           onChange: (value) => {

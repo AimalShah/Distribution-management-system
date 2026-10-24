@@ -163,7 +163,7 @@ async function assertCustomerLedgerReconciliation(customerId: string) {
     select: { id: true, totalAmount: true, amountPaid: true },
   });
 
-  const unpaidSales = sales.reduce((sum, s) => sum + (s.totalAmount - s.amountPaid), 0);
+  const unpaidSales = sales.reduce((sum, s) => sum + (Number(s.totalAmount) - Number(s.amountPaid)), 0);
 
   const returns = await prisma.return.findMany({
     where: {
@@ -183,7 +183,7 @@ async function assertCustomerLedgerReconciliation(customerId: string) {
     (sum, ret) =>
       sum +
       ret.items.reduce(
-        (lineSum, item) => lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+        (lineSum, item) => lineSum + Number(item.quantity) * Number(item.unitPrice) + Number(item.taxAmount) - Number(item.discount),
         0
       ),
     0
@@ -199,7 +199,7 @@ async function assertCustomerLedgerReconciliation(customerId: string) {
     select: { amount: true },
   });
 
-  const unallocated = unallocatedPayments.reduce((sum, p) => sum + p.amount, 0);
+  const unallocated = unallocatedPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
   const netBalance = unpaidSales - returnCredits - unallocated;
   const expectedClosing = Math.max(0, netBalance);
@@ -235,7 +235,7 @@ async function assertStoreCreditReconciliation(customerId: string) {
     (sum, ret) =>
       sum +
       ret.items.reduce(
-        (lineSum, item) => lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+        (lineSum, item) => lineSum + Number(item.quantity) * Number(item.unitPrice) + Number(item.taxAmount) - Number(item.discount),
         0
       ),
     0
@@ -251,7 +251,7 @@ async function assertStoreCreditReconciliation(customerId: string) {
     select: { amount: true },
   });
 
-  const usedStoreCredit = storeCreditPayments.reduce((sum, p) => sum + p.amount, 0);
+  const usedStoreCredit = storeCreditPayments.reduce((sum, p) => sum + Number(p.amount), 0);
   const expectedAvailableStoreCredit = Math.max(0, totalReturnCredits - usedStoreCredit);
 
   return { totalReturnCredits, usedStoreCredit, expectedAvailableStoreCredit };
@@ -707,7 +707,7 @@ describe("Reconciliation — Invariant 5: Dashboard Organization-Wide Financial 
       _sum: { totalAmount: true, amountPaid: true },
     });
     const expectedUnpaid =
-      (unpaidSalesAgg._sum.totalAmount ?? 0) - (unpaidSalesAgg._sum.amountPaid ?? 0);
+      Number(unpaidSalesAgg._sum.totalAmount ?? 0) - Number(unpaidSalesAgg._sum.amountPaid ?? 0);
 
     const returns = await prisma.return.findMany({
       where: { organizationId: t.organizationId, deletedAt: null, returnType: "SALE" },
@@ -719,7 +719,7 @@ describe("Reconciliation — Invariant 5: Dashboard Organization-Wide Financial 
       (sum, ret) =>
         sum +
         ret.items.reduce(
-          (lineSum, item) => lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+          (lineSum, item) => lineSum + Number(item.quantity) * Number(item.unitPrice) + Number(item.taxAmount) - Number(item.discount),
           0
         ),
       0
@@ -729,7 +729,7 @@ describe("Reconciliation — Invariant 5: Dashboard Organization-Wide Financial 
       where: { organizationId: t.organizationId, deletedAt: null, saleId: null },
       _sum: { amount: true },
     });
-    const expectedUnallocated = unallocatedAgg._sum.amount ?? 0;
+    const expectedUnallocated = Number(unallocatedAgg._sum.amount ?? 0);
 
     const expectedOutstanding = Math.max(0, expectedUnpaid - expectedReturnCredits - expectedUnallocated);
     expectMoney(stats.outstanding, expectedOutstanding);

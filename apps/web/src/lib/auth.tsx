@@ -8,10 +8,14 @@ import {
   type ReactNode,
 } from "react";
 import { authClient } from "./auth-client";
+import { resetUnauthorizedRedirect } from "./api";
+import { startTenantMutationStream } from "./mutation";
 
 export interface AuthUser {
   username: string;
   name: string;
+  /** P0-5: set while the account still carries its provisioning password. */
+  mustChangePassword?: boolean;
 }
 
 /**
@@ -51,12 +55,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [data, isPending]);
 
   const user: AuthUser | null = data?.user
-    ? { name: data.user.name ?? "", username: data.user.email }
+    ? {
+        name: data.user.name ?? "",
+        username: data.user.email,
+        mustChangePassword:
+          (data.user as { mustChangePassword?: boolean }).mustChangePassword ??
+          false,
+      }
     : null;
 
   const activeOrganizationId =
     (data?.session as { activeOrganizationId?: string | null } | undefined)
       ?.activeOrganizationId ?? null;
+
+  useEffect(() => {
+    if (status !== "authenticated" || !activeOrganizationId) return;
+
+    return startTenantMutationStream(activeOrganizationId);
+  }, [status, activeOrganizationId]);
 
   const login = useCallback(async (username: string, password: string) => {
     const { error, data: body } = await authClient.signIn.email({
@@ -73,6 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!signedIn) {
       throw new Error("Invalid username or password");
     }
+
+    resetUnauthorizedRedirect();
 
     return { name: signedIn.name ?? "", username: signedIn.email };
   }, []);

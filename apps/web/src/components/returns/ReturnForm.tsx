@@ -37,7 +37,6 @@ import {
   TableRow,
 } from "@dms/ui";
 import { api, fetcher, shortfallLine, toFailure } from "../../lib/api";
-import { generateReturnCode } from "../../lib/code";
 import { formatMoney } from "../../lib/format";
 
 export const RETURN_TYPE_OPTIONS: { value: ReturnTypeValue; label: string }[] = [
@@ -83,7 +82,7 @@ export function ReturnForm() {
   const form = useForm<any>({
     resolver: zodResolver(ReturnCreateSchema),
     defaultValues: {
-      returnCode: generateReturnCode(),
+      returnCode: "",
       returnType: "SALE",
       returnDate: new Date().toISOString().split("T")[0],
       reason: "",
@@ -282,7 +281,6 @@ export function ReturnForm() {
 
     try {
       const payload: any = {
-        returnCode: values.returnCode.trim(),
         returnType: values.returnType,
         returnDate: values.returnDate ? values.returnDate : undefined,
         reason: values.reason?.trim() || undefined,
@@ -342,11 +340,10 @@ export function ReturnForm() {
                 name="returnCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Return Code *</FormLabel>
+                    <FormLabel>Return Code</FormLabel>
                     <FormControl>
-                      <Input placeholder="RET-YYYY-XXXXX" {...field} />
+                      <Input {...field} value="Assigned automatically when saved" readOnly />
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />

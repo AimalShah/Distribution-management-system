@@ -5,9 +5,11 @@ import type {
   PurchaseItemInput,
   PurchaseUpdateInput,
 } from "@dms/shared";
+import { fromPaise, percentagePaise, toMoneyNumber, toPaise } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement, type StockMovementRequest } from "./stock-movement";
 import { serverCache, invalidateTenantMetrics } from "../utils/cache";
+import { nextDocumentCode } from "./document-code";
 
 const listInclude = {
   supplier: true,
@@ -29,12 +31,18 @@ const detailInclude = {
  * existing documents while removing a client supplied total the API would
  * otherwise have to trust.
  */
-const lineTotal = (item: Pick<PurchaseItemInput, "quantity" | "unitCost" | "itemDiscount" | "taxPercent">) => {
-  const gross = item.quantity * item.unitCost;
-  const itemDiscount = item.itemDiscount ?? 0;
-  const tax = ((item.taxPercent ?? 0) / 100) * (gross - itemDiscount);
+type PurchasePricedLine = Pick<PurchaseItemInput, "quantity" | "taxPercent"> & {
+  unitCost: number | { toString(): string };
+  itemDiscount?: number | { toString(): string } | null;
+};
 
-  return gross - itemDiscount + tax;
+const lineTotal = (item: PurchasePricedLine) => {
+  const grossPaise = BigInt(item.quantity) * toPaise(item.unitCost);
+  const itemDiscountPaise = toPaise(item.itemDiscount ?? 0);
+  const taxablePaise = grossPaise - itemDiscountPaise;
+  const taxPaise = percentagePaise(taxablePaise, item.taxPercent ?? 0);
+
+  return fromPaise(taxablePaise + taxPaise);
 };
 
 /**
@@ -44,21 +52,21 @@ const lineTotal = (item: Pick<PurchaseItemInput, "quantity" | "unitCost" | "item
  * were priced under can), so they accept a structural subset of the form item
  * rather than the full create input.
  */
-type PurchasePricedLine = Pick<PurchaseItemInput, "quantity" | "unitCost" | "itemDiscount" | "taxPercent">;
-
 const linesTax = (data: { items: readonly PurchasePricedLine[] }) =>
   data.items.reduce(
     (sum, item) =>
-      sum +
-      (((item.taxPercent ?? 0) / 100) * (item.quantity * item.unitCost - (item.itemDiscount ?? 0))),
+      sum + fromPaise(percentagePaise(
+        BigInt(item.quantity) * toPaise(item.unitCost) - toPaise(item.itemDiscount ?? 0),
+        item.taxPercent ?? 0
+      )),
     0
   );
 
 export const calculatePurchaseTotal = (data: {
   items: readonly PurchasePricedLine[];
-  discount?: number;
+  discount?: number | { toString(): string };
 }) =>
-  data.items.reduce((sum, item) => sum + lineTotal(item), 0) - (data.discount ?? 0);
+  fromPaise(data.items.reduce((sum, item) => sum + toPaise(lineTotal(item)), 0n) - toPaise(data.discount ?? 0));
 
 export type PurchaseListArgs = {
   organizationId: string;
@@ -225,9 +233,11 @@ export async function createPurchase(
       );
     }
 
+    const purchaseCode = await nextDocumentCode(tx, organizationId, "purchase");
+
     const purchase = await tx.purchase.create({
       data: {
-        purchaseCode: data.purchaseCode,
+        purchaseCode,
         supplierId: data.supplierId,
         purchaseDate: data.purchaseDate,
         totalAmount,
@@ -270,8 +280,8 @@ export async function createPurchase(
         direction: "in",
         quantity: item.quantity,
         movementType: "IN",
-        reason: `Stock In from Purchase ${data.purchaseCode}`,
-        reference: data.purchaseCode,
+        reason: `Stock In from Purchase ${purchaseCode}`,
+        reference: purchaseCode,
         opening: { reorderLevel: 10 },
         batch,
       });

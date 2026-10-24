@@ -3,6 +3,7 @@ import useSWR from "swr";
 import { AlertTriangle, DollarSign, Layers, Package } from "lucide-react";
 import { Badge } from "@dms/ui";
 import { fetcher } from "../../lib/api";
+import { LoadErrorState } from "../list/LoadErrorState";
 import { formatDate, formatMoney } from "../../lib/format";
 import {
   KpiCardGrid,
@@ -16,7 +17,7 @@ interface InventoryReportTabProps {
 }
 
 export function InventoryReportTab({ queryString }: InventoryReportTabProps) {
-  const { data, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/reports/inventory/full?${queryString}`,
     fetcher
   );
@@ -70,12 +71,17 @@ export function InventoryReportTab({ queryString }: InventoryReportTabProps) {
     [totalInventoryValue, totalItemsInStock, lowStockCount, uniqueProducts]
   );
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return <ReportTabsSkeleton />;
+  }
+
+  if (error && !data) {
+    return <LoadErrorState error={error} onRetry={() => void mutate()} />;
   }
 
   return (
     <div className="space-y-6">
+      {error ? <LoadErrorState error={error} onRetry={() => void mutate()} compact /> : null}
       {/* KPI Cards */}
       <KpiCardGrid cards={cards} />
 

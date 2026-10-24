@@ -5,6 +5,7 @@ import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/au
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    documentSequence: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     member: { findFirst: async () => ({ role: "owner" }) },
     purchase: {
       findMany: vi.fn(),
@@ -154,7 +155,7 @@ describe("organization context", () => {
     await request(app).get("/api/purchases").set(auth());
 
     expect(models.purchase.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 });
@@ -196,6 +197,7 @@ describe("GET /api/purchases", () => {
       expect.objectContaining({
         where: {
           organizationId: ORG,
+          deletedAt: null,
           purchaseCode: { contains: "po-00", mode: "insensitive" },
         },
       })
@@ -203,7 +205,7 @@ describe("GET /api/purchases", () => {
 
     await request(app).get("/api/purchases?search=").set(auth());
     expect(models.purchase.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: { organizationId: ORG } })
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
     );
   });
 
@@ -241,7 +243,7 @@ describe("GET /api/purchases/supplier/:supplierId", () => {
     expect(res.status).toBe(200);
     expect(models.purchase.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { supplierId: "sup_1", organizationId: ORG },
+        where: { supplierId: "sup_1", organizationId: ORG, deletedAt: null },
         skip: 5,
         take: 5,
       })
@@ -261,11 +263,11 @@ describe("GET /api/purchases/supplier/:supplierId", () => {
 
     expect(models.purchase.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { supplierId: "sup_1", organizationId: ORG },
+        where: { supplierId: "sup_1", organizationId: ORG, deletedAt: null },
       })
     );
     expect(models.purchase.count).toHaveBeenCalledWith({
-      where: { supplierId: "sup_1", organizationId: ORG },
+      where: { supplierId: "sup_1", organizationId: ORG, deletedAt: null },
     });
   });
 
@@ -289,7 +291,7 @@ describe("GET /api/purchases/:id", () => {
     expect(res.body.id).toBe("pur_1");
     expect(res.body.purchaseItems).toHaveLength(1);
     expect(models.purchase.findFirst).toHaveBeenCalledWith({
-      where: { id: "pur_1", organizationId: ORG },
+      where: { id: "pur_1", organizationId: ORG, deletedAt: null },
       include: { supplier: true, purchaseItems: { include: { product: true } } },
     });
   });
@@ -314,7 +316,7 @@ describe("POST /api/purchases", () => {
     expect(models.purchase.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          purchaseCode: "PO-001",
+          purchaseCode: "PO-00001",
           organizationId: ORG,
           status: "Pending",
           totalAmount: 50,
@@ -347,7 +349,7 @@ describe("POST /api/purchases", () => {
         quantity: 10,
         previousQty: 5,
         newQty: 15,
-        reference: "PO-001",
+        reference: "PO-00001",
       }),
     });
   });
@@ -629,7 +631,7 @@ describe("PUT /api/purchases/:id", () => {
 
     expect(res.status).toBe(200);
     expect(models.purchase.update).toHaveBeenCalledWith({
-      where: { id: "pur_1", organizationId: ORG },
+      where: { id: "pur_1", organizationId: ORG, deletedAt: null },
       data: { status: "Completed", purchaseDate: new Date("2026-02-01T00:00:00.000Z") },
       include: { supplier: true, purchaseItems: { include: { product: true } } },
     });
@@ -729,7 +731,7 @@ describe("PUT /api/purchases/:id", () => {
 });
 
 describe("DELETE /api/purchases/:id", () => {
-  it("deletes the purchase and reverses the stock via an OUT movement", async () => {
+  it("soft-deletes the purchase and reverses the stock via an OUT movement", async () => {
     const res = await request(app).delete("/api/purchases/pur_1").set(auth());
 
     expect(res.status).toBe(204);
@@ -752,9 +754,11 @@ describe("DELETE /api/purchases/:id", () => {
         reason: expect.stringMatching(/Reversal of purchase PO-001/i),
       }),
     });
-    expect(models.purchase.delete).toHaveBeenCalledWith({
-      where: { id: "pur_1", organizationId: ORG },
+    expect(models.purchase.update).toHaveBeenCalledWith({
+      where: { id: "pur_1", organizationId: ORG, deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
     });
+    expect(models.purchase.delete).not.toHaveBeenCalled();
   });
 
   it("404s for a purchase owned by another tenant", async () => {
@@ -773,7 +777,7 @@ describe("DELETE /api/purchases/:id", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("PURCHASE_HAS_RETURNS");
-    expect(models.purchase.delete).not.toHaveBeenCalled();
+    expect(models.purchase.update).not.toHaveBeenCalled();
   });
 
   it("refuses to delete when on-hand stock has been consumed downstream", async () => {
@@ -783,7 +787,7 @@ describe("DELETE /api/purchases/:id", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("INSUFFICIENT_STOCK");
-    expect(models.purchase.delete).not.toHaveBeenCalled();
+    expect(models.purchase.update).not.toHaveBeenCalled();
   });
 });
 

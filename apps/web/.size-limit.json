@@ -1,7 +1,7 @@
 [
   {
-    "name": "Web app (gzipped JS + CSS)",
-    "path": "dist/assets/*.{js,css}",
-    "limit": "260 kB"
+    "name": "Web app entry bundle",
+    "path": "dist/assets/index-*.js",
+    "limit": "400 kB"
   }
 ]

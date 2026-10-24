@@ -472,24 +472,26 @@ describe("payments — corrections", () => {
     expectMoney(after.totals.closingBalance, before.totals.closingBalance);
   });
 
-  it("the same paymentCode cannot be recorded twice — the accidental double-submit guard", async () => {
+  it("the same payment cannot be recorded twice against a settled invoice — the accidental double-submit guard", async () => {
     const p = await newProduct("corr-dup");
     await stock(p.id);
     const customer = await createIsolatedCustomer(t, "corr-dup");
-    const code = unique("PAY");
+    const sale = await createSale(t, { customerId: customer.id, items: [{ productId: p.id, quantity: 2 }] });
+    const total = (await saleDetail(t, sale.id)).totalAmount;
 
-    await expectOk(
-      raw("post", "/payments", { paymentCode: code, customerId: customer.id, amount: 5, method: "Cash" })
+    const first = await expectOk(
+      raw("post", "/payments", { customerId: customer.id, saleId: sale.id, amount: total, method: "Cash" })
     );
+    expect(first.body.paymentCode).toMatch(/^PMT-\d{5}$/);
 
-    const dup = await raw("post", "/payments", { paymentCode: code, customerId: customer.id, amount: 5, method: "Cash" });
+    const dup = await raw("post", "/payments", { customerId: customer.id, saleId: sale.id, amount: total, method: "Cash" });
 
     expect(dup.status).toBe(409);
-    // One row only.
+    // One payment row only for this sale.
     const page = (await expectOk(raw("get", `/payments?pageSize=100&customerId=${customer.id}`))).body;
     const rows = page?.data ?? page;
 
-    expect(rows.filter((r: { paymentCode: string }) => r.paymentCode === code)).toHaveLength(1);
+    expect(rows.filter((r: { saleId?: string }) => r.saleId === sale.id)).toHaveLength(1);
   });
 });
 

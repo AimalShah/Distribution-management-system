@@ -1,4 +1,5 @@
 import axios, { isAxiosError } from "axios";
+import { toast } from "sonner";
 import { z } from "zod";
 import { AUTH_TOKEN_KEY } from "./auth-client";
 
@@ -7,6 +8,8 @@ const configuredApiUrl =
   (import.meta.env.VITE_SERVER_URL
     ? `${import.meta.env.VITE_SERVER_URL.replace(/\/+$/, "")}/api`
     : "/api");
+
+export const apiBaseUrl = configuredApiUrl;
 
 /** The axios adapter: the transport this module keeps private behind the seam. */
 const client = axios.create({
@@ -18,6 +21,13 @@ const client = axios.create({
   withCredentials: true,
 });
 
+let unauthorizedRedirectPending = false;
+
+/** Called after a successful sign-in so later expired sessions can redirect again. */
+export const resetUnauthorizedRedirect = () => {
+  unauthorizedRedirectPending = false;
+};
+
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
@@ -27,6 +37,29 @@ client.interceptors.request.use((config) => {
 
   return config;
 });
+
+client.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (
+      isAxiosError(error) &&
+      error.response?.status === 401 &&
+      !error.config?.url?.includes("/auth/") &&
+      !unauthorizedRedirectPending
+    ) {
+      unauthorizedRedirectPending = true;
+      try {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+      } catch {
+        // Storage can be unavailable in a sandboxed browser; navigation still works.
+      }
+      toast.error("Your session has expired. Sign in again to continue.");
+      window.dispatchEvent(new Event("dms:unauthorized"));
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 /**
  * One request leaves the app, one error comes back.

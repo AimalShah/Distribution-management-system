@@ -1,8 +1,11 @@
 import prisma from "@dms/db";
+import { toMoneyNumber } from "@dms/shared";
 import { serverCache } from "../utils/cache";
 
 async function getReturnCredits(organizationId: string): Promise<number> {
-  if (typeof (prisma as any).$queryRaw === "function" && process.env.NODE_ENV !== "test") {
+  // SAFETY: Testing mock environments might not define $queryRaw on prisma client.
+  const hasRawQuery = "$queryRaw" in (prisma as Record<string, unknown>) && typeof (prisma as { $queryRaw?: unknown }).$queryRaw === "function";
+  if (hasRawQuery && process.env.NODE_ENV !== "test") {
     try {
       const res = await prisma.$queryRaw<Array<{ total: number | null }>>`
         SELECT COALESCE(SUM(ri.quantity * ri."unitPrice" + ri."taxAmount" - ri.discount), 0)::float as total
@@ -10,6 +13,7 @@ async function getReturnCredits(organizationId: string): Promise<number> {
         JOIN "returns" r ON ri."returnId" = r.id
         WHERE r."organizationId" = ${organizationId} AND r."deletedAt" IS NULL AND r."returnType" = 'SALE'
       `;
+
       return Number(res[0]?.total ?? 0);
     } catch {
       // Fallback to findMany if raw query fails
@@ -35,7 +39,7 @@ async function getReturnCredits(organizationId: string): Promise<number> {
       sum +
       ret.items.reduce(
         (lineSum, item) =>
-          lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+          lineSum + item.quantity * toMoneyNumber(item.unitPrice) + toMoneyNumber(item.taxAmount) - toMoneyNumber(item.discount),
         0
       ),
     0
@@ -60,7 +64,7 @@ async function getReturnCredits(organizationId: string): Promise<number> {
  * what the legacy cards put a currency sign in front of; the counts are not
  * shown anywhere and are not worth a query.
  */
-export async function getDashboardStats(organizationId: string) {
+export async function getDashboardStats(organizationId: string): Promise<unknown> {
   return serverCache.getOrSet(`dashboard:${organizationId}`, 15 * 1000, async () => {
     const now = new Date();
     const threshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -179,9 +183,8 @@ export async function getDashboardStats(organizationId: string) {
       }),
     ]);
 
-    const unpaidSales =
-      (outstanding._sum.totalAmount ?? 0) - (outstanding._sum.amountPaid ?? 0);
-    const unallocated = unallocatedPayments._sum.amount ?? 0;
+    const unpaidSales = toMoneyNumber(outstanding._sum.totalAmount ?? 0) - toMoneyNumber(outstanding._sum.amountPaid ?? 0);
+    const unallocated = toMoneyNumber(unallocatedPayments._sum.amount ?? 0);
     const netOutstanding = Math.max(0, unpaidSales - returnCredits - unallocated);
 
     return {
@@ -190,8 +193,8 @@ export async function getDashboardStats(organizationId: string) {
       totalSuppliers,
       // An organization with no sales aggregates to `null`; the page renders a
       // zero rather than a blank, so the sum is normalized here once.
-      totalSalesAmount: salesTotal._sum.totalAmount ?? 0,
-      totalPurchasesAmount: purchasesTotal._sum.totalAmount ?? 0,
+      totalSalesAmount: toMoneyNumber(salesTotal._sum.totalAmount ?? 0),
+      totalPurchasesAmount: toMoneyNumber(purchasesTotal._sum.totalAmount ?? 0),
       lowStockCount,
       recentSales,
       recentPurchases,

@@ -80,7 +80,7 @@ export default function ReturnList() {
     return params.toString();
   }, [page, pageSize, search, typeFilter, view]);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/returns?${queryString}`,
     fetcher
   );
@@ -391,6 +391,8 @@ export default function ReturnList() {
       <ListTablePanel
         isLoading={isLoading}
         isEmpty={returnsList.length === 0}
+        error={error}
+        onRetry={() => void mutate()}
         search={{
           value: search,
           onChange: (value) => {

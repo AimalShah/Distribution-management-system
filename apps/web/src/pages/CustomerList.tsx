@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import {
   BookOpen,
   CreditCard,
+  Download,
   Edit,
   Plus,
   RefreshCw,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { invalidateDomains } from "../lib/mutation";
+import { exportCustomersCSV } from "../lib/csv";
 import {
   Badge,
   Button,
@@ -60,7 +62,7 @@ export default function CustomerList() {
     return params.toString();
   }, [page, pageSize, search, statusFilter]);
 
-  const { data, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/customers?${queryString}`,
     fetcher
   );
@@ -257,6 +259,17 @@ export default function CustomerList() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => exportCustomersCSV(data?.data || [])}
+              disabled={isLoading || !data?.data?.length}
+              className="btn-secondary h-9 rounded-md cursor-pointer"
+              data-testid="btn-export-customers-csv"
+            >
+              <Download className="size-3.5 mr-2" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => mutate()}
               disabled={isLoading}
               className="btn-secondary h-9 rounded-md cursor-pointer"
@@ -308,6 +321,8 @@ export default function CustomerList() {
       <ListTablePanel
         isLoading={isLoading}
         isEmpty={customersList.length === 0}
+        error={error}
+        onRetry={() => void mutate()}
         search={{
           value: search,
           onChange: (value) => {

@@ -3,12 +3,15 @@ import type { Prisma } from "@dms/db";
 import {
   calculateSaleBreakdown,
   isInvalidSaleTotal,
+  toMoneyNumber,
   type SaleInvoiceInput,
   type SaleUpdateInput,
 } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement } from "./stock-movement";
 import { serverCache, invalidateTenantMetrics } from "../utils/cache";
+import { nextDocumentCode } from "./document-code";
+import { recordAuditLog } from "./audit";
 
 const listInclude = {
   customer: true,
@@ -219,6 +222,8 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
 
     const saleDate = data.saleDate ?? new Date();
 
+    const saleCode = await nextDocumentCode(tx, organizationId, "sale", saleDate);
+
     // Credit terms (ADR 0009): the due date is derived from the customer's own
     // term when they have one, else the Company's default. A company that has
     // never saved settings still falls back to net-30, the documented default.
@@ -280,24 +285,23 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
           sum +
           ret.items.reduce(
             (lineSum, item) =>
-              lineSum + item.quantity * item.unitPrice + item.taxAmount - item.discount,
+              lineSum + item.quantity * toMoneyNumber(item.unitPrice) + toMoneyNumber(item.taxAmount) - toMoneyNumber(item.discount),
             0
           ),
         0
       );
 
-      const unpaidSales =
-        (ledger._sum.totalAmount ?? 0) - (ledger._sum.amountPaid ?? 0);
-      const unallocated = unallocatedPayments._sum.amount ?? 0;
+      const unpaidSales = toMoneyNumber(ledger._sum.totalAmount ?? 0) - toMoneyNumber(ledger._sum.amountPaid ?? 0);
+      const unallocated = toMoneyNumber(unallocatedPayments._sum.amount ?? 0);
       const netBalance = unpaidSales - returnCredits - unallocated;
       const outstanding = Math.max(0, netBalance);
       const projected = Math.max(0, netBalance + money.total);
 
-      if (projected > customer.creditLimit && !data.overrideCreditLimit) {
+      if (projected > toMoneyNumber(customer.creditLimit) && !data.overrideCreditLimit) {
         throw conflict(
           "This sale would take the customer over their credit limit",
           "CREDIT_LIMIT_EXCEEDED",
-          { outstanding, limit: customer.creditLimit, projected }
+          { outstanding, limit: toMoneyNumber(customer.creditLimit), projected }
         );
       }
     }
@@ -376,8 +380,8 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         direction: "out",
         quantity: item.quantity,
         movementType: "OUT",
-        reason: `Stock Out from Sale ${data.saleCode}`,
-        reference: data.saleCode,
+        reason: `Stock Out from Sale ${saleCode}`,
+        reference: saleCode,
         refusal: (available) =>
           conflict("Not enough stock to fulfil this sale", "INSUFFICIENT_STOCK", {
             shortages: [{ productId: item.productId, available, requested: item.quantity }],
@@ -389,7 +393,7 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
 
     const sale = await tx.sale.create({
       data: {
-        saleCode: data.saleCode,
+        saleCode,
         customerId: data.customerId,
         saleDate,
         totalAmount: money.total,
@@ -684,7 +688,7 @@ export async function deleteSale(id: string, organizationId: string, userId: str
         });
       }
 
-      if (existing.amountPaid > 0) {
+      if (toMoneyNumber(existing.amountPaid) > 0) {
         throw conflict(
           "This invoice has payments recorded against it. Correct them first, " +
             "then delete the invoice.",
@@ -825,7 +829,7 @@ export async function cancelSale(id: string, organizationId: string) {
     });
   }
 
-  if (existing.amountPaid > 0) {
+  if (toMoneyNumber(existing.amountPaid) > 0) {
     throw conflict(
       "This invoice has payments recorded against it. Correct them first, " +
         "then cancel the invoice.",
@@ -854,6 +858,14 @@ export async function cancelSale(id: string, organizationId: string) {
     where: { id, organizationId },
     data: { status: "Cancelled", statusBeforeCancel: existing.status },
     include: detailInclude,
+  });
+
+  await recordAuditLog({
+    organizationId,
+    entityType: "SALE",
+    entityId: existing.saleCode,
+    action: "CANCEL",
+    details: { id, saleCode: existing.saleCode },
   });
 
   invalidateTenantMetrics(organizationId, "sales");
@@ -905,7 +917,7 @@ export async function getSaleInvoiceData(id: string, organizationId: string) {
     items: items.map((it) => ({
       quantity: it.quantity,
       unitPrice: it.unitPrice,
-      subtotal: it.totalPrice ?? it.quantity * it.unitPrice,
+      subtotal: it.totalPrice ?? it.quantity * toMoneyNumber(it.unitPrice),
       cgstRate: it.cgstRate ?? 0,
       sgstRate: it.sgstRate ?? 0,
       igstRate: it.igstRate ?? 0,

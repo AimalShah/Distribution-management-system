@@ -7,6 +7,42 @@ import { badRequest, forbidden, unauthorized } from "../http/errors";
 type Session = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;
 
 /**
+ * The two account-level locks P0-5 enforces, checked against the session's own
+ * user on every authenticated mount:
+ *
+ * - `banned`: the provisioning service sets it when an owner deactivates a
+ *   member and deletes that user's live sessions, so an unauthenticated caller
+ *   is the normal case here. Better-auth's admin plugin independently refuses
+ *   the sign-in of a banned user (BANNED_USER at session creation). This check
+ *   covers the race in between: a session minted moments before the
+ *   deactivation lands is refused here on its next request.
+ * - `mustChangePassword`: set when an owner provisions a staff account with a
+ *   temporary password, and cleared only by the first-login password-change
+ *   endpoint. While it stands no tenant route is reachable at all, so a
+ *   provisioned staff cannot read, write, or create an organization before
+ *   replacing the password.
+ */
+const assertAccountUsable = (user: {
+  id: string;
+  banned?: boolean | null;
+  mustChangePassword?: boolean | null;
+}) => {
+  if (user.banned) {
+    throw unauthorized(
+      "This account has been deactivated. Contact the owner of your organization.",
+      "ACCOUNT_DEACTIVATED"
+    );
+  }
+
+  if (user.mustChangePassword) {
+    throw forbidden(
+      "Your password must be changed before you can use the app.",
+      "PASSWORD_CHANGE_REQUIRED"
+    );
+  }
+};
+
+/**
  * Express 4 does not catch a rejected promise from an async handler, so each
  * middleware below is written as a promise and routed to `next` explicitly.
  */
@@ -37,6 +73,8 @@ const handle =
  */
 export const sessionAuthContext = (auth: Auth): RequestHandler =>
   handle(async (req, { session, user }) => {
+    assertAccountUsable(user);
+
     const organizationId = session.activeOrganizationId;
 
     if (!organizationId) {
@@ -66,8 +104,30 @@ export const sessionAuthContext = (auth: Auth): RequestHandler =>
  * active organization yet is the normal case on these routes, so only the
  * session is required. Each organization/member route already checks
  * membership in its service against the id it acts on.
+ *
+ * Both account locks above apply here too, so a provisioned staff cannot work
+ * the organization routes (create an organization, list memberships) while
+ * their password is still the temporary one, and a deactivated member cannot
+ * act through a session they held before deactivation. The one route exempt
+ * from the mustChangePassword half is the first-login password change itself,
+ * which sits behind `sessionBootstrapOpenAuthContext` below.
  */
 export const sessionBootstrapAuthContext = (auth: Auth): RequestHandler =>
+  handle(async (req, { session, user }) => {
+    assertAccountUsable(user);
+
+    req.auth = { organizationId: "", userId: user.id, sessionId: session.id };
+  }, auth);
+
+/**
+ * The same middleware without the account locks, for exactly one mount: the
+ * route that clears `mustChangePassword`. Gating it with its own lock would
+ * mean the route insists on the password being already changed -- the opposite
+ * of its purpose -- and the deactivation half stays unnecessary because a
+ * deactivated user's sessions were deleted at deactivation (and better-auth
+ * refuses their sign-in outright).
+ */
+export const sessionBootstrapOpenAuthContext = (auth: Auth): RequestHandler =>
   handle(async (req, { session, user }) => {
     req.auth = { organizationId: "", userId: user.id, sessionId: session.id };
   }, auth);

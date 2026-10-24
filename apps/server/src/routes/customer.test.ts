@@ -31,6 +31,7 @@ vi.mock("../services/customer-pdf", () => ({
 
 vi.mock("@dms/db", () => ({
   default: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     customer: customerModel,
     sale: saleModel,
@@ -39,6 +40,7 @@ vi.mock("@dms/db", () => ({
     companySettings: { findUnique: vi.fn().mockResolvedValue(null) },
   },
   prisma: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     customer: customerModel,
     sale: saleModel,
@@ -117,7 +119,7 @@ describe("organization context", () => {
     const res = await request(app).get("/api/health");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body).toMatchObject({ status: "ok", db: "ok" });
   });
 });
 

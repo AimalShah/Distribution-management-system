@@ -2,9 +2,12 @@ import { useState } from "react";
 import useSWR from "swr";
 import {
   AlertTriangle,
+  Mail,
   Plus,
   RefreshCw,
   Shield,
+  ShieldOff,
+  ShieldCheck,
   Trash2,
   UserPlus,
   Users,
@@ -31,8 +34,10 @@ import { useActiveMembership } from "../lib/profile";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHead } from "../components/list/PageHead";
 import {
+  InviteMemberDialog,
   labelFor,
   MemberDialog,
+  StaffDialog,
   type AvailableUser,
   type MemberRow,
 } from "../components/settings/MemberDialog";
@@ -65,6 +70,12 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<MemberRow | null>(null);
   const [removing, setRemoving] = useState<MemberRow | null>(null);
   const [removingBusy, setRemovingBusy] = useState(false);
+
+  // P0-5: the staff account the Company can actually create through the UI.
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<MemberRow | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const { data: available } = useSWR(
     dialogOpen && !editing && organizationId
@@ -121,6 +132,28 @@ export default function UsersPage() {
     }
   };
 
+  const confirmStatus = async () => {
+    if (!statusTarget) return;
+
+    const activate = statusTarget.user.banned ?? false;
+
+    setStatusBusy(true);
+
+    try {
+      await api.patch(`/members/${statusTarget.id}/status`, {
+        active: activate,
+      });
+      invalidateDomains("members");
+      toast.success(activate ? "Member reactivated" : "Member deactivated");
+      setStatusTarget(null);
+      await mutate();
+    } catch (cause) {
+      toast.error(failureMessage(cause, "Could not update the member"));
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
   const waitingForCompany = membershipLoading || !organizationId;
 
   return (
@@ -139,6 +172,24 @@ export default function UsersPage() {
             >
               <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setInviteOpen(true)}
+            >
+              <Mail className="size-3.5" />
+              Invite by email
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setStaffOpen(true)}
+            >
+              <UserPlus className="size-3.5" />
+              Add staff account
             </Button>
             <Button size="sm" className="gap-1.5" onClick={openAdd}>
               <Plus className="size-3.5" />
@@ -193,6 +244,7 @@ export default function UsersPage() {
                   <TableRow className="bg-muted/40">
                     <TableHead className="font-semibold text-xs">Member</TableHead>
                     <TableHead className="font-semibold text-xs">Role</TableHead>
+                    <TableHead className="font-semibold text-xs">Status</TableHead>
                     <TableHead className="font-semibold text-xs text-right">
                       Actions
                     </TableHead>
@@ -227,6 +279,29 @@ export default function UsersPage() {
                           {labelFor(member.role)}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        {member.user.banned ? (
+                          <Badge variant="destructive" className="gap-1 text-[10px]">
+                            <ShieldOff className="size-3" aria-hidden="true" />
+                            Deactivated
+                          </Badge>
+                        ) : member.user.mustChangePassword ? (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-400"
+                          >
+                            <ShieldCheck className="size-3" aria-hidden="true" />
+                            First login pending
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          >
+                            Active
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1.5">
                           <Button
@@ -237,6 +312,24 @@ export default function UsersPage() {
                           >
                             <UserPlus className="size-3" aria-hidden="true" />
                             Change role
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => setStatusTarget(member)}
+                          >
+                            {member.user.banned ? (
+                              <>
+                                <ShieldCheck className="size-3" aria-hidden="true" />
+                                Reactivate
+                              </>
+                            ) : (
+                              <>
+                                <ShieldOff className="size-3" aria-hidden="true" />
+                                Deactivate
+                              </>
+                            )}
                           </Button>
                           <Button
                             variant="outline"
@@ -266,6 +359,18 @@ export default function UsersPage() {
         onSubmit={submitDialog}
       />
 
+      <StaffDialog
+        open={staffOpen}
+        onOpenChange={setStaffOpen}
+        organizationId={organizationId}
+      />
+
+      <InviteMemberDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        organizationId={organizationId}
+      />
+
       <ConfirmDialog
         open={Boolean(removing)}
         title="Remove this member?"
@@ -277,6 +382,21 @@ export default function UsersPage() {
         busy={removingBusy}
         onConfirm={() => void confirmRemove()}
         onCancel={() => setRemoving(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(statusTarget)}
+        title={statusTarget?.user.banned ? "Reactivate this member?" : "Deactivate this member?"}
+        description={
+          statusTarget?.user.banned
+            ? `${statusTarget?.user.name ?? "This member"} can sign in with their password again.`
+            : `${statusTarget?.user.name ?? "This member"} is signed out everywhere and cannot sign in until you reactivate them. Their history stays.`
+        }
+        confirmLabel={statusTarget?.user.banned ? "Reactivate" : "Deactivate"}
+        destructive={!statusTarget?.user.banned}
+        busy={statusBusy}
+        onConfirm={() => void confirmStatus()}
+        onCancel={() => setStatusTarget(null)}
       />
     </div>
   );

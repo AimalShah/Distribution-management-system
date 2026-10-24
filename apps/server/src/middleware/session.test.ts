@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Auth } from "../auth";
 import { errorHandler } from "../http";
 import { ORGANIZATION_HEADER, USER_HEADER } from "./auth-context";
-import { sessionAuthContext, sessionBootstrapAuthContext } from "./session";
+import {
+  sessionAuthContext,
+  sessionBootstrapAuthContext,
+  sessionBootstrapOpenAuthContext,
+} from "./session";
 
 const { memberModel, dbStub } = vi.hoisted(() => {
   const member = { findUnique: vi.fn() };
@@ -18,15 +22,25 @@ const getSession = vi.fn();
 
 const auth = { api: { getSession } } as unknown as Auth;
 
-const session = (activeOrganizationId: string | null = "org_1") => ({
+interface SessionUser {
+  id: string;
+  banned?: boolean | null;
+  mustChangePassword?: boolean | null;
+}
+
+const session = (
+  activeOrganizationId: string | null = "org_1",
+  user: Partial<SessionUser> = {}
+) => ({
   session: { id: "ses_1", activeOrganizationId },
-  user: { id: "usr_1" },
+  user: { id: "usr_1", ...user },
 });
 
 const buildApp = (): Express => {
   const app = express();
   app.get("/strict", sessionAuthContext(auth), (req, res) => res.json(req.auth));
   app.get("/bootstrap", sessionBootstrapAuthContext(auth), (req, res) => res.json(req.auth));
+  app.get("/open", sessionBootstrapOpenAuthContext(auth), (req, res) => res.json(req.auth));
   app.use(errorHandler);
 
   return app;
@@ -89,6 +103,81 @@ describe("sessionAuthContext", () => {
     const res = await request(app).get("/strict");
 
     expect(res.status).toBe(500);
+  });
+});
+
+describe("P0-5 account locks", () => {
+  it("refuses a provisioned staff member at a tenant route until the password is changed", async () => {
+    // The flag is what makes the temporary password temporary: with it, no
+    // tenant route answers at all.
+    getSession.mockResolvedValue(session("org_1", { mustChangePassword: true }));
+
+    const res = await request(app).get("/strict");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "PASSWORD_CHANGE_REQUIRED" });
+    expect(memberModel.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("refuses the same member at the organization routes too", async () => {
+    // Or they could create an organization before ever setting a password of
+    // their own.
+    getSession.mockResolvedValue(session(null, { mustChangePassword: true }));
+
+    const res = await request(app).get("/bootstrap");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "PASSWORD_CHANGE_REQUIRED" });
+  });
+
+  it("answers the first-login password change through the open mount", async () => {
+    // The route that ends the flag is the one route the flag must not gate.
+    getSession.mockResolvedValue(session(null, { mustChangePassword: true }));
+
+    const res = await request(app).get("/open");
+
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a deactivated member with 401", async () => {
+    // Deactivation deletes their sessions; a session recorded moments before
+    // the write lands is the race this answers.
+    getSession.mockResolvedValue(session("org_1", { banned: true }));
+
+    const res = await request(app).get("/strict");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: "ACCOUNT_DEACTIVATED" });
+  });
+
+  it("refuses a deactivated member at the bootstrap routes too", async () => {
+    getSession.mockResolvedValue(session(null, { banned: true }));
+
+    const res = await request(app).get("/bootstrap");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: "ACCOUNT_DEACTIVATED" });
+  });
+
+  it("deactivation wins over the forced-password-change state", async () => {
+    getSession.mockResolvedValue(
+      session(null, { banned: true, mustChangePassword: true })
+    );
+
+    const res = await request(app).get("/bootstrap");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: "ACCOUNT_DEACTIVATED" });
+  });
+
+  it("answers both locks as absent for a normal member", async () => {
+    getSession.mockResolvedValue(
+      session("org_1", { banned: null, mustChangePassword: null })
+    );
+
+    const res = await request(app).get("/strict");
+
+    expect(res.status).toBe(200);
   });
 });
 

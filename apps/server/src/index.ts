@@ -3,13 +3,14 @@
 import "./config/dev-env";
 import { createApp } from "./app";
 import { assertAuthIsSafe, host, port } from "./config/env";
+import { logger } from "./logger";
 
 assertAuthIsSafe();
 
 const app = createApp();
 
 app.listen(port, host, () => {
-  console.log(`Server running on http://${host}:${port}`);
+  logger.info({ event: "server_started", host, port }, "server started");
 });
 
 export { app };

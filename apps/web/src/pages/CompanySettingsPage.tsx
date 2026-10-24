@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Building2,
   CheckCircle2,
+  History,
   Loader2,
   Plus,
   Save,
@@ -38,6 +39,7 @@ import { api, failureMessage } from "../lib/api";
 import { SkuFormatBuilder } from "../components/settings/SkuFormatBuilder";
 import { BrandManager } from "../components/settings/BrandManager";
 import { CreateCompanyDialog } from "../components/settings/CreateCompanyDialog";
+import { AuditTrailTab } from "../components/settings/AuditTrailTab";
 
 /** The shape `GET /api/settings` answers with (issue #39). */
 interface CompanySettingsView {
@@ -306,7 +308,7 @@ export function CompanySettingsPage() {
       {/* Tabs / Panels for Active Company Settings */}
       {/* We mount panels and control view with Tabs */}
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full sm:w-auto h-auto p-1 bg-muted/60">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full sm:w-auto h-auto p-1 bg-muted/60">
           <TabsTrigger value="profile" className="gap-1.5 py-2">
             <Building2 className="size-4" />
             <span>Profile</span>
@@ -322,6 +324,10 @@ export function CompanySettingsPage() {
           <TabsTrigger value="brands" className="gap-1.5 py-2">
             <Tags className="size-4" />
             <span>Brands</span>
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="gap-1.5 py-2">
+            <History className="size-4" />
+            <span>Audit Trail</span>
           </TabsTrigger>
         </TabsList>
 
@@ -482,6 +488,11 @@ export function CompanySettingsPage() {
               <BrandManager />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Tab 5: Audit Trail */}
+        <TabsContent value="audit" forceMount className="data-[state=inactive]:hidden focus-visible:outline-none">
+          <AuditTrailTab />
         </TabsContent>
       </Tabs>
 

@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { addMemberSchema, updateMemberRoleSchema } from "@dms/shared";
+import {
+  addMemberSchema,
+  addStaffSchema,
+  setMemberStatusSchema,
+  updateMemberRoleSchema,
+} from "@dms/shared";
 import { asyncHandler } from "../http";
 import {
   addMember,
@@ -9,6 +14,7 @@ import {
   updateMemberRole,
 } from "../services/member";
 import { requireUserId } from "../middleware/auth-context";
+import { createStaff, setMemberStatus } from "../services/user-provisioning";
 
 /**
  * The two org-scoped member routes. Mounted inside the `/api/organizations`
@@ -69,6 +75,24 @@ organizationMemberRouter.post(
   })
 );
 
+/**
+ * P0-5: create the staff account itself. The tenant is named in the path, so
+ * this lives on the same mount as the other membership routes -- only now the
+ * account does not have to exist first, which is the reason a fresh tenant
+ * could never staff itself.
+ */
+organizationMemberRouter.post(
+  "/:id/staff",
+  asyncHandler(async (req, res) => {
+    const callerUserId = requireUserId(req.auth.userId);
+    const data = addStaffSchema.parse(req.body);
+
+    const user = await createStaff(req.params.id, data, callerUserId);
+
+    res.status(201).json(user);
+  })
+);
+
 memberRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
@@ -94,5 +118,22 @@ memberRouter.patch(
     const member = await updateMemberRole(req.params.id, data, callerUserId);
 
     res.json(member);
+  })
+);
+
+/**
+ * P0-5: deactivate/reactivate a member. The row and its history stay; the user
+ * loses their sessions and is refused at every authenticated route until
+ * reactivated. Scoped by member id the same way as the role route above.
+ */
+memberRouter.patch(
+  "/:id/status",
+  asyncHandler(async (req, res) => {
+    const callerUserId = requireUserId(req.auth.userId);
+    const data = setMemberStatusSchema.parse(req.body);
+
+    const result = await setMemberStatus(req.params.id, data, callerUserId);
+
+    res.json(result);
   })
 );

@@ -40,7 +40,6 @@ import {
   Separator,
 } from "@dms/ui";
 import { api, fetcher, shortfallLine, toFailure } from "../../lib/api";
-import { generateSaleInvoiceCode } from "../../lib/code";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
 
@@ -108,7 +107,7 @@ export function SaleInvoiceForm({
     resolver: zodResolver(SaleInvoiceSchema),
     defaultValues: {
       customerId: initialData?.customerId ?? "",
-      saleCode: initialData?.saleCode ?? generateSaleInvoiceCode(),
+      saleCode: initialData?.saleCode ?? "",
       saleDate: initialData?.saleDate
         ? new Date(initialData.saleDate).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
@@ -232,7 +231,6 @@ export function SaleInvoiceForm({
       if (isEditing && saleId) {
         const updatePayload = {
           customerId: values.customerId,
-          saleCode: values.saleCode,
           saleDate: values.saleDate,
           status: values.status,
           invoiceType: values.invoiceType,
@@ -246,7 +244,6 @@ export function SaleInvoiceForm({
       } else {
         createPayload = {
           customerId: values.customerId,
-          saleCode: values.saleCode,
           saleDate: values.saleDate,
           status: values.status,
           invoiceType: values.invoiceType,
@@ -333,11 +330,15 @@ export function SaleInvoiceForm({
                 name="saleCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Invoice Code *</FormLabel>
+                    <FormLabel>Invoice Code</FormLabel>
                     <FormControl>
-                      <Input placeholder="SALE-2026-XXXXX" className="font-mono text-xs" {...field} />
+                      <Input
+                        {...field}
+                        value={initialData?.saleCode ?? "Assigned automatically when saved"}
+                        readOnly
+                        className="font-mono text-xs"
+                      />
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />

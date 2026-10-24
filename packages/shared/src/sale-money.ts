@@ -32,12 +32,14 @@
  */
 
 /** One line of the document, as the caller knows it: inputs only, no figures. */
+type MoneyInput = number | string | { toString(): string };
+
 export interface SaleBreakdownLineInput {
   productId?: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: MoneyInput;
   /** Line subtotal override; absent means `quantity * unitPrice`. */
-  subtotal?: number;
+  subtotal?: MoneyInput;
   gstApplicable?: boolean;
   /** Product GST rate in percent, the fallback when the line states no rate. */
   gstRate?: number;
@@ -47,9 +49,9 @@ export interface SaleBreakdownLineInput {
   cgstRate?: number;
   sgstRate?: number;
   igstRate?: number;
-  cgstAmount?: number;
-  sgstAmount?: number;
-  igstAmount?: number;
+  cgstAmount?: MoneyInput;
+  sgstAmount?: MoneyInput;
+  igstAmount?: MoneyInput;
   productName?: string;
   productCode?: string;
 }
@@ -58,13 +60,13 @@ export interface SaleBreakdownLineInput {
 export interface SaleBreakdownParams {
   items: SaleBreakdownLineInput[];
   isInterState?: boolean;
-  discount?: number;
+  discount?: MoneyInput;
   /** Header tax; supplied, it wins over the derived GST sum. */
-  taxAmount?: number;
+  taxAmount?: MoneyInput;
   /** Header split; each supplied component wins over its derived sum. */
-  cgstAmount?: number;
-  sgstAmount?: number;
-  igstAmount?: number;
+  cgstAmount?: MoneyInput;
+  sgstAmount?: MoneyInput;
+  igstAmount?: MoneyInput;
 }
 
 /** One line after the module has resolved its rate, split and amount. */
@@ -99,8 +101,9 @@ export interface SaleBreakdownResult {
   items: SaleBreakdownItem[];
 }
 
-/** Money is reported to two decimals wherever a figure is derived. */
-const round2 = (value: number) => Number(value.toFixed(2));
+import { fromPaise, percentagePaise, toPaise } from "./money";
+
+const roundRate = (value: number) => Number(value.toFixed(2));
 
 /**
  * The single implementation of a sale document's money figures — see the note
@@ -108,44 +111,52 @@ const round2 = (value: number) => Number(value.toFixed(2));
  */
 export function calculateSaleBreakdown(params: SaleBreakdownParams): SaleBreakdownResult {
   const isInterState = Boolean(params.isInterState);
-  let totalCgst = 0;
-  let totalSgst = 0;
-  let totalIgst = 0;
-  let subtotal = 0;
+  let totalCgst = 0n;
+  let totalSgst = 0n;
+  let totalIgst = 0n;
+  let subtotal = 0n;
 
   const items: SaleBreakdownItem[] = params.items.map((item) => {
-    const lineTotal = item.subtotal ?? item.quantity * item.unitPrice;
-    subtotal += lineTotal;
+    const unitPricePaise = toPaise(item.unitPrice);
+    const lineTotalPaise = item.subtotal === undefined
+      ? BigInt(item.quantity) * unitPricePaise
+      : toPaise(item.subtotal);
+    const lineTotal = fromPaise(lineTotalPaise);
+    const unitPrice = fromPaise(unitPricePaise);
+    subtotal += lineTotalPaise;
     const isGstApplicable = item.gstApplicable ?? true;
     const rawRate = isGstApplicable ? (item.taxPercent ?? item.gstRate ?? 0) : 0;
 
     let cgstRate = item.cgstRate ?? 0;
     let sgstRate = item.sgstRate ?? 0;
     let igstRate = item.igstRate ?? 0;
-    let cgstAmount = item.cgstAmount ?? 0;
-    let sgstAmount = item.sgstAmount ?? 0;
-    let igstAmount = item.igstAmount ?? 0;
+    let cgstAmount = fromPaise(toPaise(item.cgstAmount ?? 0));
+    let sgstAmount = fromPaise(toPaise(item.sgstAmount ?? 0));
+    let igstAmount = fromPaise(toPaise(item.igstAmount ?? 0));
 
     if (rawRate > 0 && !item.cgstRate && !item.sgstRate && !item.igstRate && !item.cgstAmount && !item.sgstAmount && !item.igstAmount) {
       if (isInterState) {
         igstRate = rawRate;
-        igstAmount = round2((lineTotal * igstRate) / 100);
+        igstAmount = fromPaise(percentagePaise(lineTotalPaise, igstRate));
       } else {
-        cgstRate = round2(rawRate / 2);
-        sgstRate = round2(rawRate / 2);
-        cgstAmount = round2((lineTotal * cgstRate) / 100);
-        sgstAmount = round2((lineTotal * sgstRate) / 100);
+        cgstRate = roundRate(rawRate / 2);
+        sgstRate = roundRate(rawRate / 2);
+        cgstAmount = fromPaise(percentagePaise(lineTotalPaise, cgstRate));
+        sgstAmount = fromPaise(percentagePaise(lineTotalPaise, sgstRate));
       }
     }
 
-    totalCgst += cgstAmount;
-    totalSgst += sgstAmount;
-    totalIgst += igstAmount;
+    const cgstAmountPaise = toPaise(cgstAmount);
+    const sgstAmountPaise = toPaise(sgstAmount);
+    const igstAmountPaise = toPaise(igstAmount);
+    totalCgst += cgstAmountPaise;
+    totalSgst += sgstAmountPaise;
+    totalIgst += igstAmountPaise;
 
     return {
       productId: item.productId,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
+      unitPrice,
       subtotal: lineTotal,
       productName: item.productName,
       productCode: item.productCode,
@@ -161,18 +172,21 @@ export function calculateSaleBreakdown(params: SaleBreakdownParams): SaleBreakdo
     };
   });
 
-  const cgstAmount = params.cgstAmount ?? round2(totalCgst);
-  const sgstAmount = params.sgstAmount ?? round2(totalSgst);
-  const igstAmount = params.igstAmount ?? round2(totalIgst);
+  const cgstAmount = fromPaise(params.cgstAmount === undefined ? totalCgst : toPaise(params.cgstAmount));
+  const sgstAmount = fromPaise(params.sgstAmount === undefined ? totalSgst : toPaise(params.sgstAmount));
+  const igstAmount = fromPaise(params.igstAmount === undefined ? totalIgst : toPaise(params.igstAmount));
 
-  const taxAmount =
-    params.taxAmount !== undefined ? params.taxAmount : round2(cgstAmount + sgstAmount + igstAmount);
+  const taxAmountPaise = params.taxAmount !== undefined
+    ? toPaise(params.taxAmount)
+    : toPaise(cgstAmount) + toPaise(sgstAmount) + toPaise(igstAmount);
+  const taxAmount = fromPaise(taxAmountPaise);
 
-  const discount = params.discount ?? 0;
-  const total = round2(subtotal + taxAmount - discount);
+  const discountPaise = toPaise(params.discount ?? 0);
+  const discount = fromPaise(discountPaise);
+  const total = fromPaise(subtotal + taxAmountPaise - discountPaise);
 
   return {
-    subtotal: round2(subtotal),
+    subtotal: fromPaise(subtotal),
     cgstAmount,
     sgstAmount,
     igstAmount,

@@ -22,12 +22,14 @@ const { brandModel, categoryModel, productModel } = vi.hoisted(() => ({
 
 vi.mock("@dms/db", () => ({
   default: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     brand: brandModel,
     category: categoryModel,
     product: productModel,
   },
   prisma: {
+    $queryRaw: vi.fn().mockResolvedValue([{ result: 1 }]),
     member: { findFirst: async () => ({ role: "owner" }) },
     brand: brandModel,
     category: categoryModel,
@@ -89,7 +91,7 @@ describe("organization context", () => {
     const res = await request(app).get("/api/health");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body).toMatchObject({ status: "ok", db: "ok" });
   });
 });
 

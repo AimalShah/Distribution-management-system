@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.inventioo.dms",
-    "productName": "Inventioo DMS",
+    "productName": "AM-Enterprise",
     "files": [
       "dist/**/*",
       "node_modules/**/*"

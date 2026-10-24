@@ -5,6 +5,7 @@ import { ORGANIZATION_HEADER, USER_ENV_VAR, USER_HEADER } from "../middleware/au
 
 const { models, transaction } = vi.hoisted(() => {
   const models = {
+    documentSequence: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     member: { findFirst: async () => ({ role: "owner" }) },
     return: {
       findFirst: vi.fn(),
@@ -362,13 +363,14 @@ describe("POST /api/returns validation", () => {
     expect(models.return.create).not.toHaveBeenCalled();
   });
 
-  it("refuses a return code shorter than three characters", async () => {
+  it("replaces a client-supplied return code with the organization sequence", async () => {
     const res = await request(app)
       .post("/api/returns")
       .set(auth())
       .send(saleReturn({ returnCode: "RE" }));
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(createArg().data.returnCode).toBe("RET-00001");
   });
 
   it("refuses a return with no user to attribute the stock movement to", async () => {
@@ -485,8 +487,8 @@ describe("POST /api/returns for a SALE", () => {
     expect(data.userId).toBe(USER);
     expect(data.inventoryId).toBe("inv_1");
     expect(data.productId).toBe("prod_1");
-    expect(data.reference).toBe("RET-001");
-    expect(data.reason).toContain("RET-001");
+    expect(data.reference).toBe("RET-00001");
+    expect(data.reason).toContain("RET-00001");
     expect(data.reason).toContain("Damaged box");
   });
 
@@ -645,7 +647,7 @@ describe("POST /api/returns that takes stock off hand", () => {
     expect(data.newQty).toBe(8);
     // An outbound movement subtracts, so the ledger's arithmetic is previous - qty.
     expect(data.previousQty - data.quantity).toBe(data.newQty);
-    expect(data.reference).toBe("RET-002");
+    expect(data.reference).toBe("RET-00001");
   });
 
   it("labels the write-off movements by type", async () => {
@@ -765,13 +767,13 @@ describe("PUT /api/returns/:id", () => {
     const res = await request(app)
       .put("/api/returns/ret_1")
       .set(auth())
-      .send({ returnCode: "RET-900", reason: "Opened again" });
+      .send({ reason: "Opened again" });
 
     expect(res.status).toBe(200);
     expect(models.return.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "ret_1", organizationId: ORG },
-        data: { returnCode: "RET-900", reason: "Opened again" },
+        data: { reason: "Opened again" },
       })
     );
   });

@@ -10,6 +10,13 @@ export const DEFAULT_ORGANIZATION_ID = "XvLM6ho7gz20skKWktQkeDgYD4uGC9jE";
 export const DEFAULT_OWNER_ID = "JEXqru5KeZxSMUhEQ1I6P5hJgMepXMum";
 export const DEFAULT_OWNER_EMAIL = "owner@test.com";
 
+const bootstrap = {
+  ownerEmail: process.env.DMS_OWNER_EMAIL?.trim().toLowerCase() || DEFAULT_OWNER_EMAIL,
+  ownerName: process.env.DMS_OWNER_NAME?.trim() || "Test Owner",
+  organizationName: process.env.DMS_ORGANIZATION_NAME?.trim() || "Acme Distribution",
+  organizationSlug: process.env.DMS_ORGANIZATION_SLUG?.trim() || "acme",
+};
+
 export async function seedOwnerOnly() {
   assertLocalDatabase("db:seed:owner");
   console.log("🌱 Starting owner credentials seeding...");
@@ -23,8 +30,8 @@ export async function seedOwnerOnly() {
     organization = await prisma.organization.create({
       data: {
         id: DEFAULT_ORGANIZATION_ID,
-        name: "Acme Distribution",
-        slug: "acme",
+        name: bootstrap.organizationName,
+        slug: bootstrap.organizationSlug,
         createdAt: new Date(),
       },
     });
@@ -35,15 +42,15 @@ export async function seedOwnerOnly() {
 
   // 2. Get or Create Owner user
   let owner = await prisma.user.findFirst({
-    where: { email: DEFAULT_OWNER_EMAIL },
+    where: { email: bootstrap.ownerEmail },
   });
 
   if (!owner) {
     owner = await prisma.user.create({
       data: {
         id: DEFAULT_OWNER_ID,
-        name: "Test Owner",
-        email: DEFAULT_OWNER_EMAIL,
+        name: bootstrap.ownerName,
+        email: bootstrap.ownerEmail,
         emailVerified: true,
         organizationId: organization.id,
         isOwner: true,
