@@ -114,6 +114,7 @@ export interface SaleInvoiceItemRow {
   taxAmount?: number | null;
   discount?: number | null;
   status: string;
+  statusBeforeCancel?: string | null;
   amountPaid?: number;
   saleDate: string;
   createdAt: string;
