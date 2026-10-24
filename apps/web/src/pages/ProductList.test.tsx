@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { SWRConfig } from "swr";
@@ -105,5 +105,31 @@ describe("ProductList Brand Filter (issue #45)", () => {
         expect.stringContaining("brandId=b2")
       );
     });
+  });
+
+  it("optimistically removes product from view during delete (flag G-1)", async () => {
+    let resolveDelete: (val: any) => void = () => {};
+    apiDelete.mockReturnValue(new Promise((resolve) => { resolveDelete = resolve; }));
+
+    const user = userEvent.setup();
+    renderComponent();
+
+    expect(await screen.findByText("Cola 500ml")).toBeInTheDocument();
+
+    const menuBtns = screen.getAllByRole("button", { name: "Open menu" });
+    await user.click(menuBtns[0]);
+
+    const deleteMenuItem = await screen.findByRole("menuitem", { name: /delete/i });
+    await user.click(deleteMenuItem);
+
+    const confirmDialog = await screen.findByRole("dialog");
+    const confirmBtn = within(confirmDialog).getByRole("button", { name: /delete/i });
+    await user.click(confirmBtn);
+
+    expect(apiDelete).toHaveBeenCalledWith("/products/p1");
+    // Row should be removed optimistically before resolveDelete
+    expect(screen.queryByText("Cola 500ml")).not.toBeInTheDocument();
+
+    resolveDelete({ id: "p1" });
   });
 });

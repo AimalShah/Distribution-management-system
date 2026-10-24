@@ -84,14 +84,31 @@ export default function SupplierList() {
 
   const handleDelete = async () => {
     if (!confirmTarget) return;
+    const target = confirmTarget;
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/suppliers/${confirmTarget.id}`);
-      invalidateDomains("suppliers");
+      await mutate(
+        async () => {
+          await api.delete(`/suppliers/${target.id}`);
+          invalidateDomains("suppliers");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((s: SupplierRow) => s.id !== target.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Supplier removed successfully");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to delete supplier"));
     } finally {

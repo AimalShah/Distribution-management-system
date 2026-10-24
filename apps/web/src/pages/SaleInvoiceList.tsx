@@ -192,11 +192,27 @@ export default function SaleInvoiceList() {
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/sales/${row.id}`);
-      invalidateDomains("sales");
+      await mutate(
+        async () => {
+          await api.delete(`/sales/${row.id}`);
+          invalidateDomains("sales");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((s: SaleInvoiceItemRow) => s.id !== row.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Invoice deleted, stock returned, and moved to the Deleted tab");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to delete sale invoice"));
     } finally {
@@ -208,11 +224,27 @@ export default function SaleInvoiceList() {
     setConfirmBusy(true);
 
     try {
-      await api.post(`/sales/${row.id}/restore`);
-      invalidateDomains("sales");
+      await mutate(
+        async () => {
+          await api.post(`/sales/${row.id}/restore`);
+          invalidateDomains("sales");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((s: SaleInvoiceItemRow) => s.id !== row.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success(`Invoice "${row.saleCode}" restored and stock re-applied`);
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       // The refusal carries { productId, available, requested }: name the gap.
       const failure = toFailure(err, "Failed to restore sale invoice");
@@ -227,11 +259,28 @@ export default function SaleInvoiceList() {
     setConfirmBusy(true);
 
     try {
-      await api.post(`/sales/${sale.id}/cancel`);
-      invalidateDomains("sales");
+      await mutate(
+        async () => {
+          await api.post(`/sales/${sale.id}/cancel`);
+          invalidateDomains("sales");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.map((s: SaleInvoiceItemRow) =>
+                s.id === sale.id ? { ...s, status: "Cancelled" } : s
+              ),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success(`Invoice "${sale.saleCode}" cancelled`);
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to cancel invoice"));
     } finally {
@@ -243,11 +292,28 @@ export default function SaleInvoiceList() {
     setConfirmBusy(true);
 
     try {
-      await api.post(`/sales/${sale.id}/uncancel`);
-      invalidateDomains("sales");
+      await mutate(
+        async () => {
+          await api.post(`/sales/${sale.id}/uncancel`);
+          invalidateDomains("sales");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.map((s: SaleInvoiceItemRow) =>
+                s.id === sale.id ? { ...s, status: sale.statusBeforeCancel ?? "Pending" } : s
+              ),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success(`Invoice "${sale.saleCode}" restored to its previous status`);
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to un-cancel invoice"));
     } finally {

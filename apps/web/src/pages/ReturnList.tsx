@@ -97,11 +97,27 @@ export default function ReturnList() {
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/returns/${row.id}`);
-      invalidateDomains("returns");
+      await mutate(
+        async () => {
+          await api.delete(`/returns/${row.id}`);
+          invalidateDomains("returns");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((r: ReturnRow) => r.id !== row.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Return deleted and stock reversed successfully");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       // The refusal carries { available, requested }: name the gap.
       const failure = toFailure(err, "Failed to delete return");
@@ -116,11 +132,27 @@ export default function ReturnList() {
     setConfirmBusy(true);
 
     try {
-      await api.post(`/returns/${row.id}/restore`);
-      invalidateDomains("returns");
+      await mutate(
+        async () => {
+          await api.post(`/returns/${row.id}/restore`);
+          invalidateDomains("returns");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((r: ReturnRow) => r.id !== row.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success(`Return "${row.returnCode}" restored and stock re-applied`);
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       // The refusal carries { available, requested }: name the gap.
       const failure = toFailure(err, "Failed to restore return");

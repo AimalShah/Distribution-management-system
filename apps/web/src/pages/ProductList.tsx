@@ -111,14 +111,31 @@ export default function ProductList() {
 
   const handleDelete = async () => {
     if (!confirmTarget) return;
+    const target = confirmTarget;
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/products/${confirmTarget.id}`);
-      invalidateDomains("products");
+      await mutate(
+        async () => {
+          await api.delete(`/products/${target.id}`);
+          invalidateDomains("products");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((p: ProductItem) => p.id !== target.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Product deleted successfully");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to delete product"));
     } finally {

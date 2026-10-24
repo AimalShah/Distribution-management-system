@@ -86,14 +86,31 @@ export default function CustomerList() {
 
   const handleDelete = async () => {
     if (!confirmTarget) return;
+    const target = confirmTarget;
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/customers/${confirmTarget.id}`);
-      invalidateDomains("customers");
+      await mutate(
+        async () => {
+          await api.delete(`/customers/${target.id}`);
+          invalidateDomains("customers");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((c: CustomerRow) => c.id !== target.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Customer removed successfully");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to delete customer"));
     } finally {

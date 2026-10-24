@@ -96,14 +96,31 @@ export default function PurchaseList() {
 
   const handleDelete = async () => {
     if (!confirmTarget) return;
+    const target = confirmTarget;
     setConfirmBusy(true);
 
     try {
-      await api.delete(`/purchases/${confirmTarget.id}`);
-      invalidateDomains("purchases");
+      await mutate(
+        async () => {
+          await api.delete(`/purchases/${target.id}`);
+          invalidateDomains("purchases");
+          return data;
+        },
+        {
+          optimisticData: (current: any) => {
+            if (!current?.data) return current;
+            return {
+              ...current,
+              data: current.data.filter((p: PurchaseItemRow) => p.id !== target.id),
+              total: Math.max(0, (current.total ?? 1) - 1),
+            };
+          },
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      );
       toast.success("Purchase order deleted successfully");
       setConfirmTarget(null);
-      await mutate();
     } catch (err: any) {
       toast.error(failureMessage(err, "Failed to delete purchase order"));
     } finally {
