@@ -90,6 +90,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
   });
 
   const [creating, setCreating] = useState(false);
+  const [selectingOrgId, setSelectingOrgId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"list" | "create">("list");
 
   useEffect(() => {
@@ -143,6 +144,8 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
   };
 
   const selectOrganization = async (organizationId: string) => {
+    if (selectingOrgId) return;
+    setSelectingOrgId(organizationId);
     try {
       await api.post("/organizations/set-active", { organizationId });
       invalidateEverything();
@@ -155,6 +158,8 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not switch the company");
+    } finally {
+      setSelectingOrgId(null);
     }
   };
 
@@ -218,6 +223,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                     key={organization.id}
                     variant="outline"
                     className="w-full justify-start gap-3 text-left py-3"
+                    disabled={selectingOrgId !== null}
                     onClick={() => selectOrganization(organization.id)}
                   >
                     <Avatar className="size-8">
@@ -231,6 +237,9 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                         Created {new Date(organization.createdAt).toLocaleDateString()}
                       </p>
                     </div>
+                    {selectingOrgId === organization.id && (
+                      <Loader2 className="size-4 animate-spin ml-auto text-primary" aria-hidden="true" />
+                    )}
                   </Button>
                 ))}
               </div>

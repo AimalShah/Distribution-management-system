@@ -128,4 +128,31 @@ describe("OnboardingPage", () => {
     const errors = await screen.findAllByText(/already exists/i);
     expect(errors.length).toBeGreaterThan(0);
   });
+
+  it("shows busy state and guards against double clicks when selecting an organization (flag G-5)", async () => {
+    let resolvePost: (val: any) => void = () => {};
+    apiPost.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+
+    apiGet.mockResolvedValue([
+      org({ id: "org_1", name: "Acme Distribution" }),
+      org({ id: "org_2", name: "Beta Logistics" }),
+    ]);
+
+    renderPage();
+
+    const acmeBtn = await screen.findByRole("button", { name: /acme distribution/i });
+    const user = userEvent.setup();
+
+    // First click initiates set-active
+    await user.click(acmeBtn);
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(apiPost).toHaveBeenCalledWith("/organizations/set-active", { organizationId: "org_1" });
+
+    // Second click while in-flight is guarded
+    const betaBtn = screen.getByRole("button", { name: /beta logistics/i });
+    await user.click(betaBtn);
+    expect(apiPost).toHaveBeenCalledTimes(1);
+
+    resolvePost({});
+  });
 });
