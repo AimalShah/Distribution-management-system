@@ -2,7 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { CompanySwitcher } from "./CompanySwitcher";
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 /** The Company switcher at the `lib/api` seam (issue #42). */
 
@@ -107,6 +112,50 @@ describe("CompanySwitcher", () => {
       expect(apiPost).toHaveBeenCalledWith("/organizations/set-active", {
         organizationId: "org_b",
       });
+    });
+  });
+
+  it("shows busy state and prevents duplicate switch calls while switching is in progress (flag G-2)", async () => {
+    const user = userEvent.setup();
+    let resolvePost: (val: any) => void = () => {};
+    apiPost.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+
+    renderSwitcher();
+
+    const button = await screen.findByRole("button", { name: /acme distribution/i });
+    await user.click(button);
+
+    const betaItem = await screen.findByRole("menuitem", { name: /beta logistics/i });
+    await user.click(betaItem);
+
+    // Assert first call made
+    expect(apiPost).toHaveBeenCalledTimes(1);
+
+    // While busy, clicking again should not fire duplicate call
+    await user.click(betaItem);
+    expect(apiPost).toHaveBeenCalledTimes(1);
+
+    // Resolve post
+    resolvePost({});
+  });
+
+  it("toasts an error message when switching fails (flag G-2)", async () => {
+    const user = userEvent.setup();
+    apiPost.mockRejectedValue(new Error("Permission denied"));
+
+    renderSwitcher();
+
+    const button = await screen.findByRole("button", { name: /acme distribution/i });
+    await user.click(button);
+
+    const betaItem = await screen.findByRole("menuitem", { name: /beta logistics/i });
+    await user.click(betaItem);
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith("/organizations/set-active", {
+        organizationId: "org_b",
+      });
+      expect(toast.error).toHaveBeenCalledWith("Permission denied");
     });
   });
 

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import { ChevronDown, Building2, AlertTriangle, Plus, Settings2 } from "lucide-react";
-import { api } from "../../lib/api";
+import { ChevronDown, Building2, AlertTriangle, Plus, Settings2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { api, failureMessage } from "../../lib/api";
 import { useActiveMembership } from "../../lib/profile";
 import {
   Button,
@@ -36,14 +37,21 @@ export function CompanySwitcher() {
 
   const organizations = Array.isArray(data) ? data : [];
   const activeOrg = organizations.find((o) => o.id === organizationId);
+  const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
 
   const switchOrganization = async (targetOrgId: string) => {
+    if (switchingOrgId) return;
+    setSwitchingOrgId(targetOrgId);
     try {
       await api.post("/organizations/set-active", { organizationId: targetOrgId });
+      toast.success("Switched company");
       await mutate();
       await globalMutate(() => true, undefined, { revalidate: true });
     } catch (err) {
+      toast.error(failureMessage(err as Error, "Failed to switch organization"));
       console.error("Failed to switch organization:", err);
+    } finally {
+      setSwitchingOrgId(null);
     }
   };
 
@@ -63,8 +71,13 @@ export function CompanySwitcher() {
             variant="ghost"
             size="sm"
             className="gap-1.5 h-8 px-3"
+            disabled={switchingOrgId !== null}
           >
-            <Building2 className="size-3.5" aria-hidden="true" />
+            {switchingOrgId ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Building2 className="size-3.5" aria-hidden="true" />
+            )}
             <span className="hidden sm:inline font-medium">
               {activeOrg?.name ?? "Select Company"}
             </span>
@@ -84,7 +97,7 @@ export function CompanySwitcher() {
                   key={organization.id}
                   className="flex items-center gap-2"
                   onSelect={() => switchOrganization(organization.id)}
-                  disabled={organization.id === organizationId}
+                  disabled={organization.id === organizationId || switchingOrgId !== null}
                 >
                   {organization.id === organizationId && (
                     <span className="size-4 flex-shrink-0">✓</span>
