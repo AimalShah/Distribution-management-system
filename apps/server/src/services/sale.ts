@@ -448,29 +448,25 @@ export async function updateSale(
   // the endpoints refuse invoices with payments or returns and remember the
   // status they came from. A PUT that could set `Cancelled` directly would be a
   // second, unguarded way past exactly those checks.
-  if (data.status !== undefined) {
-    const current = await prisma.sale.findFirst({
-      where: { id, organizationId, deletedAt: null },
-      select: { status: true },
-    });
+  if (data.status === "Cancelled") {
+    throw badRequest(
+      "Cancel an invoice through POST /api/sales/:id/cancel, which checks " +
+        "for payments and returns first",
+      "USE_CANCEL_ENDPOINT"
+    );
+  }
 
-    if (current) {
-      if (data.status === "Cancelled") {
-        throw badRequest(
-          "Cancel an invoice through POST /api/sales/:id/cancel, which checks " +
-            "for payments and returns first",
-          "USE_CANCEL_ENDPOINT"
-        );
-      }
+  const current = await prisma.sale.findFirst({
+    where: { id, organizationId, deletedAt: null },
+    select: { status: true },
+  });
 
-      if (current.status === "Cancelled") {
-        throw conflict(
-          "This invoice is cancelled. Un-cancel it through POST /api/sales/:id/uncancel first",
-          "SALE_IS_CANCELLED",
-          { status: current.status }
-        );
-      }
-    }
+  if (current?.status === "Cancelled") {
+    throw conflict(
+      "This invoice is cancelled. Un-cancel it through POST /api/sales/:id/uncancel first",
+      "SALE_IS_CANCELLED",
+      { status: current.status }
+    );
   }
 
   const updateData: Prisma.SaleUncheckedUpdateInput = { ...data };

@@ -34,6 +34,9 @@ export default defineConfig({
     // The suites drive real transactions (Serializable, concurrency pairs);
     // late-joining Postgres migrations and contention deserve more than 5 s.
     testTimeout: 30_000,
+    // Run domain test files serially so global sequence counters (productCode SKU)
+    // don't collide between concurrent seedTenant calls on the shared local test DB.
+    fileParallelism: false,
     // A failed invariant should show the numbers, not truncate them.
     disableConsoleIntercept: true,
     setupFiles: ["qa/support/setup.ts"],
