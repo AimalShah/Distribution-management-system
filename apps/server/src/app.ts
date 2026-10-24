@@ -129,7 +129,11 @@ export function createApp(options: AppOptions = {}): Express {
 
         const normalized = origin.replace(/\/+$/, "");
 
-        if (allowedOrigins.has(origin) || allowedOrigins.has(normalized)) {
+        if (
+          allowedOrigins.has(origin) ||
+          allowedOrigins.has(normalized) ||
+          /^https:\/\/[a-zA-Z0-9-]+\.pages\.dev$/.test(normalized)
+        ) {
           callback(null, true);
 
           return;

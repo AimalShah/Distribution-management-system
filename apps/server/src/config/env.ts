@@ -16,6 +16,7 @@ const PRODUCTION_DEFAULT_ORIGINS = [
   "https://distribution-management-system.aimalshah62.workers.dev",
   "https://am-enterprise.org",
   "https://www.am-enterprise.org",
+  "https://*.pages.dev",
   ...(process.env.RENDER_EXTERNAL_URL ? [process.env.RENDER_EXTERNAL_URL] : []),
 ];
 
