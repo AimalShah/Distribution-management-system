@@ -12,7 +12,7 @@ export default {
 
     if (url.pathname.startsWith("/api/")) {
       const backendBase =
-        env.BACKEND_URL || "https://distribution-management-system-1-92tj.onrender.com";
+        env.BACKEND_URL || "https://distribution-management-system-1-bhdf.onrender.com";
 
       const targetUrl = new URL(url.pathname + url.search, backendBase);
 

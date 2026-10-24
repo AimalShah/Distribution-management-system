@@ -8,6 +8,6 @@
     "not_found_handling": "single-page-application"
   },
   "vars": {
-    "BACKEND_URL": "https://distribution-management-system-1-92tj.onrender.com"
+    "BACKEND_URL": "https://distribution-management-system-1-bhdf.onrender.com"
   }
 }
