@@ -170,6 +170,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       });
 
       toast.success("Category created successfully");
+      invalidateDomains("categories");
       await mutateCategories();
       form.setValue("category", created.id);
       setNewCategoryName("");
@@ -207,6 +208,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       });
 
       toast.success("Brand created successfully");
+      invalidateDomains("brands");
       await mutateBrands();
       form.setValue("brand", created.id);
       setNewBrandName("");

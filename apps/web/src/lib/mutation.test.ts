@@ -34,6 +34,16 @@ describe("keyMatchesDomains", () => {
     expect(keyMatchesDomains("/payments?page=1&pageSize=20", domains)).toBe(true);
   });
 
+  it("category and brand mutations reach products and reports (flag G-4)", () => {
+    const categoryDomains = ["categories", "products", "reports"] as const;
+    const brandDomains = ["brands", "products", "reports"] as const;
+
+    expect(keyMatchesDomains("/products?page=1&pageSize=20", categoryDomains)).toBe(true);
+    expect(keyMatchesDomains("/reports/products?from=2026-01-01", categoryDomains)).toBe(true);
+    expect(keyMatchesDomains("/products?page=1&pageSize=20", brandDomains)).toBe(true);
+    expect(keyMatchesDomains("/reports/products?from=2026-01-01", brandDomains)).toBe(true);
+  });
+
   it("never leaks into unrelated domains", () => {
     const domains = ["payments"] as const;
 

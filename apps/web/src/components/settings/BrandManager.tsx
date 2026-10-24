@@ -4,6 +4,7 @@ import { Plus, Edit2, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Skeleton } from "@dms/ui";
 import { api, failureMessage, fetcher } from "../../lib/api";
+import { invalidateDomains } from "../../lib/mutation";
 
 export interface BrandItem {
   id: string;
@@ -41,6 +42,7 @@ export function BrandManager() {
       toast.success("Brand created successfully");
       setNewName("");
       setNewShortCode("");
+      invalidateDomains("brands");
       await mutate();
     } catch (err: unknown) {
       toast.error(failureMessage(err as Error, "Failed to create brand"));
@@ -72,6 +74,7 @@ export function BrandManager() {
       });
       toast.success("Brand updated successfully");
       cancelEditing();
+      invalidateDomains("brands");
       await mutate();
     } catch (err: unknown) {
       toast.error(failureMessage(err as Error, "Failed to update brand"));

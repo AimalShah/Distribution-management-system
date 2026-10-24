@@ -4,16 +4,21 @@ import { SWRConfig } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandManager } from "./BrandManager";
 
-const { apiGet, apiPost, apiPut } = vi.hoisted(() => ({
+const { apiGet, apiPost, apiPut, mockInvalidateDomains } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   apiPut: vi.fn(),
+  mockInvalidateDomains: vi.fn(),
 }));
 
 vi.mock("../../lib/api", () => ({
   fetcher: apiGet,
   api: { get: apiGet, post: apiPost, put: apiPut, delete: vi.fn() },
   failureMessage: (_err: { message?: string }, fallback: string) => _err?.message ?? fallback,
+}));
+
+vi.mock("../../lib/mutation", () => ({
+  invalidateDomains: mockInvalidateDomains,
 }));
 
 const mockBrands = [
@@ -61,6 +66,7 @@ describe("BrandManager (issue #45)", () => {
         name: "Fanta",
         shortCode: "FNT",
       });
+      expect(mockInvalidateDomains).toHaveBeenCalledWith("brands");
     });
   });
 
@@ -85,6 +91,7 @@ describe("BrandManager (issue #45)", () => {
         name: "Next Cola Classic",
         shortCode: "NXC",
       });
+      expect(mockInvalidateDomains).toHaveBeenCalledWith("brands");
     });
   });
 });
