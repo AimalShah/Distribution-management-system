@@ -17,6 +17,25 @@ export function formatDate(value: string | Date): string {
   });
 }
 
+/** `Jan 5, 2026, 14:30:00` — timestamp with time for audit logs and receipts. */
+export function formatDateTime(value: string | Date): string {
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return String(value);
+  }
+}
+
 /** `Jan 5` — axis ticks, where the year repeats thirty times. */
 export function formatDay(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {

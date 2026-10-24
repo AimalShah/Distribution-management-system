@@ -1,5 +1,4 @@
 import useSWR from "swr";
-import { format } from "date-fns";
 import { Activity, History, RefreshCw, User } from "lucide-react";
 import {
   Badge,
@@ -18,6 +17,7 @@ import {
   TableRow,
 } from "@dms/ui";
 import { fetcher } from "../../lib/api";
+import { formatDateTime } from "../../lib/format";
 
 interface AuditLogRow {
   id: string;
@@ -126,10 +126,7 @@ export function AuditTrailTab() {
               </TableHeader>
               <TableBody>
                 {logs.map((log) => {
-                  let formattedDate = log.createdAt;
-                  try {
-                    formattedDate = format(new Date(log.createdAt), "MMM d, yyyy HH:mm:ss");
-                  } catch {}
+                  const formattedDate = formatDateTime(log.createdAt);
 
                   return (
                     <TableRow key={log.id} className="text-xs">
