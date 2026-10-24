@@ -77,6 +77,7 @@ export async function getPurchases({
 }: PurchaseListArgs) {
   const where: Prisma.PurchaseWhereInput = {
     organizationId,
+    deletedAt: null,
   };
 
   if (status) {
@@ -129,7 +130,7 @@ export async function getPurchasesBySupplier({
   page,
   pageSize,
 }: PurchaseSupplierListArgs) {
-  const where: Prisma.PurchaseWhereInput = { supplierId, organizationId };
+  const where: Prisma.PurchaseWhereInput = { supplierId, organizationId, deletedAt: null };
 
   const [data, total] = await Promise.all([
     prisma.purchase.findMany({
@@ -147,7 +148,7 @@ export async function getPurchasesBySupplier({
 
 export async function getPurchaseById(id: string, organizationId: string) {
   const purchase = await prisma.purchase.findFirst({
-    where: { id, organizationId },
+    where: { id, organizationId, deletedAt: null },
     include: detailInclude,
   });
 
@@ -191,6 +192,19 @@ export async function createPurchase(
   // purchase with no stock, or stock with no purchase. One transaction per
   // POST makes the three writes commit or roll back together.
   const result = await prisma.$transaction(async (tx) => {
+    const supplier = await tx.supplier.findFirst({
+      where: { id: data.supplierId, organizationId },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      throw badRequest(
+        "The supplier does not exist in this organization",
+        "SUPPLIER_NOT_IN_ORGANIZATION",
+        { supplierId: data.supplierId }
+      );
+    }
+
     // `Inventory.productId` is unique across organizations, so the legacy
     // `upsert({ where: { productId } })` would happily increment another
     // tenant's stock for a product id this organization does not own. Checking
@@ -309,7 +323,7 @@ export async function updatePurchase(
   // it comes from the lines' rates, which a header-only PUT cannot touch.
   if (data.discount !== undefined) {
     const lines = await prisma.purchaseItem.findMany({
-      where: { purchase: { id, organizationId } },
+      where: { purchase: { id, organizationId, deletedAt: null } },
       select: { quantity: true, unitCost: true, discount: true, taxPercent: true },
     });
 
@@ -333,7 +347,7 @@ export async function updatePurchase(
   }
 
   const updated = await prisma.purchase.update({
-    where: { id, organizationId },
+    where: { id, organizationId, deletedAt: null },
     data: updateData,
     include: detailInclude,
   });
@@ -353,7 +367,7 @@ export async function deletePurchase(
 ) {
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.purchase.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
       include: {
         purchaseItems: true,
       },
@@ -426,7 +440,10 @@ export async function deletePurchase(
       }
     }
 
-    await tx.purchase.delete({ where: { id: existing.id, organizationId } });
+    await tx.purchase.update({
+      where: { id: existing.id, organizationId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
   });
 
   invalidateTenantMetrics(organizationId, "purchases");

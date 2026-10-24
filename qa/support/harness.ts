@@ -554,6 +554,10 @@ export async function returnDetail(t: Caller, returnIdOrCode: string) {
   return (await ok(api.raw(t)("get", `/returns/${returnIdOrCode}`))).body;
 }
 
+export async function purchaseDetail(t: Caller, purchaseId: string) {
+  return (await ok(api.raw(t)("get", `/purchases/${purchaseId}`))).body;
+}
+
 /** The derived customer balance (closing) from the ledger endpoint. */
 export async function customerBalance(t: Caller, customerId: string): Promise<number> {
   const ledger = (await ok(api.raw(t)("get", `/customers/${customerId}/ledger`))).body;
@@ -568,7 +572,7 @@ export async function customerBalance(t: Caller, customerId: string): Promise<nu
 
 /** Stock-batch quantities for a product (batch plane of the invariant). */
 export const batchQuantities = async (t: Caller, productId: string) => {
-  const page = (await ok(api.raw(t)("get", `/inventory/batches?pageSize=200`))).body;
+  const page = (await ok(api.raw(t)("get", `/inventory/batches?pageSize=100`))).body;
   const rows = page?.data ?? page;
 
   if (!Array.isArray(rows)) throw new Error("batches list is not an array");

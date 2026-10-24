@@ -312,6 +312,7 @@ model Purchase {
   discount       Float?
   status         String // e.g. 'Pending', 'Completed'
   purchaseDate   DateTime       @default(now())
+  deletedAt      DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   // Relations
