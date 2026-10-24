@@ -74,7 +74,7 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
   const customerPhone = escapeHtml(sale.customer?.phone || "");
   const customerAddress = escapeHtml(sale.customer?.address || "");
 
-  const companyName = escapeHtml(sale.company?.name?.trim() || "Distribution Management System");
+  const companyName = escapeHtml(sale.company?.name?.trim() || "AM Enterprise");
   const companyAddress = escapeHtml(sale.company?.address?.trim() || "");
   const companyGstin = escapeHtml(sale.company?.gstin?.trim() || "");
 

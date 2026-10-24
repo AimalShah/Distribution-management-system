@@ -57,7 +57,7 @@ function formatDate(isoOrDate?: string | Date | null): string {
  * Designed for crisp, black-and-white office printing with zero color fills.
  */
 export function renderCustomerStatementHtml(data: CustomerStatementRenderData): string {
-  const companyName = escapeHtml(data.company?.name?.trim() || "Distribution Management System");
+  const companyName = escapeHtml(data.company?.name?.trim() || "AM Enterprise");
   const companyAddress = escapeHtml(data.company?.address?.trim() || "");
   const companyGstin = escapeHtml(data.company?.gstin?.trim() || "");
   const customerName = escapeHtml(data.customer.name);

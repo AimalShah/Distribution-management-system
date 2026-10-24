@@ -79,7 +79,7 @@ export function renderCreditNoteHtml(data: CreditNoteRenderData): string {
   const isSaleReturn = returnRecord.returnType === "SALE";
   const title = isSaleReturn ? "CREDIT NOTE (SALE RETURN)" : "DEBIT NOTE (PURCHASE RETURN)";
 
-  const compName = escapeHtml(company?.name || "DISTRIBUTION MANAGEMENT");
+  const compName = escapeHtml(company?.name || "AM Enterprise");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
 
@@ -451,7 +451,7 @@ export function renderCreditNoteHtml(data: CreditNoteRenderData): string {
     </div>
 
     <div class="footer">
-      <div>Generated via Distribution Management System</div>
+      <div>Generated via AM Enterprise</div>
       <div>Page 1 of 1</div>
     </div>
   </div>

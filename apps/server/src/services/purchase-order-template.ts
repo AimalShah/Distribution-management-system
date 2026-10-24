@@ -101,7 +101,7 @@ export function renderPurchaseOrderHtml(data: PurchaseOrderRenderData): string {
     0
   );
 
-  const compName = escapeHtml(company?.name || "DISTRIBUTION MANAGEMENT");
+  const compName = escapeHtml(company?.name || "AM Enterprise");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
   const compPhone = company?.phone ? escapeHtml(company.phone) : "";
@@ -485,7 +485,7 @@ export function renderPurchaseOrderHtml(data: PurchaseOrderRenderData): string {
     </div>
 
     <div class="footer">
-      <div>Generated via Distribution Management System</div>
+      <div>Generated via AM Enterprise</div>
       <div>Page 1 of 1</div>
     </div>
   </div>

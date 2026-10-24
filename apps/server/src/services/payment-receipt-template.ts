@@ -62,7 +62,7 @@ export function renderPaymentReceiptHtml(data: PaymentReceiptRenderData): string
   const customer = payment.customer;
   const sale = payment.sale;
 
-  const compName = escapeHtml(company?.name || "DISTRIBUTION MANAGEMENT");
+  const compName = escapeHtml(company?.name || "AM Enterprise");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
   const compPhone = company?.phone ? escapeHtml(company.phone) : "";

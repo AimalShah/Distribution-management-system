@@ -1135,6 +1135,6 @@ describe("GET /api/sales/:id/print", () => {
     const res = await request(app).get("/api/sales/sal_1/print").set(auth());
 
     expect(res.status).toBe(200);
-    expect(res.text).toContain("Distribution Management System");
+    expect(res.text).toContain("AM Enterprise");
   });
 });
