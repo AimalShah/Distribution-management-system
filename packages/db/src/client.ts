@@ -1,7 +1,22 @@
 import { PrismaClient } from "../prisma/generated/client";
 import { trackQuery } from "./debug-log";
 
-const baseClient = new PrismaClient();
+const transactionTimeout =
+  Number(process.env.PRISMA_TRANSACTION_TIMEOUT) > 0
+    ? Number(process.env.PRISMA_TRANSACTION_TIMEOUT)
+    : 30000;
+
+const transactionMaxWait =
+  Number(process.env.PRISMA_TRANSACTION_MAX_WAIT) > 0
+    ? Number(process.env.PRISMA_TRANSACTION_MAX_WAIT)
+    : 10000;
+
+const baseClient = new PrismaClient({
+  transactionOptions: {
+    maxWait: transactionMaxWait,
+    timeout: transactionTimeout,
+  },
+});
 
 const shouldTrack = process.env.NODE_ENV !== "production";
 
