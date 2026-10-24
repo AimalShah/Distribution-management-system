@@ -1,8 +1,11 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { fromNodeHeaders } from "better-auth/node";
+import { z } from "zod";
 import prisma from "@dms/db";
 import type { Auth } from "../auth";
 import { badRequest, forbidden, unauthorized } from "../http/errors";
+
+const queryTokenSchema = z.string().trim().min(1);
 
 type Session = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;
 
@@ -49,8 +52,20 @@ const assertAccountUsable = (user: {
 const handle =
   (fn: (req: Request, session: Session) => Promise<void>, auth: Auth): RequestHandler =>
   (req: Request, _res: Response, next: NextFunction) => {
+    const headers = fromNodeHeaders(req.headers);
+
+    // Support token query parameter for direct browser navigations (PDF downloads, print views)
+    // where window.open() cannot attach an Authorization header in cross-origin environments.
+    if (!headers.get("authorization")) {
+      const parsed = queryTokenSchema.safeParse(req.query.token || req.query.auth_token);
+
+      if (parsed.success) {
+        headers.set("authorization", `Bearer ${parsed.data}`);
+      }
+    }
+
     auth.api
-      .getSession({ headers: fromNodeHeaders(req.headers) })
+      .getSession({ headers })
       .then(async (session) => {
         if (!session) throw unauthorized();
 

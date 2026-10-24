@@ -75,6 +75,16 @@ describe("sessionAuthContext", () => {
     expect(memberModel.findUnique).not.toHaveBeenCalled();
   });
 
+  it("passes Bearer token from query parameter if Authorization header is omitted", async () => {
+    const res = await request(app).get("/strict?token=sample_query_token");
+
+    expect(res.status).toBe(200);
+    expect(getSession).toHaveBeenCalled();
+    // SAFETY: fromNodeHeaders returns a standard Web Headers instance.
+    const passedHeaders = getSession.mock.calls[0][0].headers as Headers;
+    expect(passedHeaders.get("authorization")).toBe("Bearer sample_query_token");
+  });
+
   it("answers 400 when the session has no active organization", async () => {
     getSession.mockResolvedValue(session(null));
 

@@ -31,7 +31,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, failureMessage, fetcher } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -223,14 +223,14 @@ export default function PurchaseList() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={() => window.open(`/api/purchases/${purchase.id}/pdf`, "_blank")}
+                  onClick={() => openDocument(`/purchases/${purchase.id}/pdf`)}
                   className="cursor-pointer"
                 >
                   <Download className="size-4 mr-2" />
                   Download PO (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => window.open(`/api/purchases/${purchase.id}/html`, "_blank")}
+                  onClick={() => openDocument(`/purchases/${purchase.id}/html`)}
                   className="cursor-pointer"
                 >
                   <Printer className="size-4 mr-2" />

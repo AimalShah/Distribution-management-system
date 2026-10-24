@@ -11,6 +11,35 @@ const configuredApiUrl =
 
 export const apiBaseUrl = configuredApiUrl;
 
+/**
+ * Resolves an authenticated URL for documents (PDF/HTML prints) that are opened in a new tab.
+ * In cross-origin production or Bearer token auth, top-level window.open() does not attach
+ * custom Authorization headers, so the session token is appended as a query parameter.
+ */
+const readAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export function getDocumentUrl(endpoint: string): string {
+  const token = readAuthToken();
+  const base = apiBaseUrl.replace(/\/+$/, "");
+  const normalized = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const cleanEndpoint = normalized.startsWith("/api/") ? normalized.slice(4) : normalized;
+  const separator = cleanEndpoint.includes("?") ? "&" : "?";
+
+  return token
+    ? `${base}${cleanEndpoint}${separator}token=${encodeURIComponent(token)}`
+    : `${base}${cleanEndpoint}`;
+}
+
+export function openDocument(endpoint: string): void {
+  window.open(getDocumentUrl(endpoint), "_blank");
+}
+
 /** The axios adapter: the transport this module keeps private behind the seam. */
 const client = axios.create({
   baseURL: configuredApiUrl,
@@ -48,11 +77,13 @@ client.interceptors.response.use(
       !unauthorizedRedirectPending
     ) {
       unauthorizedRedirectPending = true;
+
       try {
         localStorage.removeItem(AUTH_TOKEN_KEY);
       } catch {
         // Storage can be unavailable in a sandboxed browser; navigation still works.
       }
+
       toast.error("Your session has expired. Sign in again to continue.");
       window.dispatchEvent(new Event("dms:unauthorized"));
     }
@@ -229,3 +260,21 @@ export const shortfallLine = (
 
   return "";
 };
+
+export async function downloadBlob(endpoint: string, filename: string): Promise<void> {
+  const normalized = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const cleanEndpoint = normalized.startsWith("/api/") ? normalized.slice(4) : normalized;
+  const res = await client.get(cleanEndpoint, { responseType: "blob" });
+  const parsedType = z.string().safeParse(res.headers["content-type"]);
+  const contentType = parsedType.success ? parsedType.data : "application/pdf";
+  const blob = new Blob([res.data], { type: contentType });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}

@@ -24,7 +24,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, fetcher, shortfallLine, toFailure } from "../lib/api";
+import { api, fetcher, openDocument, shortfallLine, toFailure } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -288,7 +288,7 @@ export default function ReturnList() {
                 size="icon"
                 className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
                 title="Download Credit / Debit Note (PDF)"
-                onClick={() => window.open(`/api/returns/${ret.id}/pdf`, "_blank")}
+                onClick={() => openDocument(`/returns/${ret.id}/pdf`)}
               >
                 <span className="sr-only">Download Note</span>
                 <Download className="size-3.5" />

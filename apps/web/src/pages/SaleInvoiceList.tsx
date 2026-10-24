@@ -39,7 +39,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, failureMessage, fetcher, shortfallLine, toFailure } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument, shortfallLine, toFailure } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -377,11 +377,11 @@ export default function SaleInvoiceList() {
   };
 
   const handlePrint = (id: string) => {
-    window.open(`/api/sales/${id}/print`, "_blank");
+    openDocument(`/sales/${id}/print`);
   };
 
   const handleDownloadPdf = (id: string) => {
-    window.open(`/api/sales/${id}/pdf`, "_blank");
+    openDocument(`/sales/${id}/pdf`);
   };
 
   /**

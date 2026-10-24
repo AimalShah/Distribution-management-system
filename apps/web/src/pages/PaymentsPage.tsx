@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api, failureMessage, fetcher } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { PageHead } from "../components/list/PageHead";
@@ -380,7 +380,7 @@ export default function PaymentsPage() {
                             size="icon"
                             className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
                             title="Download Receipt (PDF)"
-                            onClick={() => window.open(`/api/payments/${row.id}/pdf`, "_blank")}
+                            onClick={() => openDocument(`/payments/${row.id}/pdf`)}
                           >
                             <span className="sr-only">Download receipt</span>
                             <Download className="size-3.5" />

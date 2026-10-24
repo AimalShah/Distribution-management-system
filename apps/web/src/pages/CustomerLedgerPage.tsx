@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { fetcher } from "../lib/api";
+import { downloadBlob, fetcher, openDocument } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { exportCustomerLedgerCSV } from "../lib/csv";
@@ -162,23 +162,10 @@ export default function CustomerLedgerPage() {
     setDownloadBusy(true);
 
     try {
-      const response = await fetch(`/api/customers/${id}/statement/pdf${queryString}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to generate PDF statement");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const safeName = ledger.customer.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       const dateStr = new Date().toISOString().split("T")[0];
-      a.download = `statement-${safeName}-${dateStr}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const filename = `statement-${safeName}-${dateStr}.pdf`;
+      await downloadBlob(`/customers/${id}/statement/pdf${queryString}`, filename);
       toast.success("Statement PDF downloaded");
     } catch {
       toast.error("Failed to generate statement PDF");
@@ -189,8 +176,7 @@ export default function CustomerLedgerPage() {
 
   const handlePrint = () => {
     if (!id || !ledger) return;
-    const url = `/api/customers/${id}/statement/pdf${queryString}`;
-    window.open(url, "_blank");
+    openDocument(`/customers/${id}/statement/pdf${queryString}`);
   };
 
   return (
