@@ -208,8 +208,29 @@ const scenarios = {
 
   /** P0-4: a tenant switch can never leave the previous tenant's rows on screen. */
   async orgSwitch({ page, api, spaNavigate, assertNoReload }) {
-    const payload = await api("GET", "/organizations");
-    const orgs = Array.isArray(payload) ? payload : payload?.data ?? [];
+    let payload = await api("GET", "/organizations");
+    let orgs = Array.isArray(payload) ? payload : payload?.data ?? [];
+
+    if (orgs.length < 2) {
+      const initialOrg = orgs[0];
+      await step(page, "orgSwitch: create secondary company via UI", async () => {
+        const trigger = page
+          .getByRole("button", { name: initialOrg ? initialOrg.name : /select company/i, exact: false })
+          .first();
+
+        await trigger.click();
+        await page.getByRole("menuitem", { name: "Create Company" }).click();
+        const stamp = Date.now().toString().slice(-4);
+        await page.getByLabel("Company Name").fill(`Secondary Company ${stamp}`);
+        // Click Create Company inside the dialog
+        const dialog = page.getByRole("dialog");
+        await dialog.getByRole("button", { name: "Create Company" }).click();
+        await page.waitForTimeout(1_500);
+      });
+
+      payload = await api("GET", "/organizations");
+      orgs = Array.isArray(payload) ? payload : payload?.data ?? [];
+    }
 
     if (orgs.length < 2) {
       log(`↷ orgSwitch: ${orgs.length} organization(s) exist — create a second company in Settings to exercise this`);
@@ -240,6 +261,45 @@ const scenarios = {
     });
 
     await assertNoReload();
+  },
+
+  /**
+   * P0-4 / G-1: deletion updates the UI optimistically and settles via SPA without page reload.
+   */
+  async optimisticDeletes({ page, api, spaNavigate, assertNoReload }) {
+    const stamp = Date.now().toString().slice(-6);
+    const customerCode = `OPT-${stamp}`;
+    const customerName = `Optimistic Customer ${stamp}`;
+
+    await api("POST", "/customers", {
+      customerCode,
+      name: customerName,
+    });
+
+    await step(page, "optimisticDeletes: navigate to customers list", async () => {
+      await spaNavigate("/customers");
+      await page.getByText(customerName, { exact: false }).first().waitFor({ timeout: 15_000 });
+      await assertNoReload();
+    });
+
+    await step(page, "optimisticDeletes: delete customer removes row optimistically", async () => {
+      const row = page.locator("tr", { hasText: customerName }).first();
+      await row.getByRole("button", { name: "Delete" }).click();
+
+      const dialog = page.getByRole("dialog");
+      await dialog.getByRole("button", { name: /Delete customer/i }).click();
+
+      await page.getByText(customerName, { exact: false }).waitFor({ state: "hidden", timeout: 10_000 });
+      await assertNoReload();
+    });
+
+    await step(page, "optimisticDeletes: API truth — customer is deleted", async () => {
+      const list = await api("GET", `/customers?search=${encodeURIComponent(customerCode)}`);
+      const items = list?.data ?? [];
+      if (items.some((c) => c.customerCode === customerCode)) {
+        throw new Error(`customer ${customerCode} still exists in the API response`);
+      }
+    });
   },
 
   /**
