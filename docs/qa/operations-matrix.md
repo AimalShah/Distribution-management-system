@@ -115,16 +115,16 @@ tenant A must never see or mutate tenant B's rows (404/403/code).
 | **F-11** ✅ fixed (`b45e5fc`) | `services/purchase.ts:429` | Purchase delete previously hard-deleted the row. Now soft-deletes with `deletedAt: new Date()` stamp and migration, preserving document history for audit trail and reconciliation. Pinned by `qa/domain/purchases.test.ts`. |
 | **F-12** ✅ fixed (`eb6139c`) | `services/sale.ts:584–586` | `updateSale`/`deriveSaleMoney` read `Product` by bare id without org filter. Now scopes query with `organizationId` and verifies all product IDs belong to the tenant, refusing foreign products with 400 `PRODUCT_NOT_IN_ORGANIZATION`. Pinned by `qa/domain/isolation.test.ts`. |
 | **F-13** | (server-wide) | No idempotency layer; double-submit safety rides on the client-generated unique `returnCode` (accidental). The UI generates a fresh code per attempt in some paths — a retry re-posts a new code → duplicate return (see Phase 4 double-submit scenario). |
-| **F-14** | (web) | Zero optimistic updates anywhere in `apps/web` (SWR). All Phase-4 optimistic-UI requirements fail today. |
+| **F-14** ✅ fixed (`0a140ae`) | (web) | Zero optimistic updates previously in `apps/web` (SWR). List pages (`ProductList`, `SaleInvoiceList`, `ReturnList`, `PurchaseList`, `CustomerList`, `SupplierList`) now apply optimistic mutations on delete/restore/cancel. Pinned by `ProductList.test.tsx`. |
 
 ## UI flags (wiring, fixes in Phase 4)
 
 | # | Where | Gap |
 |---|---|---|
-| G-1 | all of `apps/web` | No optimistic data anywhere; every mutation awaits then refetches (⚡ perf + rank of Phase 4). |
-| G-2 | `CompanySwitcher.tsx:40–48` | Org switch has no busy state; failure silent (`console.error`); stale rows from previous org can paint before refetch completes. |
-| G-3 | `PaymentsPage.tsx:186–200` | Delete-payment invalidates only its own key (missing `invalidateDomains("payments")`); sales `amountPaid`, ledger, dashboard stay stale. |
-| G-4 | `ProductForm.tsx:167/203`, `BrandManager.tsx:37/69` | Category/brand quick-create + rename bypass the domain invalidation graph. |
-| G-5 | `OnboardingPage.tsx:145–149` | Pick-org buttons have no busy state; double clicks race `set-active` twice (harmless but unguarded). |
+| G-1 ✅ fixed (`0a140ae`) | all of `apps/web` | List pages (`ProductList`, `SaleInvoiceList`, `ReturnList`, `PurchaseList`, `CustomerList`, `SupplierList`) now apply optimistic mutations on delete/restore/cancel without waiting for network round-trip. |
+| G-2 ✅ fixed (`07132dc`) | `CompanySwitcher.tsx:40–48` | Org switch now has busy state (`switchingOrgId`), disables switching during in-flight requests, adds spinner to trigger button, and displays error toast via `failureMessage`. Pinned by `CompanySwitcher.test.tsx`. |
+| G-3 ✅ fixed (`9d19b95`) | `PaymentsPage.tsx:186–200` | Delete-payment now calls `invalidateDomains("payments")` with optimistic removal, refreshing sales `amountPaid`, customer ledgers, and dashboard metrics. Pinned by `PaymentsPage.test.tsx`. |
+| G-4 ✅ fixed (`769abc7`) | `ProductForm.tsx:167/203`, `BrandManager.tsx:37/69` | Category and brand quick-create and updates now route through `invalidateDomains("categories")` and `invalidateDomains("brands")`, invalidating related products and reports. Pinned by `BrandManager.test.tsx`. |
+| G-5 ✅ fixed (`560e7bb`) | `OnboardingPage.tsx:145–149` | Pick-org buttons now have busy state (`selectingOrgId`), disable buttons during in-flight switches, and display a spinner. Pinned by `OnboardingPage.test.tsx`. |
 | G-6 ✅ fixed (`5733fda`) | `ReturnForm.tsx` | Return form estimated value froze mid-session: `form.watch('items')` in the render body is lazy and Controller input changes publish only `{name,type}`, never re-rendering the footer. Replaced with `useWatch`; document-backed line money derived once and shared by rows/footer/payload (`documentItemMoney` semantics). |
 | G-7 ✅ fixed (`3d557dc`) | `ReturnList.tsx`, `services/return.ts` | Returns list showed the line count (`_count.items`) labeled pcs — "returned 12 → 1 pcs". List service now computes a grouped piece sum (`items._sum.quantity`) and the column shows true pieces with line count as annotation. |
