@@ -578,9 +578,18 @@ async function deriveSaleMoney(
 
   if (productIds.length > 0) {
     const owned = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, organizationId },
       select: { id: true, gstApplicable: true, gstRate: true },
     });
+
+    if (owned.length !== productIds.length) {
+      const ownedIds = new Set(owned.map((product) => product.id));
+      throw badRequest(
+        "One or more products do not exist in this organization",
+        "PRODUCT_NOT_IN_ORGANIZATION",
+        { productIds: productIds.filter((id) => !ownedIds.has(id)) }
+      );
+    }
 
     const productMap = new Map(owned.map((product) => [product.id, product]));
 
