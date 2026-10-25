@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dms/ui";
-import { api } from "../../lib/api";
+import { api, failureMessage } from "../../lib/api";
 import { authClient } from "../../lib/auth-client";
 import { invalidateDomains } from "../../lib/mutation";
 
@@ -117,9 +117,7 @@ export function MemberDialog({
       await onSubmit({ userId: userId || undefined, role });
       onOpenChange(false);
     } catch (cause) {
-      setError(
-        cause instanceof Error && cause.message ? cause.message : "Could not save"
-      );
+      setError(failureMessage(cause, "Could not save"));
     } finally {
       setSubmitting(false);
     }
@@ -274,15 +272,24 @@ export function StaffDialog({ open, onOpenChange, organizationId }: StaffDialogP
       );
 
       setCreated(response);
+      invalidateDomains("members");
     } catch (cause) {
-      setError(cause instanceof Error && cause.message ? cause.message : "Could not create the account");
+      setError(failureMessage(cause, "Could not create the account"));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && created) {
+      invalidateDomains("members");
+    }
+
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         {created ? null : (
           <DialogHeader>
@@ -322,7 +329,14 @@ export function StaffDialog({ open, onOpenChange, organizationId }: StaffDialogP
               >
                 Copy password
               </Button>
-              <Button onClick={() => onOpenChange(false)}>Done</Button>
+              <Button
+                onClick={() => {
+                  invalidateDomains("members");
+                  onOpenChange(false);
+                }}
+              >
+                Done
+              </Button>
             </DialogFooter>
           </div>
         ) : (
@@ -460,11 +474,7 @@ export function InviteMemberDialog({
         onOpenChange(false);
       }
     } catch (cause) {
-      setError(
-        cause instanceof Error && cause.message
-          ? cause.message
-          : "Could not send invitation"
-      );
+      setError(failureMessage(cause, "Could not send invitation"));
     } finally {
       setSubmitting(false);
     }

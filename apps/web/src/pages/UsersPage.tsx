@@ -3,7 +3,6 @@ import useSWR from "swr";
 import {
   AlertTriangle,
   Mail,
-  Plus,
   RefreshCw,
   Shield,
   ShieldOff,
@@ -86,11 +85,6 @@ export default function UsersPage() {
 
   const members: MemberRow[] = Array.isArray(data) ? data : [];
   const availableUsers: AvailableUser[] = Array.isArray(available) ? available : [];
-
-  const openAdd = () => {
-    setEditing(null);
-    setDialogOpen(true);
-  };
 
   const openEdit = (member: MemberRow) => {
     setEditing(member);
@@ -183,17 +177,12 @@ export default function UsersPage() {
               Invite by email
             </Button>
             <Button
-              variant="outline"
               size="sm"
               className="gap-1.5"
               onClick={() => setStaffOpen(true)}
             >
               <UserPlus className="size-3.5" />
               Add staff account
-            </Button>
-            <Button size="sm" className="gap-1.5" onClick={openAdd}>
-              <Plus className="size-3.5" />
-              Add member
             </Button>
           </>
         }
@@ -361,13 +350,25 @@ export default function UsersPage() {
 
       <StaffDialog
         open={staffOpen}
-        onOpenChange={setStaffOpen}
+        onOpenChange={(nextOpen) => {
+          setStaffOpen(nextOpen);
+
+          if (!nextOpen) {
+            void mutate();
+          }
+        }}
         organizationId={organizationId}
       />
 
       <InviteMemberDialog
         open={inviteOpen}
-        onOpenChange={setInviteOpen}
+        onOpenChange={(nextOpen) => {
+          setInviteOpen(nextOpen);
+
+          if (!nextOpen) {
+            void mutate();
+          }
+        }}
         organizationId={organizationId}
       />
 

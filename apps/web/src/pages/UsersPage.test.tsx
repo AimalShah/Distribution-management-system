@@ -115,59 +115,49 @@ describe("listing the team (issue #41)", () => {
   });
 });
 
-describe("adding a member (issue #41)", () => {
-  it("offers only accounts that can still be added", async () => {
+describe("adding a staff account", () => {
+  it("does not render the legacy add member button", async () => {
+    renderPage();
+    await screen.findByText("Ada Lovelace");
+
+    expect(
+      screen.queryByRole("button", { name: /^add member$/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the staff account dialog and creates staff", async () => {
     const user = userEvent.setup();
 
-    api.get.mockResolvedValue([
-      { id: "usr_9", name: "Grace Hopper", email: "grace@acme.test" },
-    ]);
+    api.post.mockResolvedValue({
+      id: "usr_new",
+      name: "Grace Hopper",
+      email: "grace@acme.test",
+    });
 
     renderPage();
     await screen.findByText("Ada Lovelace");
 
-    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: /add staff account/i }));
+
+    expect(await screen.findByText("Create a staff account")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^name/i), "Grace Hopper");
+    await user.type(screen.getByLabelText(/^email/i), "grace@acme.test");
+
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith(
-        `/organizations/${ORG}/available-users`
+      expect(api.post).toHaveBeenCalledWith(
+        `/organizations/${ORG}/staff`,
+        expect.objectContaining({
+          name: "Grace Hopper",
+          email: "grace@acme.test",
+          role: "member",
+        })
       );
     });
 
-    // The options only exist once the picker is open.
-    await user.click(await screen.findByRole("combobox", { name: /user|account/i }));
-
-    expect(await screen.findByRole("option", { name: /grace@acme.test/i })).toBeInTheDocument();
-  });
-
-  it("adds the chosen account with the chosen role", async () => {
-    const user = userEvent.setup();
-
-    api.get.mockResolvedValue([
-      { id: "usr_9", name: "Grace Hopper", email: "grace@acme.test" },
-    ]);
-    api.post.mockResolvedValue(member());
-
-    renderPage();
-    await screen.findByText("Ada Lovelace");
-
-    await user.click(screen.getByRole("button", { name: /add member/i }));
-
-    const picker = await screen.findByRole("combobox", { name: /user|account/i });
-
-    await user.click(picker);
-    await user.click(await screen.findByRole("option", { name: /grace@acme.test/i }));
-
-    const submit = screen.getByRole("button", { name: /add|save|invite/i });
-
-    await user.click(submit);
-
-    await waitFor(() => {
-      expect(api.post).toHaveBeenCalledWith(`/organizations/${ORG}/members`, {
-        userId: "usr_9",
-        role: "member",
-      });
-    });
+    expect(await screen.findByText("Account created")).toBeInTheDocument();
   });
 });
 

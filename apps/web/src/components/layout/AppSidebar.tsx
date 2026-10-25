@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
-import { LanguageSwitcher } from "./LanguageSwitcher";
 import {
   LayoutDashboard,
   ReceiptText,
@@ -169,14 +168,9 @@ export function AppSidebar({
         ))}
       </nav>
 
-      {/* Language Toggle & User */}
-      <div className="p-2 border-t border-stone-200 space-y-2">
-        <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between px-1"}`}>
-          {!isCollapsed && <span className="text-[11px] text-stone-500 font-medium">Language</span>}
-          <LanguageSwitcher />
-        </div>
-
-        <div className={`flex items-center gap-3 pt-1 ${
+      {/* User */}
+      <div className="p-2 border-t border-stone-200">
+        <div className={`flex items-center gap-3 ${
           isCollapsed ? "justify-center" : ""
         }`}>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-stone-900 font-bold text-xs shrink-0">

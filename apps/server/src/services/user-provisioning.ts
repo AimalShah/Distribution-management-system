@@ -69,11 +69,27 @@ export async function createStaff(
   const email = data.email.toLowerCase();
 
   const existing = await prisma.user.findFirst({
-    where: { email },
+    where: {
+      email: {
+        equals: email,
+        mode: "insensitive",
+      },
+    },
     select: { id: true },
   });
 
   if (existing) {
+    const existingMembership = await prisma.member.findFirst({
+      where: { organizationId, userId: existing.id },
+    });
+
+    if (existingMembership) {
+      throw conflict(
+        "There is already a member with that email address in this organization",
+        "EMAIL_TAKEN"
+      );
+    }
+
     // Proactive check with an actionable code; User.email carries a global
     // unique index, so a race between two provisions falls through to the
     // P2002 translation and 409s anyway.
