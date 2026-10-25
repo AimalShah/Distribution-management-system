@@ -24,6 +24,7 @@ const { apiGet, authStatus, activeOrgId } = vi.hoisted(() => {
 
   return {
     apiGet: vi.fn(),
+    // SAFETY: container holds mutable auth state under test
     authStatus: { current: initialAuth } as { current: AuthState },
     // SAFETY: container holds the active company context ID or null when in onboarding
     activeOrgId: { current: initialOrgId } as { current: string | null },

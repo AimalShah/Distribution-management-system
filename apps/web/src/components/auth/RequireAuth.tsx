@@ -41,6 +41,14 @@ export function RequireAuth() {
 
   if (
     status === "authenticated" &&
+    !user?.mustChangePassword &&
+    location.pathname === "/change-password"
+  ) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (
+    status === "authenticated" &&
     activeOrganizationId === null &&
     location.pathname !== "/onboarding"
   ) {

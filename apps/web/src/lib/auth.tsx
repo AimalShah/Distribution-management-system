@@ -25,12 +25,13 @@ export interface AuthUser {
  */
 export type AuthStatus = "loading" | "authenticated" | "anonymous";
 
-interface AuthContextValue {
+export interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
   activeOrganizationId?: string | null;
   login: (username: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  refetchSession?: () => Promise<void>;
 }
 
 /** localStorage throws in a sandboxed iframe; auth must degrade, not crash. */
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // better-auth owns the session: it holds the token, refreshes it, and is the
   // only thing that can say whether it is still good. The page asks it rather
   // than reading storage and asking the server separately.
-  const { data, isPending } = authClient.useSession();
+  const { data, isPending, refetch } = authClient.useSession();
 
   const [status, setStatus] = useState<AuthStatus>("loading");
 
@@ -58,12 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? {
         name: data.user.name ?? "",
         username: data.user.email,
+        // SAFETY: better-auth user record carries optional custom provisioning flags
         mustChangePassword:
           (data.user as { mustChangePassword?: boolean }).mustChangePassword ??
           false,
       }
     : null;
 
+  // SAFETY: better-auth session carries activeOrganizationId
   const activeOrganizationId =
     (data?.session as { activeOrganizationId?: string | null } | undefined)
       ?.activeOrganizationId ?? null;
@@ -103,9 +106,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refetchSession = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+
   const value = useMemo(
-    () => ({ user, status, activeOrganizationId, login, logout }),
-    [user, status, activeOrganizationId, login, logout]
+    () => ({
+      user,
+      status,
+      activeOrganizationId,
+      login,
+      logout,
+      refetchSession,
+    }),
+    [user, status, activeOrganizationId, login, logout, refetchSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

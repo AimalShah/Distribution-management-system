@@ -93,6 +93,7 @@ export function AppSidebar({
   const { user } = useAuth();
 
   const displayName = user?.name ?? "User";
+
   const initials = displayName
     .split(/\s+/)
     .map((p) => p[0])
@@ -102,6 +103,7 @@ export function AppSidebar({
 
   const isActive = (to: string) => {
     if (to === "/") return pathname === "/";
+
     return pathname.startsWith(to);
   };
 
@@ -149,6 +151,7 @@ export function AppSidebar({
                     to={item.to}
                     onClick={() => {
                       navigate(item.to);
+
                       if (isMobileOpen) onCloseMobile();
                     }}
                     className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors ${
