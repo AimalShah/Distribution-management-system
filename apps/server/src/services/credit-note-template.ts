@@ -1,5 +1,5 @@
 import { formatMoney } from "@dms/shared";
-import { escapeHtml } from "./html-utils";
+import { escapeHtml, renderAutoPrintScript, type DocumentRenderOptions } from "./html-utils";
 
 export interface CreditNoteRenderData {
   company?: {
@@ -74,7 +74,10 @@ function formatDate(isoOrDate?: string | Date | null): string {
  * Renders an A4 monochrome Return Note / Credit Note (ADR 0002).
  * Strictly black-on-white with crisp typographic hierarchy for clean office printing.
  */
-export function renderCreditNoteHtml(data: CreditNoteRenderData): string {
+export function renderCreditNoteHtml(
+  data: CreditNoteRenderData,
+  options?: DocumentRenderOptions
+): string {
   const { company, returnRecord } = data;
   const isSaleReturn = returnRecord.returnType === "SALE";
   const title = isSaleReturn ? "CREDIT NOTE (SALE RETURN)" : "DEBIT NOTE (PURCHASE RETURN)";
@@ -455,6 +458,7 @@ export function renderCreditNoteHtml(data: CreditNoteRenderData): string {
       <div>Page 1 of 1</div>
     </div>
   </div>
+  ${renderAutoPrintScript(options)}
 </body>
 </html>`;
 }

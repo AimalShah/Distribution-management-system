@@ -15,6 +15,8 @@ import { recordAuditLog } from "./audit";
 
 const listInclude = {
   customer: true,
+  // Who created the document ("Created by", GLOSSARY.md), shown on listings.
+  createdBy: { select: { id: true, name: true } },
   // The legacy list embedded every line with its product. That is an unbounded
   // payload per row once paging is added, so the count is sent instead and the
   // lines stay on the detail routes.
@@ -23,6 +25,7 @@ const listInclude = {
 
 const detailInclude = {
   customer: true,
+  createdBy: { select: { id: true, name: true } },
   items: { include: { product: true } },
 } satisfies Prisma.SaleInclude;
 
@@ -407,6 +410,10 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         status: data.status,
         dueDate,
         organizationId,
+        // The creator comes from the session, never the body. Reconciliation
+        // via InventoryLog kept this answerable before the column existed;
+        // now it is stored on the document itself.
+        createdById: userId,
         items: {
           create: saleItems.map((line, index) => ({ ...line, batchId: batchIds[index] })),
         },

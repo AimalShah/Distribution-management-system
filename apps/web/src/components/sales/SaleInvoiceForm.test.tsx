@@ -125,14 +125,16 @@ describe("SaleInvoiceForm Credit Limit Warning (issue #49)", () => {
     await user.click(submitBtn);
 
     // Warning dialog should appear
-    expect(await screen.findByText("Credit Limit Warning")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /going over their maximum|Credit Limit Warning/i })
+    ).toBeInTheDocument();
     const warningDetails = screen.getByTestId("credit-limit-warning-details");
     expect(warningDetails).toHaveTextContent("Rs 800");
     expect(warningDetails).toHaveTextContent("Rs 1,000");
     expect(warningDetails).toHaveTextContent("Rs 1,200");
 
-    // Click Override & Proceed
-    const overrideBtn = screen.getByRole("button", { name: /override & proceed/i });
+    // Click Override & Proceed / Save anyway
+    const overrideBtn = screen.getByRole("button", { name: /save anyway|override & proceed/i });
     await user.click(overrideBtn);
 
     await waitFor(() => {
@@ -173,9 +175,11 @@ describe("SaleInvoiceForm Credit Limit Warning (issue #49)", () => {
     const submitBtn = screen.getByRole("button", { name: /create sale invoice/i });
     await user.click(submitBtn);
 
-    expect(await screen.findByText("Credit Limit Warning")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /going over their maximum|Credit Limit Warning/i })
+    ).toBeInTheDocument();
 
-    const overrideBtn = screen.getByRole("button", { name: /override & proceed/i });
+    const overrideBtn = screen.getByRole("button", { name: /save anyway|override & proceed/i });
     await user.click(overrideBtn);
 
     await waitFor(() => {

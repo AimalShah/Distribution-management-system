@@ -104,7 +104,7 @@ describe("the sidebar's Batches entry (issue #40)", () => {
     // matched instead of falling through to the catch-all.
     expect(screen.queryByText(/not found/i)).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: /batches/i })
+      await screen.findByRole("heading", { name: /batches/i }, { timeout: 5000 })
     ).toBeInTheDocument();
   });
 

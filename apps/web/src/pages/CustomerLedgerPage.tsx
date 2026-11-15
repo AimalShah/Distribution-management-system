@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { downloadBlob, fetcher, openDocument } from "../lib/api";
+import { downloadBlob, fetcher, printDocument } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { exportCustomerLedgerCSV } from "../lib/csv";
@@ -176,7 +176,7 @@ export default function CustomerLedgerPage() {
 
   const handlePrint = () => {
     if (!id || !ledger) return;
-    openDocument(`/customers/${id}/statement/pdf${queryString}`);
+    printDocument(`/customers/${id}/statement/html${queryString}`);
   };
 
   return (

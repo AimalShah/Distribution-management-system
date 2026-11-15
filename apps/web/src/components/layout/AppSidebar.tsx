@@ -46,6 +46,12 @@ export const navSections: NavGroup[] = [
     ],
   },
   {
+    heading: "Money",
+    items: [
+      { label: "Credit", icon: Wallet, to: "/credit" },
+    ],
+  },
+  {
     heading: "Catalog",
     items: [
       { label: "Products", icon: Package, to: "/products" },

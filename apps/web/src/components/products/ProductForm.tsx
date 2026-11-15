@@ -298,13 +298,13 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel>Product Code / SKU *</FormLabel>
+                        <FormLabel>Product code *</FormLabel>
                         <button
                           type="button"
                           onClick={handleGenerateSku}
                           className="text-xs text-primary font-medium hover:underline cursor-pointer"
                         >
-                          Auto SKU
+                          Generate one for me
                         </button>
                       </div>
                       <FormControl>

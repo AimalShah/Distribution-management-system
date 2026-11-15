@@ -25,6 +25,7 @@ const ReturnList = lazy(() => import("./pages/ReturnList"));
 const ReturnNew = lazy(() => import("./pages/ReturnNew"));
 const CustomerList = lazy(() => import("./pages/CustomerList"));
 const CustomerLedgerPage = lazy(() => import("./pages/CustomerLedgerPage"));
+const CreditPage = lazy(() => import("./pages/CreditPage"));
 const PaymentsPage = lazy(() => import("./pages/PaymentsPage"));
 const SupplierList = lazy(() => import("./pages/SupplierList"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
@@ -165,6 +166,12 @@ export function App() {
           <Route
             path="/customers/:id/ledger"
             element={<Suspense fallback={<PageFallback />}><CustomerLedgerPage /></Suspense>}
+          />
+
+          {/* Credit routes: balances due, overdue, and store credit (GLOSSARY.md) */}
+          <Route
+            path="/credit"
+            element={<Suspense fallback={<PageFallback />}><CreditPage /></Suspense>}
           />
 
           {/* Payment routes */}

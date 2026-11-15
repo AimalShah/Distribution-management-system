@@ -215,7 +215,7 @@ describe("GET /api/sales/:id", () => {
         organizationId: ORG,
         OR: [{ id: "SAL-001" }, { saleCode: "SAL-001" }],
       },
-      include: { customer: true, items: { include: { product: true } } },
+      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
     });
   });
 
@@ -738,7 +738,7 @@ describe("PUT /api/sales/:id", () => {
     expect(models.sale.update).toHaveBeenCalledWith({
       where: { id: "sal_1", organizationId: ORG, deletedAt: null },
       data: { status: "Completed" },
-      include: { customer: true, items: { include: { product: true } } },
+      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
     });
   });
 
@@ -1059,7 +1059,7 @@ describe("POST /api/sales/:id/cancel and /uncancel", () => {
     expect(models.sale.update).toHaveBeenCalledWith({
       where: { id: "sal_1", organizationId: ORG },
       data: { status: "Cancelled", statusBeforeCancel: "Pending" },
-      include: { customer: true, items: { include: { product: true } } },
+      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
     });
     // Cancelling moves no stock and writes no ledger rows.
     expect(models.inventory.updateMany).not.toHaveBeenCalled();
@@ -1136,5 +1136,16 @@ describe("GET /api/sales/:id/print", () => {
 
     expect(res.status).toBe(200);
     expect(res.text).toContain("AM Enterprise");
+    expect(res.text).toContain("window.print()");
+  });
+
+  it("supports autoprint parameter override", async () => {
+    const withNoPrint = await request(app).get("/api/sales/sal_1/print?autoprint=0").set(auth());
+    expect(withNoPrint.status).toBe(200);
+    expect(withNoPrint.text).not.toContain("window.print()");
+
+    const withExplicitPrint = await request(app).get("/api/sales/sal_1/html?autoprint=1").set(auth());
+    expect(withExplicitPrint.status).toBe(200);
+    expect(withExplicitPrint.text).toContain("window.print()");
   });
 });

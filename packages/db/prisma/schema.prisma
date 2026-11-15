@@ -31,6 +31,10 @@ model User {
   returns    Return[]
   payments   Payment[]
   auditLogs  AuditLog[]
+
+  // Documents the user created (attribution shown on listings and printouts).
+  createdSales     Sale[]     @relation("SaleCreatedBy")
+  createdPurchases Purchase[] @relation("PurchaseCreatedBy")
   role       String?
   banned     Boolean?
   banReason  String?
@@ -334,10 +338,15 @@ model Purchase {
   status         String // e.g. 'Pending', 'Completed'
   purchaseDate   DateTime       @default(now())
   deletedAt      DateTime?
+
+  // The user who created the document (see Sale.createdById).
+  createdById String?
+
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   // Relations
   organization   Organization   @relation(fields: [organizationId], references: [id])
+  createdBy      User?          @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   supplier       Supplier       @relation(fields: [supplierId], references: [id])
   purchaseItems  PurchaseItem[]
   // Purchase returns point back at the receipt the goods are going out on.
@@ -408,8 +417,13 @@ model Sale {
   // re-consumes it under an availability check.
   deletedAt DateTime?
 
+  // The user who created the document, set by the server from the session and
+  // shown on listings and printouts; "Created by" (GLOSSARY.md).
+  createdById String?
+
   // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
+  createdBy    User?        @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   customer Customer   @relation(fields: [customerId], references: [id])
   items    SaleItem[]

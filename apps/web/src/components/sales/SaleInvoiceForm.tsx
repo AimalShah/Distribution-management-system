@@ -42,6 +42,7 @@ import {
 import { api, fetcher, shortfallLine, toFailure } from "../../lib/api";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
+import { ProductSearchSelect } from "../forms/ProductSearchSelect";
 
 export const SALE_STATUS_OPTIONS = [
   { value: "Pending", label: "Pending" },
@@ -81,20 +82,38 @@ export function SaleInvoiceForm({
 
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
 
-  const products: {
-    id: string;
-    name: string;
-    productCode: string;
-    unitPrice: number;
-    unit: string;
-    gstApplicable: boolean;
-    gstRate: number;
-  }[] = productsData?.data ?? [];
+  // Prices and stock from two sources: the first page (pre-fetched so common
+  // picks fill instantly) and the searched picker, whose results arrive one
+  // product at a time — both feed the same "id -> product" map.
+  const [extraProducts, setExtraProducts] = useState<Record<string, any>>({});
 
-  const productById = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products]
-  );
+  const cacheProduct = (product: any) => {
+    if (!product?.id) return;
+
+    setExtraProducts((prev) =>
+      prev[product.id] ? prev : { ...prev, [product.id]: product }
+    );
+  };
+
+  const productById = useMemo(() => {
+    const map = new Map<string, any>(
+      (productsData?.data ?? []).map((product: any) => [product.id, product])
+    );
+
+    for (const product of Object.values(extraProducts)) {
+      if (!map.has(product.id)) map.set(product.id, product);
+    }
+
+    // A document being edited still has to break down and warn on stock even
+    // if its products are no longer on the first page or were deleted.
+    for (const item of initialData?.items ?? []) {
+      if (item.productId && item.product && !map.has(item.product.id)) {
+        map.set(item.product.id, item.product);
+      }
+    }
+
+    return map;
+  }, [productsData, extraProducts, initialData]);
 
   const defaultItem = {
     productId: "",
@@ -210,12 +229,16 @@ export function SaleInvoiceForm({
       isEditing,
     ]);
 
-  const handleProductChange = (index: number, productId: string) => {
+  const handleProductChange = (index: number, productId: string, product?: any) => {
     form.setValue(`items.${index}.productId`, productId);
-    const selectedProd = products.find((p) => p.id === productId);
+    const selectedProd = product ?? productById.get(productId);
 
     if (selectedProd) {
-      form.setValue(`items.${index}.unitPrice`, selectedProd.unitPrice);
+      form.setValue(`items.${index}.unitPrice`, Number(selectedProd.unitPrice) || 0);
+
+      if (selectedProd.gstApplicable && selectedProd.gstRate) {
+        form.setValue(`items.${index}.taxPercent`, Number(selectedProd.gstRate) || 0);
+      }
     }
   };
 
@@ -269,6 +292,7 @@ export function SaleInvoiceForm({
       const failure = toFailure(err, "Failed to save sale invoice");
 
       if (failure.code === "CREDIT_LIMIT_EXCEEDED" && failure.details) {
+        // SAFETY: The CREDIT_LIMIT_EXCEEDED error details schema carries outstanding, limit, and projected balances.
         const details = failure.details as {
           outstanding: number;
           limit: number;
@@ -286,7 +310,7 @@ export function SaleInvoiceForm({
       }
 
       // The refusal carries { shortages }: one line per product, in the caller's words.
-      const label = (id: string) => products.find((p) => p.id === id)?.name ?? id;
+      const label = (id: string) => productById.get(id)?.name ?? id;
 
       toast.error(`${failure.message}${shortfallLine(failure, label)}`);
     } finally {
@@ -370,9 +394,16 @@ export function SaleInvoiceForm({
                         <div className="text-[11px] text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
                           <span>Code: <strong className="font-mono text-foreground">{selectedCustomer.customerCode}</strong></span>
                           {selectedCustomer.creditLimit ? (
-                            <span>Credit Limit: <strong className="text-emerald-700 dark:text-emerald-400 tabular-nums">{formatMoney(selectedCustomer.creditLimit)}</strong></span>
+                            <span>
+                              Maximum they can owe:{" "}
+                              <strong className="text-emerald-700 dark:text-emerald-400 tabular-nums">
+                                {formatMoney(selectedCustomer.creditLimit)}
+                              </strong>
+                            </span>
                           ) : (
-                            <span className="text-amber-700 dark:text-amber-400">Cash terms / No credit limit</span>
+                            <span className="text-amber-700 dark:text-amber-400">
+                              No maximum set — they can owe any amount
+                            </span>
                           )}
                         </div>
                       )}
@@ -401,7 +432,7 @@ export function SaleInvoiceForm({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status *</FormLabel>
+                    <FormLabel>Payment status *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -416,6 +447,9 @@ export function SaleInvoiceForm({
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Pending: they haven't paid yet · Completed: the deal is done and printed.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -455,7 +489,10 @@ export function SaleInvoiceForm({
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel className="text-xs">Inter-State (IGST)</FormLabel>
+                      <FormLabel className="text-xs">Inter-state supply (charge IGST)</FormLabel>
+                      <p className="text-[11px] text-muted-foreground">
+                        Untick for sales within the same state (CGST + SGST).
+                      </p>
                     </div>
                   </FormItem>
                 )}
@@ -500,24 +537,25 @@ export function SaleInvoiceForm({
                 name={`items.${index}.productId`}
                 render={({ field }) => (
                   <FormItem className="space-y-0">
-                    <Select
-                      onValueChange={(val) => handleProductChange(index, val)}
-                      value={field.value}
-                      disabled={isEditing}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.productCode})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ProductSearchSelect
+                        value={field.value ?? ""}
+                        onChange={(productId, product) => {
+                          if (product) cacheProduct(product);
+                          handleProductChange(index, productId, product);
+                        }}
+                        disabled={isEditing}
+                        aria-label="Product"
+                      />
+                    </FormControl>
+                    {productById.get(field.value || "")?.inventory &&
+                      !isEditing &&
+                      qty > (productById.get(field.value).inventory.quantityOnHand ?? 0) && (
+                        <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                          Only {productById.get(field.value).inventory.quantityOnHand ?? 0} in stock —
+                          the server will refuse this line unless stock is added first.
+                        </p>
+                      )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -606,7 +644,7 @@ export function SaleInvoiceForm({
                   name="discount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Invoice Discount</FormLabel>
+                      <FormLabel className="text-xs">Discount (whole invoice)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -628,7 +666,7 @@ export function SaleInvoiceForm({
                     store instead of letting a typed number diverge from the
                     stored invoice. */}
                 <div className="space-y-2">
-                  <span className="text-xs font-medium">Invoice Tax (auto)</span>
+                  <span className="text-xs font-medium">Tax (calculated automatically)</span>
                   <Input
                     type="text"
                     readOnly
@@ -727,23 +765,25 @@ export function SaleInvoiceForm({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-amber-600">
                 <AlertTriangle className="size-5" />
-                Credit Limit Warning
+                This customer is going over their maximum
               </DialogTitle>
               <DialogDescription>
-                This sale will exceed the customer's credit limit.
+                After this sale, their balance due would be {formatMoney(creditLimitWarning.projected)},
+                above the maximum of {formatMoney(creditLimitWarning.limit)} set for them. You can
+                continue anyway if you accept the debt — owners and admins decide who may.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-3 text-sm" data-testid="credit-limit-warning-details">
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Current Outstanding:</span>
+                <span className="text-muted-foreground">Balance due now:</span>
                 <span className="font-semibold">{formatMoney(creditLimitWarning.outstanding)}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Credit Limit:</span>
+                <span className="text-muted-foreground">Maximum allowed:</span>
                 <span className="font-semibold">{formatMoney(creditLimitWarning.limit)}</span>
               </div>
               <div className="flex justify-between text-destructive font-semibold">
-                <span>Projected Balance:</span>
+                <span>After this sale:</span>
                 <span>{formatMoney(creditLimitWarning.projected)}</span>
               </div>
             </div>
@@ -754,7 +794,7 @@ export function SaleInvoiceForm({
                 onClick={() => setCreditLimitWarning(null)}
                 disabled={submitting}
               >
-                Cancel
+                Don't save yet
               </Button>
               <Button
                 type="button"
@@ -762,7 +802,7 @@ export function SaleInvoiceForm({
                 onClick={handleOverrideSubmit}
                 disabled={submitting}
               >
-                {submitting ? "Processing..." : "Override & Proceed"}
+                {submitting ? "Saving…" : "Save anyway"}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -158,10 +158,13 @@ export function CustomerDialog({
                 name="customerCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Customer Code *</FormLabel>
+                    <FormLabel>Customer code</FormLabel>
                     <FormControl>
                       <Input placeholder="CUST-XXXXX" {...field} />
                     </FormControl>
+                    <p className="text-[11px] text-muted-foreground">
+                      Made up for you. Change it only if your records need it.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -172,7 +175,7 @@ export function CustomerDialog({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name / Company *</FormLabel>
+                    <FormLabel>Shop or company name *</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Acme Retailers" {...field} />
                     </FormControl>
@@ -245,7 +248,7 @@ export function CustomerDialog({
                 name="creditLimit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Credit Limit (Rs)</FormLabel>
+                    <FormLabel>Maximum they can owe (Rs)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -260,6 +263,9 @@ export function CustomerDialog({
                         }
                       />
                     </FormControl>
+                    <p className="text-[11px] text-muted-foreground">
+                      Leave empty if there is no maximum.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -301,9 +307,13 @@ export function CustomerDialog({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="true">Active</SelectItem>
-                      <SelectItem value="false">Inactive / Inactive Hold</SelectItem>
+                      <SelectItem value="false">On hold</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    On hold shops are hidden when you record a sale, but their
+                    history stays.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

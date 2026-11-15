@@ -1,5 +1,5 @@
 import { formatMoney } from "@dms/shared";
-import { escapeHtml } from "./html-utils";
+import { escapeHtml, renderAutoPrintScript, type DocumentRenderOptions } from "./html-utils";
 
 export interface PaymentReceiptRenderData {
   company?: {
@@ -57,7 +57,10 @@ function formatDate(isoOrDate?: string | Date | null): string {
  * Renders an A4 monochrome Payment Collection Receipt (ADR 0002).
  * Strictly black-on-white with crisp typographic hierarchy for clean office printing.
  */
-export function renderPaymentReceiptHtml(data: PaymentReceiptRenderData): string {
+export function renderPaymentReceiptHtml(
+  data: PaymentReceiptRenderData,
+  options?: DocumentRenderOptions
+): string {
   const { company, payment } = data;
   const customer = payment.customer;
   const sale = payment.sale;
@@ -348,6 +351,7 @@ export function renderPaymentReceiptHtml(data: PaymentReceiptRenderData): string
       <div>Page 1 of 1</div>
     </div>
   </div>
+  ${renderAutoPrintScript(options)}
 </body>
 </html>`;
 }

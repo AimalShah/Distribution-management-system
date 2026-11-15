@@ -30,6 +30,7 @@ import {
 import { api, failureMessage, fetcher } from "../../lib/api";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
+import { ProductSearchSelect } from "../forms/ProductSearchSelect";
 
 export const PURCHASE_STATUS_OPTIONS = [
   { value: "Pending", label: "Pending" },
@@ -58,8 +59,36 @@ export function PurchaseForm({
 
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
 
-  const products: { id: string; name: string; productCode: string; unitCost: number; unit: string }[] =
-    productsData?.data ?? [];
+  // Prices and details from two sources: the first page (pre-fetched so common
+  // picks fill instantly) and the searched picker, whose results arrive one
+  // product at a time — both feed the same "id -> product" map.
+  const [extraProducts, setExtraProducts] = useState<Record<string, any>>({});
+
+  const cacheProduct = (product: any) => {
+    if (!product?.id) return;
+
+    setExtraProducts((prev) =>
+      prev[product.id] ? prev : { ...prev, [product.id]: product }
+    );
+  };
+
+  const productById = useMemo(() => {
+    const map = new Map<string, any>(
+      (productsData?.data ?? []).map((product: any) => [product.id, product])
+    );
+
+    for (const product of Object.values(extraProducts)) {
+      if (!map.has(product.id)) map.set(product.id, product);
+    }
+
+    for (const item of initialData?.purchaseItems ?? []) {
+      if (item.productId && item.product && !map.has(item.product.id)) {
+        map.set(item.product.id, item.product);
+      }
+    }
+
+    return map;
+  }, [productsData, extraProducts, initialData]);
 
   const defaultItem = {
     productId: "",
@@ -134,39 +163,39 @@ export function PurchaseForm({
   const watchedDiscount = form.watch("discount") || 0;
 
   // Real-time totals calculation
-  const { subtotal, itemsTotal, grandTotal, orderTax } = useMemo(() => {
+  const { subtotal, grandTotal, orderTax } = useMemo(() => {
     let sub = 0;
-    let itemsTot = 0;
     let tax = 0;
 
     for (const item of watchedItems) {
       const qty = Number(item?.quantity) || 0;
       const cost = Number(item?.unitCost) || 0;
       const gross = qty * cost;
-      const itemDisc = Number(item?.itemDiscount) || 0;
       const taxPct = Number(item?.taxPercent) || 0;
-      const lineTax = (taxPct / 100) * Math.max(0, gross - itemDisc);
-      const line = Math.max(0, gross - itemDisc + lineTax);
+      const lineTax = (taxPct / 100) * gross;
 
       sub += gross;
-      itemsTot += line;
       tax += lineTax;
     }
 
-    // No header tax input exists any more: the API derives the order's tax
-    // from the lines' rates (`linesTax` server-side), so the preview shows
-    // exactly that figure instead of a client-typed number.
-    const total = Math.max(0, itemsTot - (Number(watchedDiscount) || 0));
+    // No header tax input exists: the API derives the order's tax from the
+    // lines' rates (`linesTax` server-side), so the preview calculates and
+    // displays exactly that figure.
+    const total = Math.max(0, sub + tax - (Number(watchedDiscount) || 0));
 
-    return { subtotal: sub, itemsTotal: itemsTot, grandTotal: total, orderTax: tax };
+    return { subtotal: sub, grandTotal: total, orderTax: tax };
   }, [watchedItems, watchedDiscount]);
 
-  const handleProductChange = (index: number, productId: string) => {
+  const handleProductChange = (index: number, productId: string, product?: any) => {
     form.setValue(`items.${index}.productId`, productId);
-    const selectedProd = products.find((p) => p.id === productId);
+    const selectedProd = product ?? productById.get(productId);
 
     if (selectedProd) {
-      form.setValue(`items.${index}.unitCost`, selectedProd.unitCost);
+      form.setValue(`items.${index}.unitCost`, Number(selectedProd.unitCost) || 0);
+      form.setValue(
+        `items.${index}.taxPercent`,
+        selectedProd.gstApplicable ? (Number(selectedProd.gstRate) || 0) : 0
+      );
     }
   };
 
@@ -191,14 +220,14 @@ export function PurchaseForm({
           purchaseDate: values.purchaseDate,
           status: values.status,
           discount: Number(values.discount) || 0,
-          items: values.items.map((it) => ({
+          items: values.items.map((it: any) => ({
             productId: it.productId,
             quantity: Number(it.quantity),
             unitCost: Number(it.unitCost),
             batchNumber: it.batchNumber?.trim() || undefined,
             expiryDate: it.expiryDate || undefined,
             taxPercent: Number(it.taxPercent) || 0,
-            itemDiscount: Number(it.itemDiscount) || 0,
+            itemDiscount: 0,
           })),
         };
 
@@ -230,7 +259,7 @@ export function PurchaseForm({
                 name="purchaseCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase Order Code</FormLabel>
+                    <FormLabel>Order code</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -272,7 +301,7 @@ export function PurchaseForm({
                 name="purchaseDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase Date *</FormLabel>
+                    <FormLabel>Purchase date *</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -286,7 +315,7 @@ export function PurchaseForm({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status *</FormLabel>
+                    <FormLabel>Order status *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -311,26 +340,24 @@ export function PurchaseForm({
 
         {/* Line Items Card */}
         <LineItemsTable
-          title="Purchase Items"
+          title="Products purchased"
           subtitle={
             isEditing
               ? "Line items cannot be modified after initial purchase creation."
-              : "Add products, quantities, unit costs, and batch details."
+              : "Add products, quantities, costs, and batch details."
           }
           isEditing={isEditing}
           onAdd={() => append(defaultItem)}
           onRemove={(index) => remove(index)}
           columns={[
-            { header: "Product *", headClassName: "min-w-[180px]" },
-            { header: "Qty *", headClassName: "w-24" },
-            { header: "Unit Cost *", headClassName: "w-32" },
+            { header: "Product *", headClassName: "min-w-[220px]" },
+            { header: "Quantity *", headClassName: "w-24" },
+            { header: "Cost per unit *", headClassName: "w-32" },
             { header: "Batch #", headClassName: "w-28" },
-            { header: "Expiry Date", headClassName: "w-36" },
-            { header: "Tax %", headClassName: "w-24" },
-            { header: "Discount", headClassName: "w-28" },
+            { header: "Expiry date", headClassName: "w-36" },
             {
-              header: "Line Total",
-              headClassName: "w-28 text-right",
+              header: "Line total",
+              headClassName: "w-32 text-right",
               cellClassName: "text-right font-medium",
             },
           ]}
@@ -339,14 +366,7 @@ export function PurchaseForm({
             const itemValues = watchedItems[index] || {};
             const qty = Number(itemValues.quantity) || 0;
             const cost = Number(itemValues.unitCost) || 0;
-            const gross = qty * cost;
-            const itmDisc = Number(itemValues.itemDiscount) || 0;
-
-            const tax =
-              ((Number(itemValues.taxPercent) || 0) / 100) *
-              Math.max(0, gross - itmDisc);
-
-            const lineTotal = Math.max(0, gross - itmDisc + tax);
+            const lineTotal = qty * cost;
 
             return [
               // Product
@@ -355,24 +375,18 @@ export function PurchaseForm({
                 name={`items.${index}.productId`}
                 render={({ field }) => (
                   <FormItem className="space-y-0">
-                    <Select
-                      onValueChange={(val) => handleProductChange(index, val)}
-                      value={field.value}
-                      disabled={isEditing}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.productCode})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ProductSearchSelect
+                        value={field.value ?? ""}
+                        onChange={(productId, product) => {
+                          if (product) cacheProduct(product);
+                          handleProductChange(index, productId, product);
+                        }}
+                        disabled={isEditing}
+                        aria-label="Product"
+                        priceMode="purchase"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -410,7 +424,7 @@ export function PurchaseForm({
                         type="number"
                         step="0.01"
                         min="0"
-                        className="h-9"
+                        className="h-9 font-mono"
                         disabled={isEditing}
                         {...field}
                         onChange={(e) => field.onChange(Number(e.target.value))}
@@ -429,8 +443,8 @@ export function PurchaseForm({
                   <FormItem className="space-y-0">
                     <FormControl>
                       <Input
-                        placeholder="Batch"
-                        className="h-9"
+                        placeholder="Batch #"
+                        className="h-9 font-mono text-xs"
                         disabled={isEditing}
                         {...field}
                       />
@@ -448,51 +462,9 @@ export function PurchaseForm({
                     <FormControl>
                       <Input
                         type="date"
-                        className="h-9"
+                        className="h-9 text-xs"
                         disabled={isEditing}
                         {...field}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />,
-
-              // Tax %
-              <FormField
-                control={form.control}
-                name={`items.${index}.taxPercent`}
-                render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        className="h-9"
-                        disabled={isEditing}
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />,
-
-              // Item Discount
-              <FormField
-                control={form.control}
-                name={`items.${index}.itemDiscount`}
-                render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="h-9"
-                        disabled={isEditing}
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
                       />
                     </FormControl>
                   </FormItem>
@@ -518,7 +490,7 @@ export function PurchaseForm({
                   name="discount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Order Discount</FormLabel>
+                      <FormLabel>Discount (whole order)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -538,7 +510,9 @@ export function PurchaseForm({
                     shows the figure the server will store instead of letting a
                     typed number diverge from the stored purchase. */}
                 <div className="space-y-2">
-                  <FormLabel>Order Tax (auto)</FormLabel>
+                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Tax (calculated automatically)
+                  </label>
                   <Input
                     type="text"
                     readOnly
@@ -557,28 +531,24 @@ export function PurchaseForm({
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Items Subtotal:</span>
+                <span className="text-muted-foreground">Items subtotal:</span>
                 <span className="font-medium font-mono tabular-nums">{formatMoney(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Items Total (with tax & line discount):</span>
-                <span className="font-medium font-mono tabular-nums">{formatMoney(itemsTotal)}</span>
-              </div>
-              {Number(watchedDiscount) > 0 && (
-                <div className="flex justify-between text-sm text-green-700">
-                  <span>Order Discount:</span>
-                  <span className="font-mono tabular-nums">-{formatMoney(Number(watchedDiscount))}</span>
-                </div>
-              )}
               {orderTax > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Tax:</span>
+                  <span className="text-muted-foreground">Order tax:</span>
                   <span className="font-mono tabular-nums">+{formatMoney(orderTax)}</span>
+                </div>
+              )}
+              {Number(watchedDiscount) > 0 && (
+                <div className="flex justify-between text-sm text-green-700">
+                  <span>Order discount:</span>
+                  <span className="font-mono tabular-nums">-{formatMoney(Number(watchedDiscount))}</span>
                 </div>
               )}
               <Separator className="my-2" />
               <div className="flex justify-between text-base font-bold">
-                <span>Grand Total:</span>
+                <span>Grand total:</span>
                 <span className="text-primary font-mono tabular-nums">{formatMoney(grandTotal)}</span>
               </div>
             </CardContent>

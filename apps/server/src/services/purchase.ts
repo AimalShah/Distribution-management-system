@@ -5,14 +5,15 @@ import type {
   PurchaseItemInput,
   PurchaseUpdateInput,
 } from "@dms/shared";
-import { fromPaise, percentagePaise, toMoneyNumber, toPaise } from "@dms/shared";
+import { fromPaise, percentagePaise, toPaise } from "@dms/shared";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { applyStockMovement, type StockMovementRequest } from "./stock-movement";
-import { serverCache, invalidateTenantMetrics } from "../utils/cache";
+import { invalidateTenantMetrics } from "../utils/cache";
 import { nextDocumentCode } from "./document-code";
 
 const listInclude = {
   supplier: true,
+  createdBy: { select: { id: true, name: true } },
   // The legacy list embedded every `purchaseItems` row with its product. On a
   // paginated list that is an unbounded payload per row, so the count is sent
   // instead and the lines stay on the detail route.
@@ -21,6 +22,7 @@ const listInclude = {
 
 const detailInclude = {
   supplier: true,
+  createdBy: { select: { id: true, name: true } },
   purchaseItems: { include: { product: true } },
 } satisfies Prisma.PurchaseInclude;
 
@@ -248,6 +250,8 @@ export async function createPurchase(
         // form had selected. The stored value is now the requested one.
         status: data.status,
         organizationId,
+        // The creator comes from the session, never the body.
+        createdById: userId,
         purchaseItems: { create: purchaseItems },
       },
       include: detailInclude,

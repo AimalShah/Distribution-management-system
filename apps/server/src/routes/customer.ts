@@ -16,6 +16,7 @@ import {
 } from "../services/customer";
 import { getCompanySettings } from "../services/settings";
 import { generateCustomerStatementPdf } from "../services/customer-pdf";
+import { renderCustomerStatementHtml } from "../services/customer-statement-template";
 
 export const customerRouter: Router = Router();
 
@@ -89,6 +90,41 @@ customerRouter.get(
       `attachment; filename="statement-${safeName}-${dateStr}.pdf"`
     );
     res.send(Buffer.from(pdfBuffer));
+  })
+);
+
+customerRouter.get(
+  ["/:id/statement/html", "/:id/statement/print", "/:id/ledger/html", "/:id/ledger/print"],
+  asyncHandler(async (req, res) => {
+    const query = customerLedgerQuerySchema.parse(req.query);
+
+    const ledger = await getCustomerLedger({
+      customerId: req.params.id,
+      organizationId: req.auth.organizationId,
+      ...query,
+    });
+
+    const settings = await getCompanySettings(req.auth.organizationId);
+    const isPrintRoute = req.path.endsWith("/print");
+
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
+    const html = renderCustomerStatementHtml(
+      {
+        company: {
+          name: settings.displayName,
+          address: settings.address,
+          gstin: settings.gstin,
+        },
+        ...ledger,
+      },
+      { autoPrint }
+    );
+
+    res.type("html").send(html);
   })
 );
 

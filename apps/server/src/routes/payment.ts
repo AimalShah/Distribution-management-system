@@ -31,6 +31,7 @@ paymentRouter.get(
 
     const pdf = await generatePaymentPdf({
       company: withComp.company,
+      // SAFETY: withCompanyProfile enriches the database payment record with company metadata.
       payment: withComp as any,
     });
 
@@ -45,15 +46,26 @@ paymentRouter.get(
 );
 
 paymentRouter.get(
-  "/:id/html",
+  ["/:id/html", "/:id/print"],
   asyncHandler(async (req, res) => {
     const payment = await getPaymentById(req.params.id, req.auth.organizationId);
     const withComp = await withCompanyProfile(payment, req.auth.organizationId);
 
-    const html = renderPaymentReceiptHtml({
-      company: withComp.company,
-      payment: withComp as any,
-    });
+    const isPrintRoute = req.path.endsWith("/print");
+
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
+    const html = renderPaymentReceiptHtml(
+      {
+        company: withComp.company,
+        // SAFETY: withCompanyProfile enriches the database payment record with company metadata.
+        payment: withComp as any,
+      },
+      { autoPrint }
+    );
 
     res.type("html").send(html);
   })

@@ -79,7 +79,7 @@ export function buildCacheKey(
     return base;
   }
   const parts = Object.entries(params)
-    .filter(([_, v]) => v !== undefined && v !== null && v !== "")
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${v instanceof Date ? v.toISOString() : String(v)}`)
     .join("&");
@@ -97,6 +97,9 @@ export function invalidateTenantMetrics(
 
   if (scope === "all" || scope === "sales") {
     serverCache.deletePrefix(`reports:sales:${organizationId}`);
+    // The "Credit" overview reads sales, payments and returns, so any document
+    // that moves money for a customer has to age it out too.
+    serverCache.deletePrefix(`credit:${organizationId}`);
   }
   if (scope === "all" || scope === "purchases") {
     serverCache.deletePrefix(`reports:purchase:${organizationId}`);

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import useSWR from "swr";
-import { ChevronLeft, ChevronRight, CreditCard, Download, Plus, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, CreditCard, Download, Plus, Printer, Receipt, RefreshCw, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { invalidateDomains } from "../lib/mutation";
 import {
@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@dms/ui";
-import { api, failureMessage, fetcher, openDocument } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument, printDocument } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { PageHead } from "../components/list/PageHead";
@@ -191,11 +191,13 @@ export default function PaymentsPage() {
         async () => {
           await api.delete(`/payments/${target.id}`);
           invalidateDomains("payments");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((r: PaymentRow) => r.id !== target.id),
@@ -375,6 +377,16 @@ export default function PaymentsPage() {
                         <span className="text-xs text-muted-foreground">Reversed</span>
                       ) : (
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
+                            title="Print Receipt"
+                            onClick={() => printDocument(`/payments/${row.id}/html`)}
+                          >
+                            <span className="sr-only">Print receipt</span>
+                            <Printer className="size-3.5" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"

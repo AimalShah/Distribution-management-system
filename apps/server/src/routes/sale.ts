@@ -80,11 +80,22 @@ saleRouter.get(
 );
 
 saleRouter.get(
-  "/:id/print",
+  ["/:id/print", "/:id/html"],
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
+    const isPrintRoute = req.path.endsWith("/print");
 
-    const html = renderSaleInvoiceHtml(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
+    // SAFETY: withCompany and normalizeDecimalValues conform to the SaleInvoiceRenderData interface.
+    const html = renderSaleInvoiceHtml(
+      normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData,
+      { autoPrint }
+    );
+
     res.type("html").send(html);
   })
 );
@@ -94,6 +105,7 @@ saleRouter.get(
   asyncHandler(async (req, res) => {
     const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
 
+    // SAFETY: withCompany and normalizeDecimalValues conform to the SaleInvoiceRenderData interface.
     const pdf = await generateSalePdf(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
     res
       .type("pdf")
@@ -108,6 +120,7 @@ saleRouter.get(
     const sale = await getSaleInvoiceData(req.params.id, req.auth.organizationId);
 
     if (req.accepts("html") && !req.accepts("json")) {
+      // SAFETY: withCompany and normalizeDecimalValues conform to the SaleInvoiceRenderData interface.
       const html = renderSaleInvoiceHtml(normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData);
 
       return res.type("html").send(html);

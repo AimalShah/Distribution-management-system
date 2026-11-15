@@ -31,7 +31,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, failureMessage, fetcher, openDocument } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument, printDocument } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDate, formatMoney } from "../lib/format";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -49,6 +49,7 @@ export interface PurchaseItemRow {
   purchaseDate: string;
   createdAt: string;
   supplier: { id: string; companyName: string };
+  createdBy?: { id: string; name: string } | null;
   _count?: { purchaseItems: number };
   purchaseItems?: any[];
 }
@@ -104,11 +105,13 @@ export default function PurchaseList() {
         async () => {
           await api.delete(`/purchases/${target.id}`);
           invalidateDomains("purchases");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((p: PurchaseItemRow) => p.id !== target.id),
@@ -182,6 +185,17 @@ export default function PurchaseList() {
         ),
       },
       {
+        // Who created the purchase ("Created by", GLOSSARY.md); a dash on
+        // rows created before the column existed.
+        id: "createdBy",
+        header: "Created by",
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {row.original.createdBy?.name ?? "—"}
+          </span>
+        ),
+      },
+      {
         id: "items",
         header: "Items",
         cell: ({ row }) => (
@@ -230,11 +244,11 @@ export default function PurchaseList() {
                   Download PO (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => openDocument(`/purchases/${purchase.id}/html`)}
+                  onClick={() => printDocument(`/purchases/${purchase.id}/html`)}
                   className="cursor-pointer"
                 >
                   <Printer className="size-4 mr-2" />
-                  View & Print Order
+                  Print Order
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => navigate(`/purchases/${purchase.id}/edit`)}

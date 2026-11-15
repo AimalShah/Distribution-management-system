@@ -43,8 +43,10 @@ purchaseRouter.get(
     );
 
     const withComp = await withCompanyProfile(purchase, req.auth.organizationId);
+
     const pdf = await generatePurchasePdf({
       company: withComp.company,
+      // SAFETY: withCompanyProfile enriches the database purchase record with company metadata.
       purchase: withComp as any,
     });
 
@@ -59,18 +61,30 @@ purchaseRouter.get(
 );
 
 purchaseRouter.get(
-  "/:id/html",
+  ["/:id/html", "/:id/print"],
   asyncHandler(async (req, res) => {
     const purchase = await getPurchaseById(
       req.params.id,
       req.auth.organizationId
     );
 
+    const isPrintRoute = req.path.endsWith("/print");
+
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
     const withComp = await withCompanyProfile(purchase, req.auth.organizationId);
-    const html = renderPurchaseOrderHtml({
-      company: withComp.company,
-      purchase: withComp as any,
-    });
+
+    const html = renderPurchaseOrderHtml(
+      {
+        company: withComp.company,
+        // SAFETY: withCompanyProfile enriches the database purchase record with company metadata.
+        purchase: withComp as any,
+      },
+      { autoPrint }
+    );
 
     res.type("html").send(html);
   })

@@ -1,5 +1,5 @@
 import { calculateSaleBreakdown, formatMoney } from "@dms/shared";
-import { escapeHtml } from "./html-utils";
+import { escapeHtml, renderAutoPrintScript, type DocumentRenderOptions } from "./html-utils";
 
 export interface SaleInvoiceRenderData {
   saleCode: string;
@@ -15,6 +15,8 @@ export interface SaleInvoiceRenderData {
   igstAmount?: number | null;
   /** The date this credit sale's balance is payable (ADR 0009); null on a cash sale. */
   dueDate?: Date | string | null;
+  /** Who created the document ("Created by", GLOSSARY.md); null on legacy rows. */
+  createdBy?: { name: string } | null;
   customer?: {
     name: string;
     email?: string | null;
@@ -53,7 +55,10 @@ export interface SaleInvoiceRenderData {
  * to print legibly on a plain office printer, where a coloured fill is a grey
  * smear. Money renders as `Rs` everywhere.
  */
-export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
+export function renderSaleInvoiceHtml(
+  sale: SaleInvoiceRenderData,
+  options?: DocumentRenderOptions
+): string {
   const formattedDate = new Date(sale.saleDate).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -307,9 +312,11 @@ export function renderSaleInvoiceHtml(sale: SaleInvoiceRenderData): string {
     </div>
 
     <div class="footer">
+      ${sale.createdBy?.name ? `<p class="doc-date" style="margin: 0 0 4px;">Created by ${escapeHtml(sale.createdBy.name)}</p>` : ""}
       <p>Thank you for your business. For questions regarding this invoice, please contact us.</p>
     </div>
   </div>
+  ${renderAutoPrintScript(options)}
 </body>
 </html>`;
 }

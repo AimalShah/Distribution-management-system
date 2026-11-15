@@ -41,6 +41,7 @@ returnRouter.get(
 
     const pdf = await generateReturnPdf({
       company: withComp.company,
+      // SAFETY: withCompanyProfile enriches the database return record with company metadata.
       returnRecord: withComp as any,
     });
 
@@ -55,15 +56,26 @@ returnRouter.get(
 );
 
 returnRouter.get(
-  "/:id/html",
+  ["/:id/html", "/:id/print"],
   asyncHandler(async (req, res) => {
     const found = await getReturnByIdOrCode(req.params.id, req.auth.organizationId);
     const withComp = await withCompanyProfile(found, req.auth.organizationId);
 
-    const html = renderCreditNoteHtml({
-      company: withComp.company,
-      returnRecord: withComp as any,
-    });
+    const isPrintRoute = req.path.endsWith("/print");
+
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
+    const html = renderCreditNoteHtml(
+      {
+        company: withComp.company,
+        // SAFETY: withCompanyProfile enriches the database return record with company metadata.
+        returnRecord: withComp as any,
+      },
+      { autoPrint }
+    );
 
     res.type("html").send(html);
   })

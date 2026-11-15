@@ -7,6 +7,7 @@ import {
   ArrowDownLeft,
   Download,
   Plus,
+  Printer,
   RefreshCw,
   RotateCw,
   Trash2,
@@ -24,7 +25,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, fetcher, openDocument, shortfallLine, toFailure } from "../lib/api";
+import { api, fetcher, openDocument, printDocument, shortfallLine, toFailure } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListPageHeader } from "../components/list/ListPageHeader";
@@ -101,11 +102,13 @@ export default function ReturnList() {
         async () => {
           await api.delete(`/returns/${row.id}`);
           invalidateDomains("returns");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((r: ReturnRow) => r.id !== row.id),
@@ -136,11 +139,13 @@ export default function ReturnList() {
         async () => {
           await api.post(`/returns/${row.id}/restore`);
           invalidateDomains("returns");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((r: ReturnRow) => r.id !== row.id),
@@ -283,6 +288,16 @@ export default function ReturnList() {
             </Button>
           ) : (
             <div className="flex items-center justify-end gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-foreground rounded-lg"
+                title="Print Note"
+                onClick={() => printDocument(`/returns/${ret.id}/html`)}
+              >
+                <span className="sr-only">Print Note</span>
+                <Printer className="size-3.5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

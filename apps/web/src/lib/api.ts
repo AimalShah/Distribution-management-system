@@ -40,6 +40,69 @@ export function openDocument(endpoint: string): void {
   window.open(getDocumentUrl(endpoint), "_blank");
 }
 
+/**
+ * Triggers printing of a document (HTML or printable view) without leaving an empty browser tab open.
+ * Loads the document into a background iframe, focuses it, and triggers window.print().
+ * Falls back to window.open() if iframe printing is blocked or in test environments.
+ */
+export function printDocument(endpoint: string): void {
+  const sep = endpoint.includes("?") ? "&" : "?";
+  const printEndpoint = endpoint.includes("autoprint=") ? endpoint : `${endpoint}${sep}autoprint=1`;
+  const url = getDocumentUrl(printEndpoint);
+
+  if (typeof document === "undefined" || !document.body) {
+    if (typeof window !== "undefined" && window.open) {
+      window.open(url, "_blank");
+    }
+
+    return;
+  }
+
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute(
+      "style",
+      "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;border:none;pointer-events:none;"
+    );
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.src = url;
+
+    const cleanup = () => {
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          iframe.parentNode.removeChild(iframe);
+        }
+      }, 30000);
+    };
+
+    iframe.onload = () => {
+      try {
+        const frameWin = iframe.contentWindow;
+
+        if (frameWin) {
+          frameWin.focus();
+          frameWin.print();
+        } else {
+          window.open(url, "_blank");
+        }
+      } catch {
+        window.open(url, "_blank");
+      } finally {
+        cleanup();
+      }
+    };
+
+    iframe.onerror = () => {
+      cleanup();
+      window.open(url, "_blank");
+    };
+
+    document.body.appendChild(iframe);
+  } catch {
+    window.open(url, "_blank");
+  }
+}
+
 /** The axios adapter: the transport this module keeps private behind the seam. */
 const client = axios.create({
   baseURL: configuredApiUrl,

@@ -39,7 +39,7 @@ import {
   SelectValue,
   Skeleton,
 } from "@dms/ui";
-import { api, failureMessage, fetcher, openDocument, shortfallLine, toFailure } from "../lib/api";
+import { api, failureMessage, fetcher, openDocument, printDocument, shortfallLine, toFailure } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import { waLink } from "../lib/whatsapp";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -120,6 +120,7 @@ export interface SaleInvoiceItemRow {
   saleDate: string;
   createdAt: string;
   customer?: { id: string; name: string; phone?: string | null };
+  createdBy?: { id: string; name: string } | null;
   _count?: { items: number };
   items?: any[];
 }
@@ -198,11 +199,13 @@ export default function SaleInvoiceList() {
         async () => {
           await api.delete(`/sales/${row.id}`);
           invalidateDomains("sales");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((s: SaleInvoiceItemRow) => s.id !== row.id),
@@ -230,11 +233,13 @@ export default function SaleInvoiceList() {
         async () => {
           await api.post(`/sales/${row.id}/restore`);
           invalidateDomains("sales");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.filter((s: SaleInvoiceItemRow) => s.id !== row.id),
@@ -265,11 +270,13 @@ export default function SaleInvoiceList() {
         async () => {
           await api.post(`/sales/${sale.id}/cancel`);
           invalidateDomains("sales");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.map((s: SaleInvoiceItemRow) =>
@@ -298,11 +305,13 @@ export default function SaleInvoiceList() {
         async () => {
           await api.post(`/sales/${sale.id}/uncancel`);
           invalidateDomains("sales");
+
           return data;
         },
         {
           optimisticData: (current: any) => {
             if (!current?.data) return current;
+
             return {
               ...current,
               data: current.data.map((s: SaleInvoiceItemRow) =>
@@ -377,7 +386,7 @@ export default function SaleInvoiceList() {
   };
 
   const handlePrint = (id: string) => {
-    openDocument(`/sales/${id}/print`);
+    printDocument(`/sales/${id}/print`);
   };
 
   const handleDownloadPdf = (id: string) => {
@@ -406,23 +415,6 @@ export default function SaleInvoiceList() {
     }
 
     return <span className="text-amber-600 dark:text-amber-400 font-medium">Partial</span>;
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Completed":
-        return (
-          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
-            Completed
-          </Badge>
-        );
-      case "Pending":
-        return <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">Pending</Badge>;
-      case "Cancelled":
-        return <Badge variant="destructive">Cancelled</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
   };
 
   const columns = useMemo<ColumnDef<SaleInvoiceItemRow, any>[]>(
@@ -463,6 +455,18 @@ export default function SaleInvoiceList() {
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatDate(row.original.saleDate)}
+          </span>
+        ),
+      },
+      {
+        // Who created the invoice ("Created by", GLOSSARY.md). Legacy rows have
+        // no creator on record and show a dash.
+        id: "createdBy",
+        header: () => <div className="text-center">Created by</div>,
+        meta: { headerClassName: "text-center", cellClassName: "text-center" },
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {row.original.createdBy?.name ?? "—"}
           </span>
         ),
       },

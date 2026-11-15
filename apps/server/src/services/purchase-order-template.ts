@@ -1,5 +1,5 @@
 import { formatMoney } from "@dms/shared";
-import { escapeHtml } from "./html-utils";
+import { escapeHtml, renderAutoPrintScript, type DocumentRenderOptions } from "./html-utils";
 
 export interface PurchaseOrderRenderData {
   company?: {
@@ -63,7 +63,10 @@ function formatDate(isoOrDate?: string | Date | null): string {
  * Renders an A4 monochrome Purchase Order / Goods Receipt Note HTML template (ADR 0002).
  * Strictly black-on-white with crisp typographic hierarchy for clean office printing.
  */
-export function renderPurchaseOrderHtml(data: PurchaseOrderRenderData): string {
+export function renderPurchaseOrderHtml(
+  data: PurchaseOrderRenderData,
+  options?: DocumentRenderOptions
+): string {
   const { company, purchase } = data;
   const supplier = purchase.supplier;
 
@@ -489,6 +492,7 @@ export function renderPurchaseOrderHtml(data: PurchaseOrderRenderData): string {
       <div>Page 1 of 1</div>
     </div>
   </div>
+  ${renderAutoPrintScript(options)}
 </body>
 </html>`;
 }

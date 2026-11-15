@@ -855,5 +855,27 @@ describe("GET /api/customers/:id/statement/pdf", () => {
     expect(res.status).toBe(200);
     expect(res.header["content-type"]).toBe("application/pdf");
   });
+
+  it("renders statement HTML and supports auto-print", async () => {
+    customerModel.findFirst.mockResolvedValue(customerFixture());
+    saleModel.findMany.mockResolvedValue([]);
+    returnModel.findMany.mockResolvedValue([]);
+    paymentModel.findMany.mockResolvedValue([]);
+
+    const resHtml = await request(app)
+      .get("/api/customers/cust_1/statement/html")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(resHtml.status).toBe(200);
+    expect(resHtml.header["content-type"]).toMatch(/html/);
+    expect(resHtml.text).toContain("ACCOUNT STATEMENT");
+
+    const resPrint = await request(app)
+      .get("/api/customers/cust_1/statement/print")
+      .set(ORGANIZATION_HEADER, ORG);
+
+    expect(resPrint.status).toBe(200);
+    expect(resPrint.text).toContain("window.print()");
+  });
 });
 

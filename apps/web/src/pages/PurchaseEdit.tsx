@@ -1,8 +1,8 @@
 import { useParams, Link } from "react-router-dom";
 import useSWR from "swr";
-import { ArrowLeft, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Printer, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@dms/ui";
-import { fetcher } from "../lib/api";
+import { fetcher, printDocument } from "../lib/api";
 import { PurchaseForm } from "../components/purchases/PurchaseForm";
 
 export default function PurchaseEdit() {
@@ -55,22 +55,36 @@ export default function PurchaseEdit() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto w-full animate-slideInUp">
-      <div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-          <Link to="/" className="hover:text-primary transition-colors">
-            Dashboard
-          </Link>
-          <span>/</span>
-          <Link to="/purchases" className="hover:text-primary transition-colors">
-            Purchases
-          </Link>
-          <span>/</span>
-          <span className="text-foreground font-semibold">Edit Order</span>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Link to="/" className="hover:text-primary transition-colors">
+              Dashboard
+            </Link>
+            <span>/</span>
+            <Link to="/purchases" className="hover:text-primary transition-colors">
+              Purchases
+            </Link>
+            <span>/</span>
+            <span className="text-foreground font-semibold">Edit Order</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Edit Purchase Order</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Update status and adjustments for <span className="font-semibold text-foreground">{purchase.purchaseCode}</span>
+            {purchase.createdBy?.name && (
+              <span> · Created by <span className="font-semibold text-foreground">{purchase.createdBy.name}</span></span>
+            )}
+          </p>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Edit Purchase Order</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Update status and adjustments for <span className="font-semibold text-foreground">{purchase.purchaseCode}</span>
-        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => id && printDocument(`/purchases/${id}/html`)}
+        >
+          <Printer className="size-4" />
+          Print Order
+        </Button>
       </div>
 
       <PurchaseForm isEditing purchaseId={id} initialData={purchase} />

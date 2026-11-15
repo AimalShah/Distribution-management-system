@@ -1,5 +1,5 @@
 import { formatMoney } from "@dms/shared";
-import { escapeHtml } from "./html-utils";
+import { escapeHtml, renderAutoPrintScript, type DocumentRenderOptions } from "./html-utils";
 
 export interface CustomerStatementRenderData {
   company?: {
@@ -56,7 +56,10 @@ function formatDate(isoOrDate?: string | Date | null): string {
  * Renders an A4 monochrome customer statement HTML template (ADR 0002).
  * Designed for crisp, black-and-white office printing with zero color fills.
  */
-export function renderCustomerStatementHtml(data: CustomerStatementRenderData): string {
+export function renderCustomerStatementHtml(
+  data: CustomerStatementRenderData,
+  options?: DocumentRenderOptions
+): string {
   const companyName = escapeHtml(data.company?.name?.trim() || "AM Enterprise");
   const companyAddress = escapeHtml(data.company?.address?.trim() || "");
   const companyGstin = escapeHtml(data.company?.gstin?.trim() || "");
@@ -279,6 +282,7 @@ export function renderCustomerStatementHtml(data: CustomerStatementRenderData): 
       Authorized Signatory
     </div>
   </div>
+  ${renderAutoPrintScript(options)}
 </body>
 </html>`;
 }

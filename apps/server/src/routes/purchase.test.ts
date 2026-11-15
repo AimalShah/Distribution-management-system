@@ -292,7 +292,7 @@ describe("GET /api/purchases/:id", () => {
     expect(res.body.purchaseItems).toHaveLength(1);
     expect(models.purchase.findFirst).toHaveBeenCalledWith({
       where: { id: "pur_1", organizationId: ORG, deletedAt: null },
-      include: { supplier: true, purchaseItems: { include: { product: true } } },
+      include: { supplier: true, createdBy: { select: { id: true, name: true } }, purchaseItems: { include: { product: true } } },
     });
   });
 
@@ -633,7 +633,7 @@ describe("PUT /api/purchases/:id", () => {
     expect(models.purchase.update).toHaveBeenCalledWith({
       where: { id: "pur_1", organizationId: ORG, deletedAt: null },
       data: { status: "Completed", purchaseDate: new Date("2026-02-01T00:00:00.000Z") },
-      include: { supplier: true, purchaseItems: { include: { product: true } } },
+      include: { supplier: true, createdBy: { select: { id: true, name: true } }, purchaseItems: { include: { product: true } } },
     });
   });
 
@@ -816,7 +816,7 @@ describe("GET /api/purchases/:id/pdf", () => {
   });
 });
 
-describe("GET /api/purchases/:id/html", () => {
+describe("GET /api/purchases/:id/html and /print", () => {
   it("renders purchase order HTML template cleanly", async () => {
     const res = await request(app)
       .get("/api/purchases/pur_1/html")
@@ -826,5 +826,21 @@ describe("GET /api/purchases/:id/html", () => {
     expect(res.headers["content-type"]).toMatch(/html/);
     expect(res.text).toContain("PURCHASE ORDER");
     expect(res.text).toContain("PO-001");
+  });
+
+  it("injects auto-print script when requested via /print or autoprint=1", async () => {
+    const printRes = await request(app)
+      .get("/api/purchases/pur_1/print")
+      .set(auth());
+
+    expect(printRes.status).toBe(200);
+    expect(printRes.text).toContain("window.print()");
+
+    const htmlAutoRes = await request(app)
+      .get("/api/purchases/pur_1/html?autoprint=1")
+      .set(auth());
+
+    expect(htmlAutoRes.status).toBe(200);
+    expect(htmlAutoRes.text).toContain("window.print()");
   });
 });

@@ -17,6 +17,7 @@ import { saleRouter } from "./sale";
 import { settingsRouter } from "./settings";
 import { supplierRouter } from "./supplier";
 import { auditRouter } from "./audit";
+import { creditRouter } from "./credit";
 
 export const apiRouter: Router = Router();
 
@@ -71,6 +72,7 @@ const PERMISSIONS: RoutePermissionTable = {
   reports: { resource: "reports" },
   dashboard: { resource: "reports" },
   audit: { resource: "reports" },
+  credit: { resource: "reports" },
 };
 
 /**
@@ -123,4 +125,6 @@ apiRouter.use("/reports/aging", (req, res, next) => {
 });
 
 apiRouter.use("/dashboard", dashboardRouter);
+
+apiRouter.use("/credit", creditRouter);
 
