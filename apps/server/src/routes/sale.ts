@@ -25,6 +25,7 @@ import { checkPermission } from "../services/rbac";
 import { requireUserId } from "../middleware/auth-context";
 
 import { renderSaleInvoiceHtml, type SaleInvoiceRenderData } from "../services/sale-invoice-template";
+import { renderSaleReceiptHtml } from "../services/sale-receipt-template";
 import { generateSalePdf } from "../services/sale-pdf";
 import { getCompanySettings } from "../services/settings";
 
@@ -90,10 +91,42 @@ saleRouter.get(
       req.query.autoprint === "true" ||
       (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
 
+    if (req.query.format === "thermal" || req.query.format === "receipt") {
+      const width = req.query.width === "58" ? "58" : "80";
+      const html = renderSaleReceiptHtml(
+        normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData,
+        { autoPrint, width }
+      );
+      return res.type("html").send(html);
+    }
+
     // SAFETY: withCompany and normalizeDecimalValues conform to the SaleInvoiceRenderData interface.
     const html = renderSaleInvoiceHtml(
       normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData,
       { autoPrint }
+    );
+
+    res.type("html").send(html);
+  })
+);
+
+saleRouter.get(
+  ["/:id/receipt", "/:id/receipt/print"],
+  asyncHandler(async (req, res) => {
+    const sale = await getSaleByIdOrCode(req.params.id, req.auth.organizationId);
+    const isPrintRoute = req.path.endsWith("/print");
+
+    const autoPrint =
+      req.query.autoprint === "1" ||
+      req.query.autoprint === "true" ||
+      (isPrintRoute && req.query.autoprint !== "0" && req.query.autoprint !== "false");
+
+    const width = req.query.width === "58" ? "58" : "80";
+
+    // SAFETY: withCompany and normalizeDecimalValues conform to the SaleInvoiceRenderData interface.
+    const html = renderSaleReceiptHtml(
+      normalizeDecimalValues(await withCompany(sale, req.auth.organizationId)) as SaleInvoiceRenderData,
+      { autoPrint, width }
     );
 
     res.type("html").send(html);

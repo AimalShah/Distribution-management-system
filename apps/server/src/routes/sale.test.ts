@@ -1148,4 +1148,24 @@ describe("GET /api/sales/:id/print", () => {
     expect(withExplicitPrint.status).toBe(200);
     expect(withExplicitPrint.text).toContain("window.print()");
   });
+
+  it("renders 80mm thermal receipt with anti-waste CSS rules", async () => {
+    const res = await request(app).get("/api/sales/sal_1/receipt/print").set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("size: 80mm auto");
+    expect(res.text).toContain("margin: 0mm !important");
+    expect(res.text).toContain("height: auto !important");
+    expect(res.text).toContain("window.print()");
+  });
+
+  it("supports 58mm thermal receipt and format=thermal override on print route", async () => {
+    const res58 = await request(app).get("/api/sales/sal_1/receipt?width=58").set(auth());
+    expect(res58.status).toBe(200);
+    expect(res58.text).toContain("size: 58mm auto");
+
+    const resFormat = await request(app).get("/api/sales/sal_1/print?format=thermal").set(auth());
+    expect(resFormat.status).toBe(200);
+    expect(resFormat.text).toContain("size: 80mm auto");
+  });
 });

@@ -389,6 +389,10 @@ export default function SaleInvoiceList() {
     printDocument(`/sales/${id}/print`);
   };
 
+  const handlePrintReceipt = (id: string) => {
+    printDocument(`/sales/${id}/receipt/print`);
+  };
+
   const handleDownloadPdf = (id: string) => {
     openDocument(`/sales/${id}/pdf`);
   };
@@ -647,16 +651,28 @@ export default function SaleInvoiceList() {
 
           return (
             <div className="flex items-center justify-end gap-1">
-              {/* Primary Action 1: Print */}
+              {/* Primary Action 1: Print A4 */}
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md"
                 onClick={() => handlePrint(sale.id)}
-                title="Print invoice"
+                title="Print invoice (A4)"
               >
                 <Printer className="size-3.5" />
-                <span className="sr-only">Print</span>
+                <span className="sr-only">Print A4</span>
+              </Button>
+
+              {/* Primary Action 2: Print Thermal Receipt */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md"
+                onClick={() => handlePrintReceipt(sale.id)}
+                title="Print receipt (Thermal 80mm)"
+              >
+                <Receipt className="size-3.5" />
+                <span className="sr-only">Print Receipt</span>
               </Button>
 
               {/* Primary Action 2: Edit (if not cancelled) */}
@@ -715,6 +731,13 @@ export default function SaleInvoiceList() {
                   >
                     <Download className="size-4 mr-2 text-sky-500" />
                     Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handlePrintReceipt(sale.id)}
+                    className="cursor-pointer font-medium"
+                  >
+                    <Receipt className="size-4 mr-2 text-amber-500" />
+                    Print Receipt (80mm)
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => handleShare(sale)}
