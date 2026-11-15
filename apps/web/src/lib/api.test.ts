@@ -8,46 +8,31 @@ describe("api document printing helpers", () => {
 
   it("builds document URLs properly", () => {
     const url = getDocumentUrl("/sales/123/print");
+
     expect(url).toContain("/sales/123/print");
   });
 
   it("openDocument opens a new window", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
     openDocument("/sales/123/pdf");
     expect(openSpy).toHaveBeenCalledWith(expect.stringContaining("/sales/123/pdf"), "_blank");
   });
 
-  it("printDocument appends autoprint=1 and creates an offscreen iframe", () => {
-    const appendChildSpy = vi.spyOn(document.body, "appendChild");
+  it("printDocument opens a new window with autoprint=1", () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     printDocument("/sales/123/print");
-
-    expect(appendChildSpy).toHaveBeenCalled();
-    // SAFETY: The appended child is an HTMLIFrameElement created inside printDocument.
-    const createdIframe = appendChildSpy.mock.calls[0][0] as HTMLIFrameElement;
-    expect(createdIframe.tagName.toLowerCase()).toBe("iframe");
-    expect(createdIframe.src).toContain("autoprint=1");
-    expect(createdIframe.style.position).toBe("fixed");
+    expect(openSpy).toHaveBeenCalledWith(expect.stringContaining("/sales/123/print?autoprint=1"), "_blank");
   });
 
-  it("triggers iframe contentWindow print on load", () => {
-    const mockPrint = vi.fn();
-    const mockFocus = vi.fn();
+  it("printDocument preserves existing query params and appends autoprint=1", () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
-    const appendChildSpy = vi.spyOn(document.body, "appendChild");
-
-    printDocument("/purchases/456/html");
-
-    // SAFETY: The appended child is an HTMLIFrameElement created inside printDocument.
-    const createdIframe = appendChildSpy.mock.calls[0][0] as HTMLIFrameElement;
-    Object.defineProperty(createdIframe, "contentWindow", {
-      value: { print: mockPrint, focus: mockFocus },
-      configurable: true,
-    });
-
-    createdIframe.onload?.(new Event("load"));
-
-    expect(mockFocus).toHaveBeenCalled();
-    expect(mockPrint).toHaveBeenCalled();
+    printDocument("/customers/cust_1/statement/print?startDate=2026-01-01");
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/customers/cust_1/statement/print?startDate=2026-01-01&autoprint=1"),
+      "_blank"
+    );
   });
 });

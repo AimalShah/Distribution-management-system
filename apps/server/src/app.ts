@@ -109,10 +109,20 @@ export function createApp(options: AppOptions = {}): Express {
   const bootstrap =
     authMode === "session" ? sessionBootstrapAuthContext(auth) : bootstrapAuthContext;
 
-  // CSP defaults block inline scripts but allow inline styles, which the
-  // server-rendered document templates (invoice/statement HTML) rely on and
-  // only inline-style use; no template ships a <script> tag.
-  app.use(helmet());
+  // CSP allows inline scripts and styles so printable document templates
+  // (invoice, purchase order, statement) can trigger auto-print and render styling.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "script-src": ["'self'", "'unsafe-inline'"],
+          "script-src-attr": ["'self'", "'unsafe-inline'"],
+          "style-src": ["'self'", "'unsafe-inline'", "https:"],
+        },
+      },
+    })
+  );
 
   // An allowlist, not a wildcard: an origin that is not on it gets no CORS
   // headers, so the browser withholds the response from the calling page.

@@ -27,12 +27,17 @@ export function renderAutoPrintScript(options?: DocumentRenderOptions): string {
 
   return `
   <script>
-    window.addEventListener("DOMContentLoaded", function() {
+    function triggerPrint() {
       setTimeout(function() {
         window.focus();
         window.print();
       }, 250);
-    });
+    }
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      triggerPrint();
+    } else {
+      window.addEventListener("DOMContentLoaded", triggerPrint);
+    }
   </script>`;
 }
 
