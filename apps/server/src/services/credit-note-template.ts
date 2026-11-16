@@ -82,7 +82,7 @@ export function renderCreditNoteHtml(
   const isSaleReturn = returnRecord.returnType === "SALE";
   const title = isSaleReturn ? "CREDIT NOTE (SALE RETURN)" : "DEBIT NOTE (PURCHASE RETURN)";
 
-  const compName = escapeHtml(company?.name || "AM Enterprise");
+  const compName = escapeHtml(company?.name || "AM-ENTERPRISES");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
 
@@ -380,7 +380,8 @@ export function renderCreditNoteHtml(
   <div class="container">
     <div class="header">
       <div>
-        <div class="company-name">${compName}</div>
+        <div class="company-name">AM-ENTERPRISES</div>
+        ${compName && compName !== "AM-ENTERPRISES" ? `<div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">${compName}</div>` : ""}
         <div class="company-details">
           ${compAddress ? `<div>${compAddress}</div>` : ""}
           ${compGstin ? `<div><strong>GSTIN:</strong> ${compGstin}</div>` : ""}
@@ -454,7 +455,7 @@ export function renderCreditNoteHtml(
     </div>
 
     <div class="footer">
-      <div>Generated via AM Enterprise</div>
+      <div>Generated via AM-ENTERPRISES</div>
       <div>Page 1 of 1</div>
     </div>
   </div>

@@ -60,7 +60,7 @@ export function renderCustomerStatementHtml(
   data: CustomerStatementRenderData,
   options?: DocumentRenderOptions
 ): string {
-  const companyName = escapeHtml(data.company?.name?.trim() || "AM Enterprise");
+  const companyName = escapeHtml(data.company?.name?.trim() || "AM-ENTERPRISES");
   const companyAddress = escapeHtml(data.company?.address?.trim() || "");
   const companyGstin = escapeHtml(data.company?.gstin?.trim() || "");
   const customerName = escapeHtml(data.customer.name);
@@ -168,8 +168,9 @@ export function renderCustomerStatementHtml(
     <tr>
       <td style="vertical-align: top; width: 60%;">
         <div style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">
-          ${companyName}
+          AM-ENTERPRISES
         </div>
+        ${companyName && companyName !== "AM-ENTERPRISES" ? `<div style="font-size: 13px; font-weight: 600; margin-top: 2px;">${companyName}</div>` : ""}
         ${companyAddress ? `<div style="font-size: 11px; color: #525252; margin-top: 4px; max-width: 320px;">${companyAddress}</div>` : ""}
         ${companyGstin ? `<div style="font-size: 11px; color: #525252; margin-top: 2px;"><strong>GSTIN:</strong> ${companyGstin}</div>` : ""}
       </td>
@@ -276,7 +277,7 @@ export function renderCustomerStatementHtml(
   <!-- Signoff & Footer -->
   <div style="margin-top: 36px; display: flex; justify-content: space-between; align-items: flex-end;">
     <div style="font-size: 10px; color: #737373; max-width: 350px;">
-      This is a system generated account statement for reconciliation. Please notify us of any discrepancies within 7 days of statement receipt.
+      Generated via AM-ENTERPRISES. This is a system generated account statement for reconciliation. Please notify us of any discrepancies within 7 days of statement receipt.
     </div>
     <div style="text-align: center; border-top: 1px solid #171717; width: 200px; padding-top: 4px; font-size: 11px; font-weight: 600;">
       Authorized Signatory

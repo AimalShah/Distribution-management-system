@@ -65,7 +65,7 @@ export function renderPaymentReceiptHtml(
   const customer = payment.customer;
   const sale = payment.sale;
 
-  const compName = escapeHtml(company?.name || "AM Enterprise");
+  const compName = escapeHtml(company?.name || "AM-ENTERPRISES");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
   const compPhone = company?.phone ? escapeHtml(company.phone) : "";
@@ -257,7 +257,8 @@ export function renderPaymentReceiptHtml(
   <div class="container">
     <div class="header">
       <div>
-        <div class="company-name">${compName}</div>
+        <div class="company-name">AM-ENTERPRISES</div>
+        ${compName && compName !== "AM-ENTERPRISES" ? `<div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">${compName}</div>` : ""}
         <div class="company-details">
           ${compAddress ? `<div>${compAddress}</div>` : ""}
           ${compGstin ? `<div><strong>GSTIN:</strong> ${compGstin}</div>` : ""}
@@ -347,7 +348,7 @@ export function renderPaymentReceiptHtml(
     </div>
 
     <div class="footer">
-      <div>This is a computer generated official acknowledgement of payment.</div>
+      <div>Generated via AM-ENTERPRISES · Official acknowledgement of payment</div>
       <div>Page 1 of 1</div>
     </div>
   </div>

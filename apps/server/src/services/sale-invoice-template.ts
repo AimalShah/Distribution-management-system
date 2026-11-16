@@ -82,7 +82,7 @@ export function renderSaleInvoiceHtml(
   const customerPhone = escapeHtml(sale.customer?.phone || "");
   const customerAddress = escapeHtml(sale.customer?.address || "");
 
-  const companyName = escapeHtml(sale.company?.name?.trim() || "AM Enterprise");
+  const companyName = escapeHtml(sale.company?.name?.trim() || "AM-ENTERPRISES");
   const companyAddress = escapeHtml(sale.company?.address?.trim() || "");
   const companyGstin = escapeHtml(sale.company?.gstin?.trim() || "");
 
@@ -233,7 +233,8 @@ export function renderSaleInvoiceHtml(
   <div class="sheet">
     <div class="doc-header">
       <div>
-        <h1 class="issuer-name">${companyName}</h1>
+        <h1 class="issuer-name">AM-ENTERPRISES</h1>
+        ${companyName && companyName !== "AM-ENTERPRISES" ? `<p class="issuer-line" style="font-weight: 600; font-size: 13px;">${companyName}</p>` : ""}
         ${companyAddress ? `<p class="issuer-line">${companyAddress}</p>` : ""}
         ${companyGstin ? `<p class="issuer-line">GSTIN: ${companyGstin}</p>` : ""}
       </div>
@@ -319,7 +320,7 @@ export function renderSaleInvoiceHtml(
 
     <div class="footer">
       ${sale.createdBy?.name ? `<p class="doc-date" style="margin: 0 0 4px;">Created by ${escapeHtml(sale.createdBy.name)}</p>` : ""}
-      <p>Thank you for your business. For questions regarding this invoice, please contact us.</p>
+      <p>AM-ENTERPRISES · Thank you for your business. For questions regarding this invoice, please contact us.</p>
     </div>
   </div>
   ${renderAutoPrintScript(options)}

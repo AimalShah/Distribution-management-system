@@ -39,7 +39,7 @@ export function renderSaleReceiptHtml(
   });
 
   const isTaxInvoice = sale.invoiceType === "tax";
-  const companyName = escapeHtml(sale.company?.name?.trim() || "AM Enterprise");
+  const companyName = escapeHtml(sale.company?.name?.trim() || "AM-ENTERPRISES");
   const companyAddress = escapeHtml(sale.company?.address?.trim() || "");
   const companyGstin = escapeHtml(sale.company?.gstin?.trim() || "");
 
@@ -236,7 +236,8 @@ export function renderSaleReceiptHtml(
 <body>
   <div class="receipt">
     <div class="header">
-      <div class="company-title">${companyName}</div>
+      <div class="company-title">AM-ENTERPRISES</div>
+      ${companyName && companyName !== "AM-ENTERPRISES" ? `<div class="company-meta bold" style="font-size: 11px;">${companyName}</div>` : ""}
       ${companyAddress ? `<div class="company-meta">${companyAddress}</div>` : ""}
       ${companyGstin ? `<div class="company-meta">GSTIN: ${companyGstin}</div>` : ""}
       <div class="company-meta bold" style="margin-top: 2px;">${isTaxInvoice ? "TAX INVOICE / RECEIPT" : "RETAIL RECEIPT"}</div>
@@ -300,7 +301,7 @@ export function renderSaleReceiptHtml(
 
     <div class="footer">
       <div>Thank you for your purchase!</div>
-      <div style="font-size: 8px; margin-top: 2px; color: #555555;">No refund without original receipt</div>
+      <div style="font-size: 8px; margin-top: 2px; color: #555555;">AM-ENTERPRISES · No refund without original receipt</div>
     </div>
   </div>
   ${renderAutoPrintScript(options)}

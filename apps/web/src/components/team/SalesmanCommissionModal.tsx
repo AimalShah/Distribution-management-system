@@ -73,6 +73,12 @@ export function SalesmanCommissionModal({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Printable Header */}
+        <div className="hidden print:block text-center border-b border-border pb-3 mb-2">
+          <h2 className="text-xl font-bold tracking-tight">AM-ENTERPRISES</h2>
+          <p className="text-xs text-muted-foreground">Salesman Commission Summary</p>
+        </div>
+
         {/* Filter & Rate Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg border border-border">
           <div className="space-y-1.5">

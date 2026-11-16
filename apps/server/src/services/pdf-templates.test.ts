@@ -6,7 +6,7 @@ import { renderPaymentReceiptHtml } from "./payment-receipt-template";
 import { renderPurchaseOrderHtml } from "./purchase-order-template";
 
 describe("PDF templates company name rendering", () => {
-  it("renders 'AM Enterprise' on Sale Invoice by default", () => {
+  it("renders 'AM-ENTERPRISES' on Sale Invoice by default", () => {
     const html = renderSaleInvoiceHtml({
       saleCode: "INV-0001",
       saleDate: "2026-10-25T00:00:00Z",
@@ -14,7 +14,7 @@ describe("PDF templates company name rendering", () => {
       totalAmount: 100,
     });
 
-    expect(html).toContain("AM Enterprise");
+    expect(html).toContain("AM-ENTERPRISES");
     expect(html).not.toContain("Distribution Management System");
   });
 
@@ -27,10 +27,11 @@ describe("PDF templates company name rendering", () => {
       company: { name: "Custom Distributor LLC" },
     });
 
+    expect(html).toContain("AM-ENTERPRISES");
     expect(html).toContain("Custom Distributor LLC");
   });
 
-  it("renders 'AM Enterprise' on Customer Statement by default", () => {
+  it("renders 'AM-ENTERPRISES' on Customer Statement by default", () => {
     const html = renderCustomerStatementHtml({
       customer: {
         id: "c_1",
@@ -47,11 +48,11 @@ describe("PDF templates company name rendering", () => {
       },
     });
 
-    expect(html).toContain("AM Enterprise");
+    expect(html).toContain("AM-ENTERPRISES");
     expect(html).not.toContain("Distribution Management System");
   });
 
-  it("renders 'AM Enterprise' on Credit Note by default and in footer", () => {
+  it("renders 'AM-ENTERPRISES' on Credit Note by default and in footer", () => {
     const html = renderCreditNoteHtml({
       returnRecord: {
         id: "ret_1",
@@ -62,13 +63,13 @@ describe("PDF templates company name rendering", () => {
       },
     });
 
-    expect(html).toContain("AM Enterprise");
-    expect(html).toContain("Generated via AM Enterprise");
+    expect(html).toContain("AM-ENTERPRISES");
+    expect(html).toContain("Generated via AM-ENTERPRISES");
     expect(html).not.toContain("DISTRIBUTION MANAGEMENT");
     expect(html).not.toContain("Distribution Management System");
   });
 
-  it("renders 'AM Enterprise' on Payment Receipt by default", () => {
+  it("renders 'AM-ENTERPRISES' on Payment Receipt by default", () => {
     const html = renderPaymentReceiptHtml({
       payment: {
         id: "pay_12345678",
@@ -77,12 +78,12 @@ describe("PDF templates company name rendering", () => {
       },
     });
 
-    expect(html).toContain("AM Enterprise");
+    expect(html).toContain("AM-ENTERPRISES");
     expect(html).not.toContain("DISTRIBUTION MANAGEMENT");
     expect(html).not.toContain("Distribution Management System");
   });
 
-  it("renders 'AM Enterprise' on Purchase Order by default, in bill-to, and in footer", () => {
+  it("renders 'AM-ENTERPRISES' on Purchase Order by default, in bill-to, and in footer", () => {
     const html = renderPurchaseOrderHtml({
       purchase: {
         id: "pur_1",
@@ -98,8 +99,8 @@ describe("PDF templates company name rendering", () => {
       },
     });
 
-    expect(html).toContain("AM Enterprise");
-    expect(html).toContain("Generated via AM Enterprise");
+    expect(html).toContain("AM-ENTERPRISES");
+    expect(html).toContain("Generated via AM-ENTERPRISES");
     expect(html).not.toContain("DISTRIBUTION MANAGEMENT");
     expect(html).not.toContain("Distribution Management System");
   });

@@ -104,7 +104,7 @@ export function renderPurchaseOrderHtml(
     0
   );
 
-  const compName = escapeHtml(company?.name || "AM Enterprise");
+  const compName = escapeHtml(company?.name || "AM-ENTERPRISES");
   const compAddress = company?.address ? escapeHtml(company.address) : "";
   const compGstin = company?.gstin ? escapeHtml(company.gstin) : "";
   const compPhone = company?.phone ? escapeHtml(company.phone) : "";
@@ -379,7 +379,8 @@ export function renderPurchaseOrderHtml(
   <div class="container">
     <div class="header">
       <div>
-        <div class="company-name">${compName}</div>
+        <div class="company-name">AM-ENTERPRISES</div>
+        ${compName && compName !== "AM-ENTERPRISES" ? `<div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">${compName}</div>` : ""}
         <div class="company-details">
           ${compAddress ? `<div>${compAddress}</div>` : ""}
           ${compGstin ? `<div><strong>GSTIN:</strong> ${compGstin}</div>` : ""}
@@ -418,7 +419,7 @@ export function renderPurchaseOrderHtml(
       </div>
       <div class="party-block right">
         <div class="section-caption">Delivery / Bill To:</div>
-        <div class="party-name">${compName}</div>
+        <div class="party-name">AM-ENTERPRISES${compName && compName !== "AM-ENTERPRISES" ? ` · ${compName}` : ""}</div>
         <div class="party-text">
           ${compAddress ? `<div>${compAddress}</div>` : "<div>Central Distribution Facility</div>"}
           ${compPhone ? `<div>Tel: ${compPhone}</div>` : ""}
@@ -488,7 +489,7 @@ export function renderPurchaseOrderHtml(
     </div>
 
     <div class="footer">
-      <div>Generated via AM Enterprise</div>
+      <div>Generated via AM-ENTERPRISES</div>
       <div>Page 1 of 1</div>
     </div>
   </div>
