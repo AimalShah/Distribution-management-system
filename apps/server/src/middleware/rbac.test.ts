@@ -189,7 +189,7 @@ describe("the permission table is the mount's own coverage", () => {
       match[1].split("/")[0]
     );
 
-    const guarded = [...tableSource.matchAll(/^ {2}([a-z][a-zA-Z]*):/gmu)].map(
+    const guarded = [...tableSource.matchAll(/^ {2}["']?([a-z][a-zA-Z0-9-]*)["']?:/gmu)].map(
       (match) => match[1]
     );
 

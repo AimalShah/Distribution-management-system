@@ -18,6 +18,7 @@ import { settingsRouter } from "./settings";
 import { supplierRouter } from "./supplier";
 import { auditRouter } from "./audit";
 import { creditRouter } from "./credit";
+import { orderBookerRouter } from "./order-booker";
 
 export const apiRouter: Router = Router();
 
@@ -69,6 +70,7 @@ const PERMISSIONS: RoutePermissionTable = {
     resource: "users",
     rules: [{ method: "POST", path: "/members/:memberId", action: "update" }],
   },
+  "order-bookers": { resource: "users" },
   reports: { resource: "reports" },
   dashboard: { resource: "reports" },
   audit: { resource: "reports" },
@@ -110,6 +112,8 @@ apiRouter.use("/settings", settingsRouter);
 apiRouter.use("/audit", auditRouter);
 
 apiRouter.use("/roles", roleRouter);
+
+apiRouter.use("/order-bookers", orderBookerRouter);
 
 apiRouter.use("/reports/inventory", inventoryReportRouter);
 

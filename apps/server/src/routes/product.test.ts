@@ -332,6 +332,27 @@ describe("POST /api/products", () => {
     );
   });
 
+  it("accepts and validates retailPrice and wholesalePrice tiers (issue #52)", async () => {
+    const res = await request(app)
+      .post("/api/products")
+      .set(ORGANIZATION_HEADER, ORG)
+      .send({
+        ...validBody,
+        retailPrice: "25.00",
+        wholesalePrice: "18.50",
+      });
+
+    expect(res.status).toBe(201);
+    expect(productModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          retailPrice: 25,
+          wholesalePrice: 18.5,
+        }),
+      })
+    );
+  });
+
   it("stores an omitted description as an empty string", async () => {
     const { description: _description, ...withoutDescription } = validBody;
 

@@ -46,6 +46,8 @@ export interface ProductItem {
   unit: string;
   unitCost: number;
   unitPrice: number;
+  retailPrice?: number;
+  wholesalePrice?: number;
   isActive: boolean;
   categoryId?: string | null;
   brandId?: string | null;
@@ -209,11 +211,20 @@ export default function ProductList() {
         ),
       },
       {
-        accessorKey: "unitPrice",
-        header: "Price",
+        accessorKey: "retailPrice",
+        header: "Retail Price",
         cell: ({ row }) => (
           <div className="text-right font-mono text-xs font-semibold tabular-nums text-foreground">
-            {formatMoney(row.original.unitPrice)}
+            {formatMoney(row.original.retailPrice ?? row.original.unitPrice)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "wholesalePrice",
+        header: "Wholesale Price",
+        cell: ({ row }) => (
+          <div className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+            {formatMoney(row.original.wholesalePrice ?? row.original.unitPrice)}
           </div>
         ),
       },

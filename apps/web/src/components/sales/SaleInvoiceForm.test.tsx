@@ -61,7 +61,7 @@ const mockCustomers = [
 ];
 
 const mockProducts = [
-  { id: "prod_1", name: "Widget", unit: "pcs", unitPrice: 200, unitCost: 150 },
+  { id: "prod_1", name: "Widget", unit: "pcs", unitPrice: 200, retailPrice: 250, wholesalePrice: 180, unitCost: 150 },
 ];
 
 const getInitialData = () => ({
@@ -90,6 +90,8 @@ beforeEach(() => {
   apiGet.mockImplementation((url: string) => {
     if (url.startsWith("/customers")) return Promise.resolve({ data: mockCustomers });
     if (url.startsWith("/products")) return Promise.resolve({ data: mockProducts });
+    if (url.includes("/members")) return Promise.resolve([{ id: "mem_1", role: "salesman", user: { id: "usr_1", name: "Alice Sales" } }]);
+    if (url.startsWith("/order-bookers")) return Promise.resolve([{ id: "ob_1", code: "OB-001", name: "Bob Booker" }]);
     return Promise.resolve({});
   });
 });
@@ -190,6 +192,63 @@ describe("SaleInvoiceForm Credit Limit Warning (issue #49)", () => {
       expect(toast.error).toHaveBeenCalledWith(
         "You do not have permission to override a customer's credit limit"
       );
+    });
+  });
+
+  describe("Tiered Pricing, Salesman and Order Booker (issue #53)", () => {
+    it("renders pricing tier, salesman, and order booker fields and submits them", async () => {
+      const user = userEvent.setup();
+      apiPost.mockResolvedValueOnce({ id: "sal_new", saleCode: "SALE-001" });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/pricing tier/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/salesman/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/order booker/i)).toBeInTheDocument();
+      });
+
+      const submitBtn = screen.getByRole("button", { name: /create sale invoice/i });
+      await user.click(submitBtn);
+
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/sales",
+          expect.objectContaining({
+            pricingTier: "retail",
+            salesmanId: expect.any(String),
+          })
+        );
+      });
+    });
+
+    it("allows unit price to be directly edited by the user", async () => {
+      const user = userEvent.setup();
+      apiPost.mockResolvedValueOnce({ id: "sal_new", saleCode: "SALE-001" });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByDisplayValue("200")[0]).toBeInTheDocument();
+      });
+
+      const priceInput = screen.getAllByDisplayValue("200")[0];
+      await user.clear(priceInput);
+      await user.type(priceInput, "225");
+
+      const submitBtn = screen.getByRole("button", { name: /create sale invoice/i });
+      await user.click(submitBtn);
+
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/sales",
+          expect.objectContaining({
+            items: expect.arrayContaining([
+              expect.objectContaining({ unitPrice: 225 }),
+            ]),
+          })
+        );
+      });
     });
   });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import {
   AlertTriangle,
+  Calculator,
   Mail,
   RefreshCw,
   Shield,
@@ -27,11 +28,17 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@dms/ui";
 import { api, failureMessage, fetcher } from "../lib/api";
 import { useActiveMembership } from "../lib/profile";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHead } from "../components/list/PageHead";
+import { OrderBookersTab } from "../components/team/OrderBookersTab";
+import { SalesmanCommissionModal } from "../components/team/SalesmanCommissionModal";
 import {
   InviteMemberDialog,
   labelFor,
@@ -75,6 +82,11 @@ export default function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [statusTarget, setStatusTarget] = useState<MemberRow | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [commissionTarget, setCommissionTarget] = useState<{
+    id: string;
+    name: string;
+    email?: string;
+  } | null>(null);
 
   const { data: available } = useSWR(
     dialogOpen && !editing && organizationId
@@ -188,8 +200,15 @@ export default function UsersPage() {
         }
       />
 
-      <Card className="rounded-md border border-border shadow-none">
-        <CardContent className="pt-6">
+      <Tabs defaultValue="members" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="members">Members & Staff</TabsTrigger>
+          <TabsTrigger value="order-bookers">Order Bookers</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="members" className="space-y-4">
+          <Card className="rounded-md border border-border shadow-none">
+            <CardContent className="pt-6">
           {/* A refused request is not an empty team. Saying "no members" here
               would tell the user everyone had left when the truth is that the
               question never got answered (issue #41). */}
@@ -297,6 +316,21 @@ export default function UsersPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 gap-1 text-xs"
+                            onClick={() =>
+                              setCommissionTarget({
+                                id: member.user.id,
+                                name: member.user.name,
+                                email: member.user.email,
+                              })
+                            }
+                          >
+                            <Calculator className="size-3" aria-hidden="true" />
+                            Calculate Commission
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
                             onClick={() => openEdit(member)}
                           >
                             <UserPlus className="size-3" aria-hidden="true" />
@@ -339,6 +373,12 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+    </TabsContent>
+
+    <TabsContent value="order-bookers">
+      <OrderBookersTab />
+    </TabsContent>
+  </Tabs>
 
       <MemberDialog
         open={dialogOpen}
@@ -398,6 +438,12 @@ export default function UsersPage() {
         busy={statusBusy}
         onConfirm={() => void confirmStatus()}
         onCancel={() => setStatusTarget(null)}
+      />
+
+      <SalesmanCommissionModal
+        open={Boolean(commissionTarget)}
+        onOpenChange={(open) => !open && setCommissionTarget(null)}
+        salesman={commissionTarget}
       />
     </div>
   );

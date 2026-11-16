@@ -40,6 +40,8 @@ import {
   Separator,
 } from "@dms/ui";
 import { api, fetcher, shortfallLine, toFailure } from "../../lib/api";
+import { authClient } from "../../lib/auth-client";
+import { useActiveMembership } from "../../lib/profile";
 import { formatMoney } from "../../lib/format";
 import { LineItemsTable } from "../forms/LineItemsTable";
 import { ProductSearchSelect } from "../forms/ProductSearchSelect";
@@ -81,6 +83,38 @@ export function SaleInvoiceForm({
   }[] = customersData?.data ?? [];
 
   const { data: productsData } = useSWR("/products?page=1&pageSize=100", fetcher);
+
+  const { membership } = useActiveMembership();
+  const organizationId = membership?.organizationId ?? "";
+  const { data: session } = authClient.useSession?.() ?? { data: null };
+  const currentUserId = session?.user?.id ?? (membership as any)?.userId ?? "";
+
+  const { data: membersData } = useSWR(
+    organizationId ? `/organizations/${organizationId}/members` : null,
+    fetcher
+  );
+
+  const salesmen: { id: string; name: string; role?: string }[] = useMemo(() => {
+    const list: any[] = Array.isArray(membersData) ? membersData : [];
+    return list
+      .filter((m) => !m.user?.banned)
+      .map((m) => ({
+        id: m.user?.id,
+        name: m.user?.name || m.user?.email || "Unknown",
+        role: m.role,
+      }));
+  }, [membersData]);
+
+  const { data: orderBookersData } = useSWR(
+    "/order-bookers?isActive=true",
+    fetcher
+  );
+
+  const orderBookers: { id: string; code: string; name: string }[] = useMemo(() => {
+    return Array.isArray(orderBookersData)
+      ? orderBookersData
+      : orderBookersData?.data ?? [];
+  }, [orderBookersData]);
 
   // Prices and stock from two sources: the first page (pre-fetched so common
   // picks fill instantly) and the searched picker, whose results arrive one
@@ -132,6 +166,9 @@ export function SaleInvoiceForm({
         : new Date().toISOString().split("T")[0],
       status: initialData?.status ?? "Pending",
       invoiceType: initialData?.invoiceType ?? "regular",
+      pricingTier: initialData?.pricingTier ?? "retail",
+      salesmanId: initialData?.salesmanId ?? currentUserId,
+      orderBookerId: initialData?.orderBookerId ?? null,
       isInterState: initialData?.isInterState ?? false,
       discount: initialData?.discount ?? 0,
       items: initialData?.items?.length
@@ -161,6 +198,9 @@ export function SaleInvoiceForm({
           : new Date().toISOString().split("T")[0],
         status: initialData.status ?? "Pending",
         invoiceType: initialData.invoiceType ?? "regular",
+        pricingTier: initialData.pricingTier ?? "retail",
+        salesmanId: initialData.salesmanId ?? currentUserId,
+        orderBookerId: initialData.orderBookerId ?? null,
         isInterState: initialData.isInterState ?? false,
         discount: initialData.discount ?? 0,
         items: initialData.items?.length
@@ -173,7 +213,20 @@ export function SaleInvoiceForm({
           : [defaultItem],
       });
     }
-  }, [initialData, form]);
+  }, [initialData, form, currentUserId]);
+
+  useEffect(() => {
+    if (!form.getValues("salesmanId")) {
+      const isSalesman = membership?.role?.toLowerCase() === "salesman";
+      if (isSalesman && currentUserId) {
+        form.setValue("salesmanId", currentUserId);
+      } else if (currentUserId) {
+        form.setValue("salesmanId", currentUserId);
+      } else if (salesmen.length > 0) {
+        form.setValue("salesmanId", salesmen[0].id);
+      }
+    }
+  }, [currentUserId, membership, salesmen, form]);
 
   const watchedItems = form.watch("items") || [];
   const watchedDiscount = form.watch("discount") || 0;
@@ -234,12 +287,35 @@ export function SaleInvoiceForm({
     const selectedProd = product ?? productById.get(productId);
 
     if (selectedProd) {
-      form.setValue(`items.${index}.unitPrice`, Number(selectedProd.unitPrice) || 0);
+      const tier = form.getValues("pricingTier") || "retail";
+      const tierPrice =
+        tier === "wholesale"
+          ? (Number(selectedProd.wholesalePrice) || Number(selectedProd.unitPrice) || 0)
+          : (Number(selectedProd.retailPrice) || Number(selectedProd.unitPrice) || 0);
+
+      form.setValue(`items.${index}.unitPrice`, tierPrice);
 
       if (selectedProd.gstApplicable && selectedProd.gstRate) {
         form.setValue(`items.${index}.taxPercent`, Number(selectedProd.gstRate) || 0);
       }
     }
+  };
+
+  const handlePricingTierChange = (newTier: "retail" | "wholesale") => {
+    form.setValue("pricingTier", newTier);
+    const items = form.getValues("items") || [];
+    items.forEach((item: any, idx: number) => {
+      if (item.productId) {
+        const prod = productById.get(item.productId);
+        if (prod) {
+          const tierPrice =
+            newTier === "wholesale"
+              ? (Number(prod.wholesalePrice) || Number(prod.unitPrice) || 0)
+              : (Number(prod.retailPrice) || Number(prod.unitPrice) || 0);
+          form.setValue(`items.${idx}.unitPrice`, tierPrice);
+        }
+      }
+    });
   };
 
   const onSubmit = async (values: SaleInvoiceInput) => {
@@ -257,6 +333,9 @@ export function SaleInvoiceForm({
           saleDate: values.saleDate,
           status: values.status,
           invoiceType: values.invoiceType,
+          pricingTier: values.pricingTier,
+          salesmanId: values.salesmanId,
+          orderBookerId: values.orderBookerId || null,
           isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
         };
@@ -270,6 +349,9 @@ export function SaleInvoiceForm({
           saleDate: values.saleDate,
           status: values.status,
           invoiceType: values.invoiceType,
+          pricingTier: values.pricingTier,
+          salesmanId: values.salesmanId,
+          orderBookerId: values.orderBookerId || null,
           isInterState: values.isInterState,
           discount: Number(values.discount) || 0,
           items: values.items.map((it) => ({
@@ -470,6 +552,91 @@ export function SaleInvoiceForm({
                       <SelectContent>
                         <SelectItem value="regular">Regular Invoice</SelectItem>
                         <SelectItem value="tax">Tax Invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="pricingTier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pricing Tier *</FormLabel>
+                    <Select
+                      onValueChange={(val: "retail" | "wholesale") => handlePricingTierChange(val)}
+                      value={field.value || "retail"}
+                    >
+                      <FormControl>
+                        <SelectTrigger aria-label="Pricing Tier">
+                          <SelectValue placeholder="Select pricing tier" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="retail">Retail</SelectItem>
+                        <SelectItem value="wholesale">Wholesale</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="salesmanId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Salesman *</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger aria-label="Salesman">
+                          <SelectValue placeholder="Select salesman" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {salesmen.length === 0 && field.value ? (
+                          <SelectItem value={field.value}>Assigned Salesman</SelectItem>
+                        ) : null}
+                        {salesmen.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} {s.role ? `(${s.role})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="orderBookerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Order Booker</FormLabel>
+                    <Select
+                      onValueChange={(val) => field.onChange(val === "none" ? null : val)}
+                      value={field.value ?? "none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger aria-label="Order Booker">
+                          <SelectValue placeholder="None (Direct Sale)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">None (Direct Sale)</SelectItem>
+                        {orderBookers.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name} ({b.code})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

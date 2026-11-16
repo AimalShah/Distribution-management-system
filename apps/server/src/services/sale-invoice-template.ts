@@ -17,6 +17,9 @@ export interface SaleInvoiceRenderData {
   dueDate?: Date | string | null;
   /** Who created the document ("Created by", GLOSSARY.md); null on legacy rows. */
   createdBy?: { name: string } | null;
+  pricingTier?: string | null;
+  salesman?: { name: string } | null;
+  orderBooker?: { name: string; code: string } | null;
   customer?: {
     name: string;
     email?: string | null;
@@ -254,6 +257,9 @@ export function renderSaleInvoiceHtml(
       <div>
         <p class="label">Summary</p>
         <p class="party-line">Invoice Type: ${isTaxInvoice ? "Tax Invoice" : "Regular Invoice"}</p>
+        <p class="party-line">Pricing Tier: ${escapeHtml(sale.pricingTier || "retail")}</p>
+        <p class="party-line">Salesman: ${escapeHtml(sale.salesman?.name || sale.createdBy?.name || "—")}</p>
+        ${sale.orderBooker ? `<p class="party-line">Order Booker: ${escapeHtml(sale.orderBooker.name)} (${escapeHtml(sale.orderBooker.code)})</p>` : ""}
         <p class="party-line">Total Items: ${items.length}</p>
       </div>
     </div>

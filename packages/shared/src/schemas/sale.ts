@@ -31,6 +31,9 @@ export const SaleInvoiceSchema = z.object({
   saleDate: optionalDate,
   status: z.enum(SaleStatus),
   invoiceType: z.enum(["regular", "tax"]).default("regular"),
+  pricingTier: z.enum(["retail", "wholesale"]).default("retail"),
+  salesmanId: z.string().trim().optional(),
+  orderBookerId: z.string().trim().nullable().optional(),
   isInterState: z.boolean().default(false),
   // The caller supplies the trade terms (line prices, per-line rate
   // statements, the invoice discount) and may not supply figures: the
@@ -63,6 +66,7 @@ export const SaleUpdateSchema = SaleInvoiceSchema.partial()
   .extend({
     invoiceType: z.enum(["regular", "tax"]).optional(),
     isInterState: z.boolean().optional(),
+    pricingTier: z.enum(["retail", "wholesale"]).optional(),
   });
 
 export const saleListQuerySchema = paginationQuerySchema.extend({
@@ -83,5 +87,13 @@ export type SaleInvoiceInput = z.output<typeof SaleInvoiceSchema>;
 export type SaleUpdateInput = z.output<typeof SaleUpdateSchema>;
 
 export type SaleListQuery = z.output<typeof saleListQuerySchema>;
+
+export const salesmanSummaryQuerySchema = z.object({
+  salesmanId: z.string().trim().min(1, "salesmanId is required"),
+  startDate: optionalDate,
+  endDate: optionalDate,
+});
+
+export type SalesmanSummaryQuery = z.output<typeof salesmanSummaryQuerySchema>;
 
 export type SaleInvoiceFormData = SaleInvoiceInput;

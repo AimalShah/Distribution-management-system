@@ -35,6 +35,7 @@ model User {
   // Documents the user created (attribution shown on listings and printouts).
   createdSales     Sale[]     @relation("SaleCreatedBy")
   createdPurchases Purchase[] @relation("PurchaseCreatedBy")
+  salesmanSales    Sale[]     @relation("SaleSalesman")
   role       String?
   banned     Boolean?
   banReason  String?
@@ -125,6 +126,7 @@ model Organization {
   settings    CompanySettings?
   documentSequences DocumentSequence[]
   auditLogs   AuditLog[]
+  orderBookers OrderBooker[]
 
   @@map("organization")
 }
@@ -302,6 +304,8 @@ model Product {
   brandId     String
   unit        String // e.g., 'box', 'piece', etc.
   unitPrice   Decimal @db.Decimal(12, 2) // base/unit price
+  retailPrice    Decimal @default(0) @db.Decimal(12, 2)
+  wholesalePrice Decimal @default(0) @db.Decimal(12, 2)
   unitCost    Decimal @db.Decimal(12, 2)
   isActive    Boolean  @default(true)
   gstApplicable Boolean @default(true)
@@ -391,6 +395,9 @@ model Sale {
   discount     Decimal? @db.Decimal(12, 2)
   status       String // 'Pending', 'Completed', 'Cancelled'
   invoiceType  String   @default("regular") // "regular" | "tax"
+  pricingTier  String   @default("retail") // "retail" | "wholesale"
+  salesmanId   String?
+  orderBookerId String?
   isInterState Boolean  @default(false)
   cgstAmount   Decimal  @default(0) @db.Decimal(12, 2)
   sgstAmount   Decimal  @default(0) @db.Decimal(12, 2)
@@ -424,6 +431,8 @@ model Sale {
   // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
   createdBy    User?        @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  salesman     User?        @relation("SaleSalesman", fields: [salesmanId], references: [id], onDelete: SetNull)
+  orderBooker  OrderBooker? @relation(fields: [orderBookerId], references: [id], onDelete: SetNull)
 
   customer Customer   @relation(fields: [customerId], references: [id])
   items    SaleItem[]
@@ -434,6 +443,8 @@ model Sale {
   @@index([organizationId, saleDate(sort: Desc)])
   @@index([organizationId, status])
   @@index([customerId])
+  @@index([salesmanId])
+  @@index([orderBookerId])
   @@unique([organizationId, saleCode])
   @@map("sales")
 }
@@ -464,6 +475,24 @@ model SaleItem {
   @@index([saleId])
   @@index([productId])
   @@map("sale_items")
+}
+
+model OrderBooker {
+  id             String       @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  phone          String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sales          Sale[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+  @@map("order_bookers")
 }
 
 model Category {

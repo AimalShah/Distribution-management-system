@@ -103,6 +103,24 @@ describe("listing the team (issue #41)", () => {
     expect(await screen.findByText(/no members/i)).toBeInTheDocument();
   });
 
+  it("provides an Order Bookers tab (issue #51)", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("tab", { name: /order bookers/i })).toBeInTheDocument();
+  });
+
+  it("opens the commission calculator modal when Calculate Commission is clicked (issue #54)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ada Lovelace");
+
+    const calcButtons = screen.getAllByRole("button", { name: /calculate commission/i });
+    expect(calcButtons.length).toBeGreaterThan(0);
+    await user.click(calcButtons[0]);
+
+    expect(await screen.findByRole("heading", { name: /commission calculator/i })).toBeInTheDocument();
+  });
+
   it("reports a failed request instead of showing an empty team", async () => {
     fetcher.mockRejectedValue(new Error("network down"));
 

@@ -36,6 +36,8 @@ export const ProductSchema = z.object({
   description: z.string().trim().optional(),
   unitCost: moneyInput("Unit cost"),
   unitPrice: moneyInput("Unit price"),
+  retailPrice: moneyInput("Retail price").optional(),
+  wholesalePrice: moneyInput("Wholesale price").optional(),
   isActive: z.boolean().default(true),
   gstApplicable: z.boolean().optional(),
   gstRate: z

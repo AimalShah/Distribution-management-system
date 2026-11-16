@@ -17,6 +17,8 @@ const listInclude = {
   customer: true,
   // Who created the document ("Created by", GLOSSARY.md), shown on listings.
   createdBy: { select: { id: true, name: true } },
+  salesman: { select: { id: true, name: true } },
+  orderBooker: { select: { id: true, name: true, code: true } },
   // The legacy list embedded every line with its product. That is an unbounded
   // payload per row once paging is added, so the count is sent instead and the
   // lines stay on the detail routes.
@@ -26,6 +28,8 @@ const listInclude = {
 const detailInclude = {
   customer: true,
   createdBy: { select: { id: true, name: true } },
+  salesman: { select: { id: true, name: true } },
+  orderBooker: { select: { id: true, name: true, code: true } },
   items: { include: { product: true } },
 } satisfies Prisma.SaleInclude;
 
@@ -403,6 +407,9 @@ export async function createSale(data: SaleInvoiceInput, organizationId: string,
         discount: data.discount,
         taxAmount: money.taxAmount,
         invoiceType: data.invoiceType ?? "regular",
+        pricingTier: data.pricingTier ?? "retail",
+        salesmanId: data.salesmanId ?? userId,
+        orderBookerId: data.orderBookerId ?? null,
         isInterState,
         cgstAmount: money.cgstAmount,
         sgstAmount: money.sgstAmount,
@@ -947,5 +954,82 @@ export async function getSaleInvoiceData(id: string, organizationId: string) {
       ...it,
       totalPrice: money.items[index].subtotal,
     })),
+  };
+}
+
+export type SalesmanSummaryArgs = {
+  organizationId: string;
+  salesmanId: string;
+  startDate?: Date;
+  endDate?: Date;
+};
+
+export async function getSalesmanSummary({
+  organizationId,
+  salesmanId,
+  startDate,
+  endDate,
+}: SalesmanSummaryArgs) {
+  const where: Prisma.SaleWhereInput = {
+    organizationId,
+    salesmanId,
+    status: "Completed",
+    deletedAt: null,
+  };
+
+  if (startDate || endDate) {
+    const saleDateFilter: Prisma.DateTimeFilter = {};
+    if (startDate) {
+      saleDateFilter.gte = startDate;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (
+        end.getHours() === 0 &&
+        end.getMinutes() === 0 &&
+        end.getSeconds() === 0 &&
+        end.getMilliseconds() === 0
+      ) {
+        end.setHours(23, 59, 59, 999);
+      }
+      saleDateFilter.lte = end;
+    }
+    where.saleDate = saleDateFilter;
+  }
+
+  const sales = await prisma.sale.findMany({
+    where,
+    include: {
+      customer: { select: { id: true, name: true } },
+      items: { select: { quantity: true, unitPrice: true, totalPrice: true } },
+    },
+    orderBy: { saleDate: "desc" },
+  });
+
+  let totalPacks = 0;
+  let totalAmount = 0;
+
+  const itemizedSales = sales.map((sale) => {
+    const salePacks = (sale.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+    const saleAmount = Number(sale.totalAmount);
+    totalPacks += salePacks;
+    totalAmount += saleAmount;
+
+    return {
+      id: sale.id,
+      saleCode: sale.saleCode,
+      saleDate: sale.saleDate,
+      customerName: sale.customer?.name ?? "Walk-in Customer",
+      packs: salePacks,
+      totalAmount: saleAmount,
+    };
+  });
+
+  return {
+    salesmanId,
+    totalInvoices: sales.length,
+    totalPacks,
+    totalAmount,
+    sales: itemizedSales,
   };
 }

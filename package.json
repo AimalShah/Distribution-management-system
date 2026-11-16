@@ -18,6 +18,7 @@
     "db:migrate": "pnpm --filter @dms/db run migrate",
     "db:migrate:deploy": "pnpm --filter @dms/db run migrate:deploy",
     "db:seed": "pnpm --filter @dms/db run seed",
+    "db:seed:beverages": "pnpm --filter @dms/db run seed:beverages",
     "db:seed:owner": "pnpm --filter @dms/db run seed:owner",
     "db:seed:stress": "pnpm --filter @dms/db run seed:stress",
     "db:wipe": "pnpm --filter @dms/db run wipe",

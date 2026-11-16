@@ -111,6 +111,7 @@ export interface SaleInvoiceItemRow {
   id: string;
   saleCode: string;
   customerId: string;
+  pricingTier?: "retail" | "wholesale" | null;
   totalAmount: number;
   taxAmount?: number | null;
   discount?: number | null;
@@ -121,6 +122,8 @@ export interface SaleInvoiceItemRow {
   createdAt: string;
   customer?: { id: string; name: string; phone?: string | null };
   createdBy?: { id: string; name: string } | null;
+  salesman?: { id: string; name: string } | null;
+  orderBooker?: { id: string; name: string; code: string } | null;
   _count?: { items: number };
   items?: any[];
 }
@@ -427,9 +430,14 @@ export default function SaleInvoiceList() {
         accessorKey: "saleCode",
         header: "Code",
         cell: ({ row }) => (
-          <span className="font-mono text-xs font-semibold text-primary">
-            {row.original.saleCode}
-          </span>
+          <div>
+            <span className="font-mono text-xs font-semibold text-primary block">
+              {row.original.saleCode}
+            </span>
+            <Badge variant="outline" className="text-[10px] font-normal px-1 py-0 uppercase mt-0.5">
+              {row.original.pricingTier || "retail"}
+            </Badge>
+          </div>
         ),
       },
       {
@@ -463,16 +471,25 @@ export default function SaleInvoiceList() {
         ),
       },
       {
-        // Who created the invoice ("Created by", GLOSSARY.md). Legacy rows have
-        // no creator on record and show a dash.
-        id: "createdBy",
-        header: () => <div className="text-center">Created by</div>,
-        meta: { headerClassName: "text-center", cellClassName: "text-center" },
-        cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {row.original.createdBy?.name ?? "—"}
-          </span>
-        ),
+        id: "salesTeam",
+        header: () => <div className="text-left">Sales Team</div>,
+        cell: ({ row }) => {
+          const salesman = row.original.salesman?.name ?? row.original.createdBy?.name ?? "—";
+          const booker = row.original.orderBooker;
+
+          return (
+            <div className="text-xs">
+              <span className="font-medium text-foreground block truncate">
+                {salesman}
+              </span>
+              {booker ? (
+                <span className="text-[11px] text-muted-foreground block truncate">
+                  Booker: {booker.name}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         id: "items",

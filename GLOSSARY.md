@@ -43,6 +43,21 @@ _Avoid_: "on credit"
 **Created by**:
 The user who created a document (sale, purchase). Shown on documents and listings.
 
+### Sales & Field Roles
+
+**Salesman**:
+A system user (Member) who fulfills sales, delivers goods, and is credited on sale invoices. Eligible for pack-based commission.
+
+**Order Booker**:
+A field booking agent who visits customers and books orders. Managed by staff as an organizational record without requiring software login accounts; optionally assigned to invoices.
+_Avoid_: sales rep, booking boy
+
+**Pricing tier**:
+The commercial pricing schedule applied to an invoice—either `Retail` or `Wholesale`—which sets default line-item unit prices from the product catalog while remaining fully editable during invoice creation.
+
+**Salesman commission**:
+An on-demand calculation managed in the Team section computed as `Total Packs Sold × Commission Rate Per Pack` across a salesman's completed invoices for a chosen date range.
+
 ## Not in this glossary
 
 "Credit note" — this system does not issue credit notes; returns settle as store credit (ADR 0006).

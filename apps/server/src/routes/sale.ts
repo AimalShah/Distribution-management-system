@@ -4,6 +4,7 @@ import {
   SaleUpdateSchema,
   paginationQuerySchema,
   saleListQuerySchema,
+  salesmanSummaryQuerySchema,
   normalizeDecimalValues,
 } from "@dms/shared";
 import { asyncHandler } from "../http";
@@ -16,6 +17,7 @@ import {
   getSaleInvoiceData,
   getSales,
   getSalesByCustomer,
+  getSalesmanSummary,
   restoreSale,
   uncancelSale,
   updateSale,
@@ -57,6 +59,22 @@ saleRouter.get(
     const result = await getSales({
       organizationId: req.auth.organizationId,
       ...query,
+    });
+
+    res.json(result);
+  })
+);
+
+saleRouter.get(
+  "/salesman-summary",
+  asyncHandler(async (req, res) => {
+    const query = salesmanSummaryQuerySchema.parse(req.query);
+
+    const result = await getSalesmanSummary({
+      organizationId: req.auth.organizationId,
+      salesmanId: query.salesmanId,
+      startDate: query.startDate,
+      endDate: query.endDate,
     });
 
     res.json(result);

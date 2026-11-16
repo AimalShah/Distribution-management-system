@@ -110,6 +110,18 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
       description: initialData?.description ?? "",
       unitCost: initialData?.unitCost !== undefined ? String(initialData.unitCost) : "",
       unitPrice: initialData?.unitPrice !== undefined ? String(initialData.unitPrice) : "",
+      retailPrice:
+        initialData?.retailPrice !== undefined
+          ? String(initialData.retailPrice)
+          : initialData?.unitPrice !== undefined
+            ? String(initialData.unitPrice)
+            : "",
+      wholesalePrice:
+        initialData?.wholesalePrice !== undefined
+          ? String(initialData.wholesalePrice)
+          : initialData?.unitPrice !== undefined
+            ? String(initialData.unitPrice)
+            : "",
       isActive: initialData?.isActive ?? true,
       gstApplicable: initialData?.gstApplicable ?? true,
       gstRate: initialData?.gstRate !== undefined ? Number(initialData.gstRate) : 0,
@@ -128,6 +140,18 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
         description: initialData.description ?? "",
         unitCost: initialData.unitCost !== undefined ? String(initialData.unitCost) : "",
         unitPrice: initialData.unitPrice !== undefined ? String(initialData.unitPrice) : "",
+        retailPrice:
+          initialData.retailPrice !== undefined
+            ? String(initialData.retailPrice)
+            : initialData.unitPrice !== undefined
+              ? String(initialData.unitPrice)
+              : "",
+        wholesalePrice:
+          initialData.wholesalePrice !== undefined
+            ? String(initialData.wholesalePrice)
+            : initialData.unitPrice !== undefined
+              ? String(initialData.unitPrice)
+              : "",
         isActive: initialData.isActive ?? true,
         gstApplicable: initialData.gstApplicable ?? true,
         gstRate: initialData.gstRate !== undefined ? Number(initialData.gstRate) : 0,
@@ -138,6 +162,8 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
   const selectedCategory = form.watch("category");
   const unitCostWatch = form.watch("unitCost");
   const unitPriceWatch = form.watch("unitPrice");
+  const retailPriceWatch = form.watch("retailPrice");
+  const wholesalePriceWatch = form.watch("wholesalePrice");
 
   const filteredBrands = brands.filter((b) =>
     selectedCategory ? b.categoryId === selectedCategory : true
@@ -226,6 +252,16 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
     setSubmitting(true);
 
     try {
+      const finalUnitPrice = typeof values.retailPrice === "number" && !isNaN(values.retailPrice)
+        ? Number(values.retailPrice)
+        : Number(values.unitPrice || 0);
+      const finalRetailPrice = typeof values.retailPrice === "number" && !isNaN(values.retailPrice)
+        ? Number(values.retailPrice)
+        : finalUnitPrice;
+      const finalWholesalePrice = typeof values.wholesalePrice === "number" && !isNaN(values.wholesalePrice)
+        ? Number(values.wholesalePrice)
+        : finalUnitPrice;
+
       const payload = {
         name: values.name,
         productCode: values.productCode,
@@ -234,7 +270,9 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
         unit: values.unit,
         description: values.description ?? "",
         unitCost: Number(values.unitCost),
-        unitPrice: Number(values.unitPrice),
+        unitPrice: finalUnitPrice,
+        retailPrice: finalRetailPrice,
+        wholesalePrice: finalWholesalePrice,
         isActive: Boolean(values.isActive),
       };
 
@@ -545,7 +583,7 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
 
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-muted-foreground">Pricing Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <FormField
                   control={form.control}
                   name="unitCost"
@@ -568,10 +606,34 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
 
                 <FormField
                   control={form.control}
-                  name="unitPrice"
+                  name="retailPrice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Unit Price *</FormLabel>
+                      <FormLabel>Retail Price *</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            form.setValue("unitPrice", e.target.value);
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="wholesalePrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Wholesale Price *</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -587,10 +649,10 @@ export function ProductForm({ productId, initialData, isEditing = false }: Produ
                 />
 
                 <div>
-                  <Label>Profit Margin</Label>
+                  <Label>Retail Margin</Label>
                   <div className="h-9 mt-2 flex items-center px-3 rounded-md border bg-muted/50">
                     <span className="text-sm font-medium">
-                      {calculateMargin(unitCostWatch || "0", unitPriceWatch || "0")}%
+                      {calculateMargin(unitCostWatch || "0", retailPriceWatch || unitPriceWatch || "0")}%
                     </span>
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import { describeOwnerPassword, resolveOwnerPassword } from "./owner-password";
 import { assertLocalDatabase } from "./db-target";
 import { faker } from "@faker-js/faker";
 import type { InventoryMovement } from "./generated/client";
+import { seedBeverageProducts } from "./seed-beverages";
 
 /** faker v9 dropped `date.past({ days })`; anchor a refDate instead. */
 function daysAgo(days: number) {
@@ -351,7 +352,12 @@ async function main() {
   console.log(`✅ Created ${brands.length} brands`);
 
   // 10. Create Products with Inventory
-  const products = [];
+  console.log("🥤 Seeding official beverage products catalog...");
+  await seedBeverageProducts(organization.id);
+  const beverageProducts = await prisma.product.findMany({
+    where: { organizationId: organization.id },
+  });
+  const products = [...beverageProducts];
 
   for (let i = 0; i < 200; i++) {
     const category = faker.helpers.arrayElement(categories);

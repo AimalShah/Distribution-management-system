@@ -215,7 +215,13 @@ describe("GET /api/sales/:id", () => {
         organizationId: ORG,
         OR: [{ id: "SAL-001" }, { saleCode: "SAL-001" }],
       },
-      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
+      include: {
+        customer: true,
+        createdBy: { select: { id: true, name: true } },
+        salesman: { select: { id: true, name: true } },
+        orderBooker: { select: { id: true, name: true, code: true } },
+        items: { include: { product: true } },
+      },
     });
   });
 
@@ -263,6 +269,65 @@ describe("GET /api/sales/customer/:customerId", () => {
     await request(app).get("/api/sales/customer/cus_1").set(auth());
 
     expect(models.sale.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/sales/salesman-summary (issue #54)", () => {
+  it("aggregates completed sales, total packs, and sales breakdown for a salesman", async () => {
+    models.sale.findMany.mockResolvedValueOnce([
+      {
+        id: "sal_1",
+        saleCode: "SAL-001",
+        saleDate: new Date("2026-11-01T10:00:00Z"),
+        totalAmount: 500,
+        customer: { id: "cus_1", name: "Shop A" },
+        items: [
+          { quantity: 10, unitPrice: 25, totalPrice: 250 },
+          { quantity: 10, unitPrice: 25, totalPrice: 250 },
+        ],
+      },
+      {
+        id: "sal_2",
+        saleCode: "SAL-002",
+        saleDate: new Date("2026-11-02T12:00:00Z"),
+        totalAmount: 300,
+        customer: { id: "cus_2", name: "Shop B" },
+        items: [
+          { quantity: 12, unitPrice: 25, totalPrice: 300 },
+        ],
+      },
+    ]);
+
+    const res = await request(app)
+      .get("/api/sales/salesman-summary?salesmanId=usr_sales_1&startDate=2026-11-01&endDate=2026-11-05")
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.salesmanId).toBe("usr_sales_1");
+    expect(res.body.totalInvoices).toBe(2);
+    expect(res.body.totalPacks).toBe(32);
+    expect(res.body.totalAmount).toBe(800);
+    expect(res.body.sales).toHaveLength(2);
+    expect(res.body.sales[0].packs).toBe(20);
+    expect(res.body.sales[1].packs).toBe(12);
+    expect(models.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG,
+          salesmanId: "usr_sales_1",
+          status: "Completed",
+          deletedAt: null,
+        }),
+      })
+    );
+  });
+
+  it("requires salesmanId query parameter", async () => {
+    const res = await request(app)
+      .get("/api/sales/salesman-summary")
+      .set(auth());
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -320,6 +385,33 @@ describe("POST /api/sales", () => {
         reference: "SALE-2026-00001",
       }),
     });
+  });
+
+  it("persists salesmanId, orderBookerId, and pricingTier (issue #53)", async () => {
+    models.inventory.findFirst
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 10 })
+      .mockResolvedValueOnce({ id: "inv_1", quantityOnHand: 8 });
+
+    const res = await request(app)
+      .post("/api/sales")
+      .set(auth())
+      .send({
+        ...validBody,
+        pricingTier: "wholesale",
+        salesmanId: "usr_sales_1",
+        orderBookerId: "ob_1",
+      });
+
+    expect(res.status).toBe(201);
+    expect(models.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingTier: "wholesale",
+          salesmanId: "usr_sales_1",
+          orderBookerId: "ob_1",
+        }),
+      })
+    );
   });
 
   it("derives the total server side and refuses to bank a client tax figure", async () => {
@@ -738,7 +830,13 @@ describe("PUT /api/sales/:id", () => {
     expect(models.sale.update).toHaveBeenCalledWith({
       where: { id: "sal_1", organizationId: ORG, deletedAt: null },
       data: { status: "Completed" },
-      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
+      include: {
+        customer: true,
+        createdBy: { select: { id: true, name: true } },
+        salesman: { select: { id: true, name: true } },
+        orderBooker: { select: { id: true, name: true, code: true } },
+        items: { include: { product: true } },
+      },
     });
   });
 
@@ -1059,7 +1157,13 @@ describe("POST /api/sales/:id/cancel and /uncancel", () => {
     expect(models.sale.update).toHaveBeenCalledWith({
       where: { id: "sal_1", organizationId: ORG },
       data: { status: "Cancelled", statusBeforeCancel: "Pending" },
-      include: { customer: true, createdBy: { select: { id: true, name: true } }, items: { include: { product: true } } },
+      include: {
+        customer: true,
+        createdBy: { select: { id: true, name: true } },
+        salesman: { select: { id: true, name: true } },
+        orderBooker: { select: { id: true, name: true, code: true } },
+        items: { include: { product: true } },
+      },
     });
     // Cancelling moves no stock and writes no ledger rows.
     expect(models.inventory.updateMany).not.toHaveBeenCalled();
