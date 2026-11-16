@@ -254,7 +254,7 @@ export function renderSaleReceiptHtml(
     </div>
     ${customerPhone ? `<div class="meta-row"><span><strong>Phone:</strong> ${customerPhone}</span></div>` : ""}
     ${sale.salesman ? `<div class="meta-row"><span><strong>Salesman:</strong> ${escapeHtml(sale.salesman.name)}</span></div>` : (createdBy ? `<div class="meta-row"><span><strong>Cashier:</strong> ${createdBy}</span></div>` : "")}
-    ${sale.orderBooker ? `<div class="meta-row"><span><strong>Booker:</strong> ${escapeHtml(sale.orderBooker.name)} (${escapeHtml(sale.orderBooker.code)})</span></div>` : ""}
+    ${sale.orderBooker ? `<div class="meta-row"><span><strong>Order Booker:</strong> ${escapeHtml(sale.orderBooker.name)} (${escapeHtml(sale.orderBooker.code)})</span></div>` : ""}
     <div class="meta-row"><span><strong>Tier:</strong> ${escapeHtml((sale.pricingTier || "retail").toUpperCase())}</span></div>
 
     <div class="dashed"></div>

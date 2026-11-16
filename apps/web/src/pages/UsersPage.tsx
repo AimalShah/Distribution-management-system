@@ -312,21 +312,23 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={() =>
-                              setCommissionTarget({
-                                id: member.user.id,
-                                name: member.user.name,
-                                email: member.user.email,
-                              })
-                            }
-                          >
-                            <Calculator className="size-3" aria-hidden="true" />
-                            Calculate Commission
-                          </Button>
+                          {member.role?.toLowerCase().includes("sales") || member.role === "member" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() =>
+                                setCommissionTarget({
+                                  id: member.user.id,
+                                  name: member.user.name,
+                                  email: member.user.email,
+                                })
+                              }
+                            >
+                              <Calculator className="size-3" aria-hidden="true" />
+                              Calculate Commission
+                            </Button>
+                          ) : null}
                           <Button
                             variant="outline"
                             size="sm"

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
-import { Calculator, Calendar, DollarSign, Package, TrendingUp } from "lucide-react";
+import { Calculator, Calendar, DollarSign, Package, Printer, TrendingUp } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -69,7 +69,7 @@ export function SalesmanCommissionModal({
             <DialogTitle>Commission Calculator: {salesman?.name}</DialogTitle>
           </div>
           <DialogDescription>
-            Compute physical pack-based commission for completed sales orders.
+            Compute physical pack-based commission for completed sales invoices.
           </DialogDescription>
         </DialogHeader>
 
@@ -179,7 +179,7 @@ export function SalesmanCommissionModal({
                 {sales.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
-                      {isLoading ? "Loading sales orders..." : "No completed sales found for the selected period."}
+                      {isLoading ? "Loading sales invoices..." : "No completed sales found for the selected period."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -208,7 +208,17 @@ export function SalesmanCommissionModal({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => window.print()}
+            disabled={sales.length === 0}
+          >
+            <Printer className="size-3.5" />
+            Print Summary
+          </Button>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Close
           </Button>
