@@ -92,7 +92,7 @@ describe("listing the team (issue #41)", () => {
     // Scoped to the row, because the dialog behind it offers the same label.
     const row = screen.getByText("Ada Lovelace").closest("tr");
 
-    expect(row).toHaveTextContent("Member");
+    expect(row).toHaveTextContent("Salesman");
   });
 
   it("says so when the Company has no other members yet", async () => {
@@ -107,6 +107,12 @@ describe("listing the team (issue #41)", () => {
     renderPage();
 
     expect(await screen.findByRole("tab", { name: /order bookers/i })).toBeInTheDocument();
+  });
+
+  it("provides a Commission tab", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("tab", { name: /commission/i })).toBeInTheDocument();
   });
 
   it("opens the commission calculator modal when Calculate Commission is clicked (issue #54)", async () => {
@@ -216,7 +222,7 @@ describe("changing a role (issue #41)", () => {
 
     // The old dialog offered sales / inventory / manager, which the server's
     // memberRoleSchema does not accept.
-    for (const role of ["Member", "Owner", "Administrator"]) {
+    for (const role of ["Salesman", "Owner", "Administrator"]) {
       expect(
         await screen.findByRole("option", { name: new RegExp(role, "i") })
       ).toBeInTheDocument();

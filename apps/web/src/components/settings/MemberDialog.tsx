@@ -40,7 +40,7 @@ import { invalidateDomains } from "../../lib/mutation";
 
 /** The roles `memberRoleSchema` accepts. `adminRole` is the server's spelling. */
 export const MEMBER_ROLE_OPTIONS = [
-  { value: "member", label: "Member" },
+  { value: "member", label: "Salesman" },
   { value: "adminRole", label: "Administrator" },
   { value: "owner", label: "Owner" },
 ] as const;
@@ -514,7 +514,7 @@ export function InviteMemberDialog({
                 <SelectValue placeholder="Choose a role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
+                <SelectItem value="member">Salesman</SelectItem>
                 <SelectItem value="adminRole">Administrator</SelectItem>
               </SelectContent>
             </Select>

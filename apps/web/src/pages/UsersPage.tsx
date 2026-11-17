@@ -38,6 +38,7 @@ import { useActiveMembership } from "../lib/profile";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHead } from "../components/list/PageHead";
 import { OrderBookersTab } from "../components/team/OrderBookersTab";
+import { CommissionTab } from "../components/team/CommissionTab";
 import { SalesmanCommissionModal } from "../components/team/SalesmanCommissionModal";
 import {
   InviteMemberDialog,
@@ -204,6 +205,7 @@ export default function UsersPage() {
         <TabsList>
           <TabsTrigger value="members">Members & Staff</TabsTrigger>
           <TabsTrigger value="order-bookers">Order Bookers</TabsTrigger>
+          <TabsTrigger value="commission">Commission</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members" className="space-y-4">
@@ -379,6 +381,10 @@ export default function UsersPage() {
 
     <TabsContent value="order-bookers">
       <OrderBookersTab />
+    </TabsContent>
+
+    <TabsContent value="commission">
+      <CommissionTab members={members} />
     </TabsContent>
   </Tabs>
 
